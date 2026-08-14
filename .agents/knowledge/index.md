@@ -12,6 +12,8 @@ Read this index first, then open the knowledge file that matches the task.
 | [nala-labs/authentication.md](nala-labs/authentication.md) | Casdoor, backend session, local startup, tier mapping, and authentication verification contract used by the Nala Labs environment. |
 | [nala-labs/defaults.md](nala-labs/defaults.md) | Development service defaults, local access notes, database/cache topology, and configuration discovery guidance. It contains lab-only credentials; do not copy them into source, tests, tickets, or PRs. |
 | [nala-labs/architecture-final.svg](nala-labs/architecture-final.svg) | Visual companion to the Nala Labs platform architecture document. |
+| [nala-trace/configuration.md](nala-trace/configuration.md) | Nala Trace application environment names, local/Kubernetes defaults, Vault ownership, workload mapping, startup validation, and redaction rules. |
+| [nala-trace/casdoor.md](nala-trace/casdoor.md) | Nala Trace Casdoor application, scopes, grant, callback overrides, secret ownership, and pre-authentication validation checklist. |
 
 ## Reading order
 

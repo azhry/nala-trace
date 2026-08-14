@@ -11,11 +11,18 @@ func TestLoadFromUsesSafeDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
 	}
-	if cfg.ListenAddr != ":8080" || cfg.Mongo.URI != "mongodb://127.0.0.1:27017" {
+	if cfg.ListenAddr != ":8080" || cfg.Mongo.URI != "mongodb://127.0.0.1:27017" || cfg.Auth.NalaLabsAuthURL != "http://127.0.0.1:18080" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.Mongo.Enabled {
 		t.Fatal("Mongo should be disabled by default")
+	}
+}
+
+func TestLoadFromRejectsInvalidNalaLabsAuthURL(t *testing.T) {
+	_, err := LoadFrom(map[string]string{"NALA_LABS_AUTH_URL": "not-a-url"})
+	if err == nil || !strings.Contains(err.Error(), "NALA_LABS_AUTH_URL") {
+		t.Fatalf("expected named Nala Labs auth URL error, got %v", err)
 	}
 }
 
@@ -57,6 +64,7 @@ func TestLoadFromParsesOverrides(t *testing.T) {
 		"AUTH_LISTEN_ADDR":      ":18080",
 		"FRONTEND_URL":          "http://localhost:18081/",
 		"AUTH_ALLOWED_ORIGIN":   "http://localhost:18081",
+		"NALA_LABS_AUTH_URL":    "http://localhost:18080",
 		"MONGO_ENABLED":         "true",
 		"MONGO_URI":             "mongodb://localhost:27017",
 		"MONGO_DATABASE":        "test_trace",

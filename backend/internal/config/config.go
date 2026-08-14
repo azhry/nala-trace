@@ -16,9 +16,7 @@ const (
 	defaultAllowedOrigin     = "http://localhost:5173"
 	defaultMongoURI          = "mongodb://127.0.0.1:27017"
 	defaultMongoDatabase     = "nala_trace"
-	defaultCasdoorIssuer     = "https://casdoor.nalanirvana.com"
-	defaultUserInfoEndpoint  = "https://casdoor.nalanirvana.com/api/get-account"
-	defaultCasdoorScopes     = "openid profile email"
+	defaultNalaLabsAuthURL   = "http://127.0.0.1:18080"
 	defaultCookieName        = "nala_trace_session"
 	defaultSessionTTL        = 24 * time.Hour
 	defaultVaultAddr         = "http://127.0.0.1:8200"
@@ -57,12 +55,7 @@ type MongoConfig struct {
 }
 
 type AuthConfig struct {
-	Issuer           string
-	ClientID         string
-	ClientSecret     string
-	UserInfoEndpoint string
-	Scopes           []string
-	RedirectURL      string
+	NalaLabsAuthURL string
 }
 
 type SessionConfig struct {
@@ -116,12 +109,7 @@ func LoadFrom(values map[string]string) (Config, error) {
 			DisconnectTimeout: durationOr(lookup, "MONGO_DISCONNECT_TIMEOUT", defaultDisconnectTimeout),
 		},
 		Auth: AuthConfig{
-			Issuer:           valueOr(lookup, "CASDOOR_ISSUER", defaultCasdoorIssuer),
-			ClientID:         values["CASDOOR_CLIENT_ID"],
-			ClientSecret:     values["CASDOOR_CLIENT_SECRET"],
-			UserInfoEndpoint: valueOr(lookup, "CASDOOR_USERINFO_ENDPOINT", defaultUserInfoEndpoint),
-			Scopes:           strings.Fields(valueOr(lookup, "CASDOOR_SCOPES", defaultCasdoorScopes)),
-			RedirectURL:      valueOr(lookup, "CASDOOR_REDIRECT_URL", "http://localhost"+defaultListenAddr+"/api/auth/callback"),
+			NalaLabsAuthURL: valueOr(lookup, "NALA_LABS_AUTH_URL", defaultNalaLabsAuthURL),
 		},
 		Session: SessionConfig{
 			CookieName: valueOr(lookup, "SESSION_COOKIE_NAME", defaultCookieName),
@@ -174,14 +162,8 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 		}
 	}
 
-	if cfg.Auth.Issuer == "" {
-		missing = append(missing, "CASDOOR_ISSUER")
-	}
-	if cfg.Auth.UserInfoEndpoint == "" {
-		missing = append(missing, "CASDOOR_USERINFO_ENDPOINT")
-	}
-	if len(cfg.Auth.Scopes) == 0 {
-		missing = append(missing, "CASDOOR_SCOPES")
+	if _, err := url.ParseRequestURI(cfg.Auth.NalaLabsAuthURL); err != nil || !strings.HasPrefix(cfg.Auth.NalaLabsAuthURL, "http") {
+		invalid = append(invalid, "NALA_LABS_AUTH_URL")
 	}
 	if cfg.Session.CookieName == "" {
 		missing = append(missing, "SESSION_COOKIE_NAME")
@@ -234,8 +216,7 @@ func knownKeys() []string {
 	return []string{
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
 		"CODEX_TRACE_API_TOKEN", "MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE", "MONGO_USERNAME", "MONGO_PASSWORD",
-		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "CASDOOR_ISSUER", "CASDOOR_CLIENT_ID",
-		"CASDOOR_CLIENT_SECRET", "CASDOOR_USERINFO_ENDPOINT", "CASDOOR_SCOPES", "CASDOOR_REDIRECT_URL", "SESSION_COOKIE_NAME",
+		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL", "SESSION_COOKIE_NAME",
 		"SESSION_TTL", "SESSION_SECRET", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_CONFIG_PATH", "VAULT_TOKEN",
 	}
 }

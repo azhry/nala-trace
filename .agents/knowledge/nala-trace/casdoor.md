@@ -1,53 +1,68 @@
-# Nala Trace Casdoor application contract
+# Nala Trace shared Nala Labs IAM contract
 
-This document defines the non-secret Casdoor settings required before Nala Trace authentication implementation begins. It is derived from the Nala Labs authentication reference and contains no client secret or test-user password.
+Nala Trace reuses the existing Nala Labs IAM service. It is a relying party of
+the Nala Labs application session, not a second Casdoor login client. This
+contract contains no provider credentials, user passwords, bearer tokens, or
+signing keys.
 
-## Provider application
+## Authority and token contract
 
 | Setting | Contract |
 | --- | --- |
-| Application | `admin/nala-labs` |
-| Public issuer | `https://casdoor.nalanirvana.com` |
-| In-cluster issuer alternative | `http://casdoor.nala-labs.svc.cluster.local:8000` when the workload is configured for internal service routing |
-| User-info endpoint | `/api/get-account` on the selected issuer; the public default is `https://casdoor.nalanirvana.com/api/get-account` |
-| Requested scopes | `openid profile email` |
-| Grant | Password Credentials Grant must be enabled for the first-party login form |
-| Callback behavior | Authorization-code callback remains registered for compatibility; the Go backend owns the password-grant exchange and application session |
-| Browser token behavior | Provider access/refresh tokens remain server-side and never enter the browser session |
+| Identity authority | Existing Nala Labs authentication service backed by the shared Casdoor deployment |
+| Nala Labs Casdoor application | `admin/nala-labs`, owned and configured by Nala Labs |
+| Validation endpoint | `GET {NALA_LABS_AUTH_URL}/api/auth/session` |
+| Request header | `Authorization: Bearer <nala-labs-application-session-jwt>` |
+| Successful response | `authenticated: true` plus the Nala Labs `user` identity and entitlements |
+| Invalid or expired token | Nala Labs returns 401; Nala Trace fails closed with a stable unauthenticated error |
+| Provider tokens | Raw Casdoor access/refresh tokens are not accepted by Nala Trace and never enter the browser contract |
 
-The backend maps the provider response's role/group/admin claims to the product tiers described by the Nala Labs authentication contract. Unknown or missing non-admin claims default to the least-privileged tier.
+The user signs in through Nala Labs. Nala Labs issues its application-session
+JWT, and the same bearer token may be sent to Nala Trace. Nala Trace validates
+the token through Nala Labs rather than copying Nala Labs' HS256 signing secret
+or reimplementing the Casdoor password-grant exchange.
 
-## Explicit local callback overrides
+## Local authority routing
 
-The active backend listen port and callback must be changed together:
+Run the local Nala Labs backend on its alternate port when Nala Trace owns the
+default API port:
 
-| Local backend | Frontend origin | `CASDOOR_REDIRECT_URL` |
-| ---: | --- | --- |
-| `:8080` | `http://localhost:5173/` | `http://localhost:8080/api/auth/callback` |
-| `:18080` | `http://localhost:18081/` | `http://localhost:18080/api/auth/callback` |
+| Service | Local address | Nala Trace setting |
+| --- | --- | --- |
+| Nala Trace API | `http://localhost:8080` | — |
+| Nala Labs auth API | `http://localhost:18080` | `NALA_LABS_AUTH_URL=http://127.0.0.1:18080` |
 
-These URLs must be registered in the `admin/nala-labs` application before local callback testing. The public Nala Trace callback is deployment-supplied and must use the same origin/port that the reverse proxy exposes.
+The deployment value is a non-secret, network-routable Nala Labs auth-service
+URL. Nala Trace owns no Casdoor callback and does not perform a provider
+redirect flow.
 
 ## Environment ownership
 
-- Ordinary provider settings: `CASDOOR_ISSUER`, `CASDOOR_CLIENT_ID`, `CASDOOR_USERINFO_ENDPOINT`, `CASDOOR_SCOPES`, and `CASDOOR_REDIRECT_URL` follow `.agents/knowledge/nala-trace/configuration.md`.
-- Secret provider setting: `CASDOOR_CLIENT_SECRET` is owned at `kv/data/nala-trace/casdoor` key `client_secret` and is injected only into the backend workload.
-- Test-user credentials are owned by Casdoor/local secret storage and are never copied into source, fixtures, issue text, logs, or PR descriptions.
-- The React app does not receive `CASDOOR_CLIENT_SECRET`, provider tokens, session secrets, or any API token.
+- `NALA_LABS_AUTH_URL` is an ordinary endpoint setting documented in
+  `.agents/knowledge/nala-trace/configuration.md`.
+- Nala Trace does not own `CASDOOR_CLIENT_ID`, `CASDOOR_CLIENT_SECRET`,
+  Casdoor callback settings, or a copy of the Nala Labs signing secret.
+- `SESSION_COOKIE_NAME`, `SESSION_TTL`, and `SESSION_SECRET` are reserved for
+  an optional Nala Trace application session; they must never be used to
+  validate or forge a Nala Labs JWT.
+- The React app may hold a short-lived bearer token only for the approved
+  session flow. It must not receive provider credentials or signing keys.
 
 ## Pre-authentication validation checklist
 
-- [ ] The selected Casdoor issuer resolves from the backend runtime network and uses the expected scheme/host.
-- [ ] The `admin/nala-labs` application exists in the selected Casdoor database.
-- [ ] Password Credentials Grant is enabled for the application.
-- [ ] `openid profile email` are allowed/requested scopes.
-- [ ] The user-info endpoint returns the provider account fields needed for tier mapping without exposing test credentials.
-- [ ] The authorization-code callback remains registered for compatibility.
-- [ ] The callback for the active local port is registered exactly, including `/api/auth/callback`.
-- [ ] `CASDOOR_CLIENT_ID` is present for the backend and `CASDOOR_CLIENT_SECRET` is injected from the documented secret path.
-- [ ] Provider client secret and test-user passwords are absent from repository files, fixtures, Linear issue text, logs, and PR text.
-- [ ] A backend login test can use a fake provider boundary; live provider tests are opt-in and do not require committed credentials.
+- [ ] The configured Nala Labs auth URL resolves from the Nala Trace backend network.
+- [ ] `GET /api/auth/session` accepts the forwarded bearer token and returns the expected safe user/entitlement response.
+- [ ] A valid Nala Labs session authenticates a protected Nala Trace request.
+- [ ] Missing, malformed, expired, or upstream-rejected tokens fail with stable 401 behavior.
+- [ ] Nala Labs timeout, network failure, malformed response, or 5xx fails closed with a stable provider-unavailable error.
+- [ ] Nala Trace never logs, persists, or returns the bearer token or upstream response details.
+- [ ] No Casdoor client secret, user password, raw provider token, or signing key is present in repository files, fixtures, issue text, logs, or PR text.
+- [ ] Browser token handoff and cross-origin deployment behavior are tested through an approved flow before production rollout.
 
 ## Failure and safety rules
 
-Missing issuer/client/callback settings fail authentication startup or request handling with a stable, redacted error code. Provider response bodies, passwords, client secrets, and bearer tokens are not copied into logs or client responses. A provider outage must not cause the backend to issue a browser-visible provider token or session secret.
+Nala Labs authority configuration and upstream failures map to stable, redacted
+error codes. Nala Trace forwards the bearer token only for validation; it never
+logs or persists the token, returns provider response bodies, or fails open when
+Nala Labs is unavailable. Raw Casdoor access/refresh tokens and
+username/password payloads are outside the Nala Trace API contract.

@@ -5,11 +5,6 @@ import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import TraceView from './components/TraceView'
 
-const navItems = [
-  { id: 'sessions', label: 'Sessions', hint: 'Every captured run', icon: '▤' },
-  { id: 'detail', label: 'Session detail', hint: 'Conversation and trace data', icon: '⌁' },
-]
-
 function parseRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '') || 'sessions'
   const match = path.match(/^sessions\/([^/]+)$/)
@@ -25,27 +20,6 @@ function dataSourceCopy(apiState) {
   if (apiState === 'loading') return { label: 'Checking source', status: 'Checking data source', detail: 'Verifying the Go API before describing these records as live' }
   if (apiState === 'unavailable') return { label: 'No data source', status: 'No data source', detail: 'The Go API is unavailable and no audited capture is loaded' }
   return { label: 'Audited capture', status: 'Audited capture loaded', detail: 'Using the real sanitized Codex audit snapshot; the Go API is unavailable' }
-}
-
-function BrandMark() {
-  return <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
-}
-
-function Sidebar({ route, selectedSession, onNavigate, apiState }) {
-  const source = dataSourceCopy(apiState)
-  return <aside className="sidebar">
-    <div className="brand-lockup"><BrandMark /><span>NALA<span className="brand-muted"> / TRACE</span></span></div>
-    <div className="sidebar-section-label">Navigate</div>
-    <nav className="sidebar-nav" aria-label="Session navigation">
-      <button type="button" className={`nav-item ${route.view === 'sessions' ? 'is-active' : ''}`} onClick={() => onNavigate('sessions')} aria-current={route.view === 'sessions' ? 'page' : undefined}>
-        <span className="nav-icon" aria-hidden="true">{navItems[0].icon}</span><span><strong>{navItems[0].label}</strong><small>{navItems[0].hint}</small></span>
-      </button>
-      <button type="button" className={`nav-item ${route.view === 'detail' ? 'is-active' : ''}`} onClick={() => onNavigate(selectedSession ? `sessions/${encodeURIComponent(selectedSession.id)}` : 'sessions')} aria-current={route.view === 'detail' ? 'page' : undefined}>
-        <span className="nav-icon" aria-hidden="true">{navItems[1].icon}</span><span><strong>{navItems[1].label}</strong><small>{navItems[1].hint}</small></span>
-      </button>
-    </nav>
-    <div className="sidebar-bottom"><div className="capture-status"><span className={`status-dot ${apiState === 'connected' ? 'connected' : ''}`} /><span><strong>{source.status}</strong><small>{source.detail}</small></span></div><div className="sidebar-footer"><span>nala-trace</span><span>session viewer</span></div></div>
-  </aside>
 }
 
 function Topbar({ route, session, apiState }) {
@@ -123,5 +97,5 @@ export default function App() {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
   }
 
-  return <div className="app-shell"><Sidebar route={route} selectedSession={selectedSession} onNavigate={navigateTo} apiState={apiState} /><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} />{route.view === 'detail' && detailSession ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} apiState={apiState} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} />{route.view === 'detail' && detailSession ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} apiState={apiState} />}</main></div>
 }

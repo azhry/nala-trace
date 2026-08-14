@@ -17,11 +17,10 @@ describe('Nala Trace session workspace', () => {
     expect(screen.getByText('Nala Trace')).toBeInTheDocument()
     expect(screen.queryByText('Nala Labs')).not.toBeInTheDocument()
     expect(screen.queryByText(/workspace/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /sessions every captured run/i })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('heading', { name: /session records/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /current codex session/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /evaluation workspace/i })).not.toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText('Audited capture loaded')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText('Audited capture')).toHaveLength(2))
     expect(screen.queryByText('Local session loaded')).not.toBeInTheDocument()
   })
 

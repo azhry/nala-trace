@@ -22,3 +22,14 @@ npm test
 npm run lint
 npm run build
 ```
+
+## Production container
+
+Build the static production image from the repository root:
+
+```sh
+docker build --file frontend/Dockerfile --tag nala-trace-frontend:local frontend
+docker run --rm --publish 8080:8080 nala-trace-frontend:local
+```
+
+The image serves the Vite output on port `8080` with history-mode SPA fallback. The browser bundle keeps `/healthz` and `/api/...` requests relative; route those paths to the Go API through the deployment ingress or service topology. No API base URL, credential, `.env` file, or `.vault-config` is needed at build time or included in the image. The Node and Nginx base images are pinned in `Dockerfile`, and `frontend/.dockerignore` excludes local configuration, secret-store files, tests, caches, and generated output from the build context.

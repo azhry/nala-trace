@@ -1,0 +1,24 @@
+.git
+.gitignore
+node_modules
+dist
+.vite
+coverage
+*.log
+
+# Never send local configuration or secret-store files to the Docker daemon.
+.env
+.env.*
+.vault-config
+.vault-config.*
+**/.env
+**/.env.*
+**/.vault-config
+**/.vault-config.*
+
+# Production builds do not need test-only or lint-only inputs.
+**/__tests__
+**/*.test.*
+vitest.config.js
+test-setup.js
+eslint.config.js

@@ -14,6 +14,8 @@ describe('Nala Trace session workspace', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: /all captured sessions/i })).toBeInTheDocument()
+    expect(screen.getAllByText('Nala Trace')).toHaveLength(2)
+    expect(screen.queryByText('Nala Labs')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /sessions every captured run/i })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('heading', { name: /session records/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /current codex session/i })).toBeInTheDocument()

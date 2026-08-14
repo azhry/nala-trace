@@ -35,7 +35,7 @@ function Sidebar({ route, selectedSession, onNavigate, apiState }) {
   const source = dataSourceCopy(apiState)
   return <aside className="sidebar">
     <div className="brand-lockup"><BrandMark /><span>NALA<span className="brand-muted"> / TRACE</span></span></div>
-    <div className="workspace-switcher"><span className="workspace-avatar">NL</span><span><strong>Nala Labs</strong><small>Codex session viewer</small></span></div>
+    <div className="workspace-switcher"><span className="workspace-avatar">NT</span><span><strong>Nala Trace</strong><small>Codex session viewer</small></span></div>
     <div className="sidebar-section-label">Navigate</div>
     <nav className="sidebar-nav" aria-label="Session navigation">
       <button type="button" className={`nav-item ${route.view === 'sessions' ? 'is-active' : ''}`} onClick={() => onNavigate('sessions')} aria-current={route.view === 'sessions' ? 'page' : undefined}>
@@ -51,7 +51,7 @@ function Sidebar({ route, selectedSession, onNavigate, apiState }) {
 
 function Topbar({ route, session, apiState }) {
   const source = dataSourceCopy(apiState)
-  return <header className="topbar"><div className="breadcrumb"><span>Nala Labs</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}</div></header>
+  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}</div></header>
 }
 
 function WorkspaceStats({ sessions }) {

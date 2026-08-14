@@ -10,7 +10,7 @@ describe('Nala Trace session workspace', () => {
     window.location.hash = ''
   })
 
-  it('renders the session list as the primary page', () => {
+  it('renders the session list as the primary page', async () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: /all captured sessions/i })).toBeInTheDocument()
@@ -18,6 +18,8 @@ describe('Nala Trace session workspace', () => {
     expect(screen.getByRole('heading', { name: /session records/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /current codex session/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /evaluation workspace/i })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Audited capture loaded')).toBeInTheDocument())
+    expect(screen.queryByText('Local session loaded')).not.toBeInTheDocument()
   })
 
   it('opens the selected session detail with real conversation and trace rows', async () => {

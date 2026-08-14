@@ -26,7 +26,8 @@ func run() error {
 		return err
 	}
 
-	api := server.New(cfg, server.HealthRoute())
+	health := server.NewHealthChecker(cfg, nil)
+	api := server.New(cfg, server.HealthRoute(health))
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

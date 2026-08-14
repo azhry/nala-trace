@@ -17,6 +17,9 @@ const (
 	defaultMongoURI          = "mongodb://127.0.0.1:27017"
 	defaultMongoDatabase     = "nala_trace"
 	defaultNalaLabsAuthURL   = "http://127.0.0.1:18080"
+	defaultPostgreSQLAddress = "127.0.0.1:5432"
+	defaultRedisAddress      = "127.0.0.1:6379"
+	defaultKafkaAddress      = "127.0.0.1:9092"
 	defaultCookieName        = "nala_trace_session"
 	defaultSessionTTL        = 24 * time.Hour
 	defaultVaultAddr         = "http://127.0.0.1:8200"
@@ -39,6 +42,7 @@ type Config struct {
 
 	Mongo   MongoConfig
 	Auth    AuthConfig
+	Health  HealthConfig
 	Session SessionConfig
 	Vault   VaultConfig
 }
@@ -54,6 +58,16 @@ type MongoConfig struct {
 
 type AuthConfig struct {
 	NalaLabsAuthURL string
+}
+
+// HealthConfig contains non-secret dependency addresses used by /healthz.
+// MongoDB's host is derived from Mongo.URI so the connection string remains
+// the only Mongo configuration value that needs to be stored.
+type HealthConfig struct {
+	PostgreSQLAddress string
+	RedisAddress      string
+	KafkaAddress      string
+	Timeout           time.Duration
 }
 
 type SessionConfig struct {
@@ -108,6 +122,12 @@ func LoadFrom(values map[string]string) (Config, error) {
 		},
 		Auth: AuthConfig{
 			NalaLabsAuthURL: valueOr(lookup, "NALA_LABS_AUTH_URL", defaultNalaLabsAuthURL),
+		},
+		Health: HealthConfig{
+			PostgreSQLAddress: valueOr(lookup, "POSTGRESQL_ADDRESS", defaultPostgreSQLAddress),
+			RedisAddress:      valueOr(lookup, "REDIS_ADDRESS", defaultRedisAddress),
+			KafkaAddress:      valueOr(lookup, "KAFKA_ADDRESS", defaultKafkaAddress),
+			Timeout:           durationOr(lookup, "HEALTHCHECK_TIMEOUT", defaultPingTimeout),
 		},
 		Session: SessionConfig{
 			CookieName: valueOr(lookup, "SESSION_COOKIE_NAME", defaultCookieName),
@@ -165,6 +185,9 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 	if _, err := url.ParseRequestURI(cfg.Auth.NalaLabsAuthURL); err != nil || !strings.HasPrefix(cfg.Auth.NalaLabsAuthURL, "http") {
 		invalid = append(invalid, "NALA_LABS_AUTH_URL")
 	}
+	if cfg.Health.Timeout <= 0 {
+		invalid = append(invalid, "HEALTHCHECK_TIMEOUT")
+	}
 	if cfg.Session.CookieName == "" {
 		missing = append(missing, "SESSION_COOKIE_NAME")
 	}
@@ -216,7 +239,8 @@ func knownKeys() []string {
 	return []string{
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
 		"CODEX_TRACE_API_TOKEN", "MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
-		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL", "SESSION_COOKIE_NAME",
+		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL",
+		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "SESSION_COOKIE_NAME",
 		"SESSION_TTL", "SESSION_SECRET", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}
 }
@@ -227,7 +251,13 @@ func loadDotEnvFiles() map[string]string {
 	if err != nil {
 		return values
 	}
-	paths := []string{filepath.Join(cwd, ".env"), filepath.Join(cwd, "backend", ".env")}
+	paths := []string{
+		filepath.Join(cwd, ".env"),
+		filepath.Join(cwd, "backend", ".env"),
+		filepath.Join(cwd, ".vault-config"),
+		filepath.Join(cwd, "backend", ".vault-config"),
+		filepath.Join(filepath.Dir(cwd), ".vault-config"),
+	}
 	for _, path := range paths {
 		fileValues, err := parseDotEnv(path)
 		if err == nil {

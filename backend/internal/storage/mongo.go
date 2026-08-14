@@ -102,6 +102,18 @@ func (s *Store) Close(ctx context.Context) error {
 	return nil
 }
 
+// Ping verifies that the initialized Mongo client can still reach its primary.
+// The caller owns the timeout and the returned error never includes the URI.
+func (s *Store) Ping(ctx context.Context) error {
+	if s == nil || s.client == nil {
+		return &LifecycleError{Code: "mongo_not_configured"}
+	}
+	if err := s.client.Ping(ctx, readpref.Primary()); err != nil {
+		return &LifecycleError{Code: "mongo_ping"}
+	}
+	return nil
+}
+
 func (s *Store) Database() *mongo.Database {
 	if s == nil {
 		return nil

@@ -2,6 +2,8 @@ package integration
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,11 +13,36 @@ import (
 )
 
 func TestHealthEndpointThroughConfiguredServer(t *testing.T) {
-	cfg, err := config.LoadFrom(map[string]string{"AUTH_LISTEN_ADDR": ":0"})
+	dependencyHTTP := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer dependencyHTTP.Close()
+
+	listeners := make([]net.Listener, 4)
+	for index := range listeners {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen for dependency %d: %v", index, err)
+		}
+		listeners[index] = listener
+		defer listener.Close()
+	}
+
+	cfg, err := config.LoadFrom(map[string]string{
+		"AUTH_LISTEN_ADDR":    ":0",
+		"NALA_LABS_AUTH_URL":  dependencyHTTP.URL,
+		"VAULT_ADDR":          dependencyHTTP.URL,
+		"POSTGRESQL_ADDRESS":  listeners[0].Addr().String(),
+		"MONGO_URI":           fmt.Sprintf("mongodb://%s", listeners[1].Addr()),
+		"REDIS_ADDRESS":       listeners[2].Addr().String(),
+		"KAFKA_ADDRESS":       listeners[3].Addr().String(),
+		"HEALTHCHECK_TIMEOUT": "1s",
+	})
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	handler := server.New(cfg, server.HealthRoute()).HTTP.Handler
+	health := server.NewHealthChecker(cfg, nil)
+	handler := server.New(cfg, server.HealthRoute(health)).HTTP.Handler
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
@@ -38,8 +65,8 @@ func TestHealthEndpointThroughConfiguredServer(t *testing.T) {
 		t.Fatalf("dependency count = %d, want %d", len(response.Dependencies), len(wantDependencies))
 	}
 	for _, name := range wantDependencies {
-		if response.Dependencies[name]["status"] != "not_configured" {
-			t.Fatalf("dependency %q = %+v, want not_configured", name, response.Dependencies[name])
+		if response.Dependencies[name]["status"] != "ok" {
+			t.Fatalf("dependency %q = %+v, want ok", name, response.Dependencies[name])
 		}
 	}
 }

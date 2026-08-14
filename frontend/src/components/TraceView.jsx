@@ -14,6 +14,10 @@ function normalizePath(file) {
   return file.replaceAll('\\', '/').replaceAll('//', '/').replace(/(\.md|\.ps1|\.yml)\/n$/i, '$1')
 }
 
+function isInstructionEvent(event) {
+  return event.type === 'tool' && (event.files || []).some((file) => instructionFilePattern.test(file))
+}
+
 function SkillTags({ skills = [] }) {
   if (!skills.length) return null
   return <span className="message-tags">{skills.map((skill) => <span className="message-tag" key={skill}>inferred / {skill}</span>)}</span>
@@ -32,11 +36,11 @@ function SystemEvent({ event }) {
   return <div className="system-event"><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body}</small></span><span className="system-event-line" /></div>
 }
 
-function ContextRow({ event }) {
+function ContextRow({ event, inline = false }) {
   const isPrompt = event.contextType !== 'instruction-read'
   const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
   const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label : event.tool || 'Captured context'
-  return <article className={`context-row ${event.contextType}`}>
+  return <article className={`context-row ${event.contextType} ${inline ? 'inline-context' : ''}`}>
     <div className="context-row-header">
       <div><span className="context-row-kind">{title}</span><strong>{source}</strong><small>record {event.record} · {event.time}</small></div>
       <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} inferred tags</span>
@@ -129,7 +133,7 @@ export default function TraceView({ session }) {
     if (filter === 'context') return contextRows
     return events.filter((event) => {
       if (filter === 'all') return true
-      if (filter === 'conversation') return event.type === 'user' || event.type === 'assistant'
+      if (filter === 'conversation') return event.type === 'user' || event.type === 'assistant' || isInstructionEvent(event)
       if (filter === 'tools') return event.type === 'tool'
       return event.type === 'system'
     })
@@ -166,6 +170,8 @@ export default function TraceView({ session }) {
       <div className="stream-intro"><span className="stream-line" /><span>Trace started · {session.startedAt}</span></div>
       {visibleEvents.map((event) => event.type === 'context'
         ? <ContextRow key={event.id} event={event} />
+        : filter === 'conversation' && isInstructionEvent(event)
+        ? <ContextRow key={event.id} event={{ ...event, id: `conversation-${event.id}`, type: 'context', contextType: 'instruction-read', files: event.files }} inline />
         : event.type === 'tool'
         ? <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} />
         : event.type === 'system'

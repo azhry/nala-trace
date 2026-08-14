@@ -28,6 +28,17 @@ export const currentSession = {
   latestTime: '13:40:16',
   outcome: 'Needs review',
   outcomeNote: 'The UI direction was rejected and needs another pass',
+  runtimeMetadata: {
+    model: 'gpt-5.6-luna',
+    provider: 'openai',
+    reasoningEffort: 'xhigh',
+    contextWindowTokens: 258400,
+    client: 'Codex Desktop',
+    clientVersion: '0.148.0-alpha.9',
+    source: 'vscode',
+    threadSource: 'user',
+    recordedFrom: 'session_meta + turn_context + task_started',
+  },
   insights: {
     evalPasses: null,
     evalTotal: null,

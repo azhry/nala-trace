@@ -3,6 +3,7 @@ import { getHealth, getSessions, getTrace } from './api'
 import { currentSessions } from './data/currentSession'
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
+import SessionMetadata from './components/SessionMetadata'
 import TraceView from './components/TraceView'
 
 function parseRoute(hash = window.location.hash) {
@@ -46,7 +47,7 @@ function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, fi
 
 function DetailPage({ session, onBack, apiState }) {
   const source = dataSourceCopy(apiState)
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title}</h1><p>{session.id} · captured {session.startedAt}–{session.capturedAt} · {session.duration}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome}</span></div></div><DataSourceNotice apiState={apiState} /><div className="detail-layout"><TraceView session={session} /><InsightCards insights={session.insights} /></div></section>
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title}</h1><p>{session.id} · captured {session.startedAt}–{session.capturedAt} · {session.duration}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome}</span></div></div><DataSourceNotice apiState={apiState} /><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} /><InsightCards insights={session.insights} /></div></section>
 }
 
 export default function App() {

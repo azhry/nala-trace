@@ -33,6 +33,12 @@ describe('Nala Trace session workspace', () => {
     expect(screen.getByRole('heading', { name: /session detail/i })).toBeInTheDocument()
     expect(screen.getByText('/goal do task from task AZH-449 to AZH-455')).toBeInTheDocument()
     expect(screen.getAllByText(/linear_get_issue/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /recorded execution settings/i })).toBeInTheDocument()
+    expect(screen.getByText('gpt-5.6-luna')).toBeInTheDocument()
+    expect(screen.getByText('xhigh')).toBeInTheDocument()
+    expect(screen.getByText('258,400 tokens')).toBeInTheDocument()
+    expect(screen.getByText('Codex Desktop · 0.148.0-alpha.9')).toBeInTheDocument()
+    expect(screen.getByText('session_meta + turn_context + task_started · Missing fields remain “Not recorded”.')).toBeInTheDocument()
     expect(screen.getAllByText('Not recorded')).toHaveLength(2)
   })
 

@@ -82,9 +82,9 @@ export default function SessionList({
               <span className="session-record-title"><strong>{session.title}</strong><StatusBadge status={session.status} /></span>
               <span className="session-record-id">{session.id} · {session.duration}</span>
             </span>
-            <span className="session-counts" aria-label={`${session.toolCalls} tool calls, ${session.skills} skills, ${session.files} files`}>
+            <span className="session-counts" aria-label={`${session.toolCalls} tool calls, ${session.skillDocumentsRead || session.skills} skill documents read, ${session.files} files`}>
               <CountBadge value={session.toolCalls} label="tools" />
-              <CountBadge value={session.skills} label="skills" />
+              <CountBadge value={session.skillDocumentsRead || session.skills} label="skill docs" />
               <CountBadge value={session.files} label="files" />
             </span>
             <span className="session-last-event"><strong>{session.latestTool}</strong><span>{session.latestTime}</span></span>

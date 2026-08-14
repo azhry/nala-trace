@@ -35,16 +35,17 @@ describe('Nala Trace session workspace', () => {
   it('filters the detail stream and expands recorded tool input and response', () => {
     render(<TraceView session={{ id: 'session-test', events: 3, messages: 1, userTurns: 1, toolCalls: 1, startedAt: '08:00:00', capturedAt: '08:01:00', rawEvents: 3, eventsList: [
       { id: 'user-1', type: 'user', role: 'user', time: '08:00:01', record: 1, body: '/inspect this session' },
-      { id: 'tool-1', type: 'tool', index: '001', record: 2, time: '08:00:02', tool: 'shell_command', intent: 'Read frontend files', action: 'read', duration: 'recorded', status: 'success', skills: ['frontend-design'], files: ['frontend/src/App.jsx', '.agents/workflows/frontend.md'], input: 'Get-Content frontend/src/App.jsx', responseLabel: 'output', response: 'App.jsx read.' },
+      { id: 'tool-1', type: 'tool', index: '001', record: 2, time: '08:00:02', tool: 'shell_command', intent: 'Read frontend files', action: 'read', duration: 'recorded', status: 'success', skills: ['frontend-design'], files: ['frontend/src/App.jsx', '.agents/workflows/frontend.md', '.agents/skills/frontend-design/SKILL.md'], input: 'Get-Content frontend/src/App.jsx', responseLabel: 'output', response: 'App.jsx read.' },
     ] }} />)
 
     fireEvent.click(screen.getByRole('button', { name: /^tool calls$/i }))
     expect(screen.queryByText('/inspect this session')).not.toBeInTheDocument()
     expect(screen.getByText('tool_input')).toBeInTheDocument()
     expect(screen.getByText('tool_response')).toBeInTheDocument()
-    expect(screen.getByText('Skill invocations')).toBeInTheDocument()
-    expect(screen.getByText('1 invocations · 1 unique skills')).toBeInTheDocument()
-    expect(screen.getAllByText('skill / frontend-design')).toHaveLength(2)
+    expect(screen.getByText('What the audit actually recorded')).toBeInTheDocument()
+    expect(screen.getByText('1 SKILL.md read across 1 unique skill document · 1 inferred tag occurrence across 1 inferred label')).toBeInTheDocument()
+    expect(screen.getByText('skill / frontend-design')).toBeInTheDocument()
+    expect(screen.getAllByText('inferred / frontend-design')).toHaveLength(2)
 
     fireEvent.click(screen.getByRole('button', { name: /prompts & context/i }))
     expect(screen.getByText('User prompt')).toBeInTheDocument()

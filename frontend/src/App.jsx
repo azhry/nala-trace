@@ -20,11 +20,19 @@ function navigateTo(path) {
   window.location.hash = `/${path}`
 }
 
+function dataSourceCopy(apiState) {
+  if (apiState === 'connected') return { label: 'Go API data', status: 'Go API connected', detail: 'Using live session records from the Go API' }
+  if (apiState === 'loading') return { label: 'Checking source', status: 'Checking data source', detail: 'Verifying the Go API before describing these records as live' }
+  if (apiState === 'unavailable') return { label: 'No data source', status: 'No data source', detail: 'The Go API is unavailable and no audited capture is loaded' }
+  return { label: 'Audited capture', status: 'Audited capture loaded', detail: 'Using the real sanitized Codex audit snapshot; the Go API is unavailable' }
+}
+
 function BrandMark() {
   return <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
 }
 
 function Sidebar({ route, selectedSession, onNavigate, apiState }) {
+  const source = dataSourceCopy(apiState)
   return <aside className="sidebar">
     <div className="brand-lockup"><BrandMark /><span>NALA<span className="brand-muted"> / TRACE</span></span></div>
     <div className="workspace-switcher"><span className="workspace-avatar">NL</span><span><strong>Nala Labs</strong><small>Codex session viewer</small></span></div>
@@ -37,12 +45,13 @@ function Sidebar({ route, selectedSession, onNavigate, apiState }) {
         <span className="nav-icon" aria-hidden="true">{navItems[1].icon}</span><span><strong>{navItems[1].label}</strong><small>{navItems[1].hint}</small></span>
       </button>
     </nav>
-    <div className="sidebar-bottom"><div className="capture-status"><span className={`status-dot ${apiState === 'connected' ? 'connected' : ''}`} /><span><strong>{apiState === 'connected' ? 'Go API connected' : 'Local session loaded'}</strong><small>{apiState === 'connected' ? 'Using captured API data' : 'Sanitized Codex rollout data'}</small></span></div><div className="sidebar-footer"><span>nala-trace</span><span>session viewer</span></div></div>
+    <div className="sidebar-bottom"><div className="capture-status"><span className={`status-dot ${apiState === 'connected' ? 'connected' : ''}`} /><span><strong>{source.status}</strong><small>{source.detail}</small></span></div><div className="sidebar-footer"><span>nala-trace</span><span>session viewer</span></div></div>
   </aside>
 }
 
-function Topbar({ route, session }) {
-  return <header className="topbar"><div className="breadcrumb"><span>Nala Labs</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className="source-chip"><span className="pulse-dot" />Real captured data</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}</div></header>
+function Topbar({ route, session, apiState }) {
+  const source = dataSourceCopy(apiState)
+  return <header className="topbar"><div className="breadcrumb"><span>Nala Labs</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}</div></header>
 }
 
 function WorkspaceStats({ sessions }) {
@@ -51,12 +60,20 @@ function WorkspaceStats({ sessions }) {
   return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>captured in this source</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from the complete rollout</small></div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>current review signal</small></div><div><span>Last captured</span><strong>{sessions[0]?.capturedAt || '—'}</strong><small>source session timestamp</small></div></div>
 }
 
-function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange }) {
-  return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: current Codex rollout</span></div><WorkspaceStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} /></section>
+function DataSourceNotice({ apiState }) {
+  const source = dataSourceCopy(apiState)
+  if (apiState === 'connected') return null
+  return <div className="data-source-notice" role="status"><span className="section-label">Data provenance</span><strong>{source.label}</strong><p>{source.detail}. No synthetic, demo, or placeholder session records are being presented.</p></div>
 }
 
-function DetailPage({ session, onBack }) {
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title}</h1><p>{session.id} · captured {session.startedAt}–{session.capturedAt} · {session.duration}</p></div><span className={`detail-status ${session.status}`}>{session.outcome}</span></div><div className="detail-layout"><TraceView session={session} /><InsightCards insights={session.insights} /></div></section>
+function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, apiState }) {
+  const source = dataSourceCopy(apiState)
+  return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} /><WorkspaceStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} /></section>
+}
+
+function DetailPage({ session, onBack, apiState }) {
+  const source = dataSourceCopy(apiState)
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title}</h1><p>{session.id} · captured {session.startedAt}–{session.capturedAt} · {session.duration}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome}</span></div></div><DataSourceNotice apiState={apiState} /><div className="detail-layout"><TraceView session={session} /><InsightCards insights={session.insights} /></div></section>
 }
 
 export default function App() {
@@ -64,7 +81,7 @@ export default function App() {
   const [sessions, setSessions] = useState(currentSessions)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
-  const [apiState, setApiState] = useState('demo')
+  const [apiState, setApiState] = useState('loading')
   const [remoteTrace, setRemoteTrace] = useState(null)
 
   useEffect(() => {
@@ -75,10 +92,15 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true
-    getHealth().then(() => { if (mounted) setApiState('connected') }).catch(() => {})
-    getSessions().then((payload) => {
-      if (mounted && Array.isArray(payload?.sessions) && payload.sessions.length) setSessions(payload.sessions)
-    }).catch(() => {})
+    Promise.all([getHealth(), getSessions()]).then(([health, payload]) => {
+      if (health?.status !== 'ok' || !Array.isArray(payload?.sessions)) throw new Error('The Go API did not return a valid session payload')
+      if (mounted) {
+        setSessions(payload.sessions)
+        setApiState('connected')
+      }
+    }).catch(() => {
+      if (mounted) setApiState(currentSessions.length ? 'capture' : 'unavailable')
+    })
     return () => { mounted = false }
   }, [])
 
@@ -102,5 +124,5 @@ export default function App() {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
   }
 
-  return <div className="app-shell"><Sidebar route={route} selectedSession={selectedSession} onNavigate={navigateTo} apiState={apiState} /><main className="main-content"><Topbar route={route} session={selectedSession} />{route.view === 'detail' && detailSession ? <DetailPage session={detailSession} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} />}</main></div>
+  return <div className="app-shell"><Sidebar route={route} selectedSession={selectedSession} onNavigate={navigateTo} apiState={apiState} /><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} />{route.view === 'detail' && detailSession ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} apiState={apiState} />}</main></div>
 }

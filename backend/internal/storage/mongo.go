@@ -60,18 +60,7 @@ func newMongoStore(ctx context.Context, cfg config.MongoConfig, factory clientFa
 	if err := validateURI(cfg.URI); err != nil {
 		return nil, &LifecycleError{Code: "mongo_config_invalid_uri"}
 	}
-	if (cfg.Username == "") != (cfg.Password == "") {
-		return nil, &LifecycleError{Code: "mongo_config_incomplete_credentials"}
-	}
-
 	clientOptions := options.Client().ApplyURI(cfg.URI)
-	if cfg.Username != "" {
-		clientOptions.SetAuth(options.Credential{
-			Username:   cfg.Username,
-			Password:   cfg.Password,
-			AuthSource: "admin",
-		})
-	}
 	connectCtx, cancelConnect := context.WithTimeout(ctx, cfg.ConnectTimeout)
 	defer cancelConnect()
 	client, err := factory(connectCtx, clientOptions)

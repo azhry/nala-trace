@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	defaultListenAddr        = ":8080"
-	defaultFrontendURL       = "http://localhost:5173/"
-	defaultAllowedOrigin     = "http://localhost:5173"
+	defaultListenAddr        = ":3003"
+	defaultFrontendURL       = "http://localhost:5005/"
+	defaultAllowedOrigin     = "http://localhost:5005"
 	defaultMongoURI          = "mongodb://127.0.0.1:27017"
 	defaultMongoDatabase     = "nala_trace"
 	defaultNalaLabsAuthURL   = "http://127.0.0.1:18080"
@@ -21,7 +21,7 @@ const (
 	defaultSessionTTL        = 24 * time.Hour
 	defaultVaultAddr         = "http://127.0.0.1:8200"
 	defaultVaultMount        = "kv"
-	defaultVaultPath         = "nala-trace/config"
+	defaultVaultPath         = "nala-labs/nala-trace"
 	defaultConnectTimeout    = 5 * time.Second
 	defaultPingTimeout       = 2 * time.Second
 	defaultDisconnectTimeout = 5 * time.Second
@@ -47,8 +47,6 @@ type MongoConfig struct {
 	Enabled           bool
 	URI               string
 	Database          string
-	Username          string
-	Password          string
 	ConnectTimeout    time.Duration
 	PingTimeout       time.Duration
 	DisconnectTimeout time.Duration
@@ -104,8 +102,6 @@ func LoadFrom(values map[string]string) (Config, error) {
 			Enabled:           boolOr(lookup, "MONGO_ENABLED", false),
 			URI:               valueOr(lookup, "MONGO_URI", defaultMongoURI),
 			Database:          valueOr(lookup, "MONGO_DATABASE", defaultMongoDatabase),
-			Username:          values["MONGO_USERNAME"],
-			Password:          values["MONGO_PASSWORD"],
 			ConnectTimeout:    durationOr(lookup, "MONGO_CONNECT_TIMEOUT", defaultConnectTimeout),
 			PingTimeout:       durationOr(lookup, "MONGO_PING_TIMEOUT", defaultPingTimeout),
 			DisconnectTimeout: durationOr(lookup, "MONGO_DISCONNECT_TIMEOUT", defaultDisconnectTimeout),
@@ -219,7 +215,7 @@ func Redact(value string) string {
 func knownKeys() []string {
 	return []string{
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
-		"CODEX_TRACE_API_TOKEN", "MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE", "MONGO_USERNAME", "MONGO_PASSWORD",
+		"CODEX_TRACE_API_TOKEN", "MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
 		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL", "SESSION_COOKIE_NAME",
 		"SESSION_TTL", "SESSION_SECRET", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}

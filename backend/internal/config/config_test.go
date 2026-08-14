@@ -11,7 +11,7 @@ func TestLoadFromUsesSafeDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
 	}
-	if cfg.ListenAddr != ":8080" || cfg.Mongo.URI != "mongodb://127.0.0.1:27017" || cfg.Auth.NalaLabsAuthURL != "http://127.0.0.1:18080" {
+	if cfg.ListenAddr != ":3003" || cfg.FrontendURL != "http://localhost:5005/" || cfg.AllowedOrigin != "http://localhost:5005" || cfg.Mongo.URI != "mongodb://127.0.0.1:27017" || cfg.Auth.NalaLabsAuthURL != "http://127.0.0.1:18080" || cfg.Vault.KVPath != "nala-labs/nala-trace" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.Mongo.Enabled {

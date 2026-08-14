@@ -3,7 +3,7 @@
 VAULT_ADDR=http://127.0.0.1:8200
 VAULT_TOKEN=
 VAULT_KV_MOUNT=kv
-VAULT_KV_PATH=nala-trace/config
+VAULT_KV_PATH=nala-labs/nala-trace
 
 # Alternatively, omit VAULT_TOKEN and provide both AppRole values.
 # VAULT_ROLE_ID=

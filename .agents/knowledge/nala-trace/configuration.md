@@ -6,9 +6,9 @@ This is the application-specific configuration contract for the Go API and React
 
 | Profile | API address | Frontend origin | MongoDB endpoint | Nala Labs auth authority |
 | --- | --- | --- | --- | --- |
-| Local default | `:8080` | `http://localhost:5173/` | `mongodb://127.0.0.1:27017` | `http://127.0.0.1:18080` |
+| Local default | `:3003` | `http://localhost:5005/` | `mongodb://127.0.0.1:27017` | `http://127.0.0.1:18080` |
 | Local alternate | process override | `http://localhost:18081/` | process override | process-supplied Nala Labs auth URL |
-| Nala Labs Kubernetes | `:8080` unless deployment overrides it | deployment-supplied public origin | `mongodb://mongodb.nala-labs.svc.cluster.local:27017` | deployment-supplied Nala Labs auth URL |
+| Nala Labs Kubernetes | `:3003` unless deployment overrides it | deployment-supplied public origin | `mongodb://mongodb.nala-labs.svc.cluster.local:27017` | deployment-supplied Nala Labs auth URL |
 
 The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is not a browser credential and must never contain a secret. Production browser code uses same-origin API paths.
 
@@ -18,26 +18,24 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 
 | Name | Class | Local default/override | Nala Labs default | Vault ownership / consumer | Required behavior |
 | --- | --- | --- | --- | --- | --- |
-| `AUTH_LISTEN_ADDR` | ordinary | `:8080`; alternate `:18080` | `:8080` | API deployment configuration | Required; fail before serving if empty or invalid. |
-| `FRONTEND_URL` | ordinary | `http://localhost:5173/`; alternate `http://localhost:18081/` | deployment-supplied public origin | API CORS/session redirect configuration | Required; must be an explicit origin and must not contain credentials. |
-| `AUTH_ALLOWED_ORIGIN` | ordinary | `http://localhost:5173`; alternate `http://localhost:18081` | same value as approved frontend origin | API CORS middleware | Required for browser-facing API responses. |
+| `AUTH_LISTEN_ADDR` | ordinary | `:3003`; alternate `:18080` | `:3003` | API deployment configuration | Required; fail before serving if empty or invalid. |
+| `FRONTEND_URL` | ordinary | `http://localhost:5005/`; alternate `http://localhost:18081/` | deployment-supplied public origin | API CORS/session redirect configuration | Required; must be an explicit origin and must not contain credentials. |
+| `AUTH_ALLOWED_ORIGIN` | ordinary | `http://localhost:5005`; alternate `http://localhost:18081` | same value as approved frontend origin | API CORS middleware | Required for browser-facing API responses. |
 | `MONGO_ENABLED` | ordinary | `false` for no-dependency local startup | `true` for the API workload | API configuration | When `true`, the Mongo settings below are required and startup/ping is bounded. |
-| `MONGO_URI` | ordinary endpoint | `mongodb://127.0.0.1:27017` | `mongodb://mongodb.nala-labs.svc.cluster.local:27017` | API configuration; credentials are separate | Required when `MONGO_ENABLED=true`; do not embed credentials. |
+| `MONGO_URI` | secret connection string | `mongodb://127.0.0.1:27017` for local unauthenticated Mongo; secret-store value when auth is enabled | Vault key `MONGO_URI` at `kv/data/nala-labs/nala-trace`, containing the complete connection string | API Mongo client | Required when `MONGO_ENABLED=true`; pass the full URI directly to the Mongo driver and redact it from errors/logs. |
 | `MONGO_DATABASE` | ordinary | `nala_trace` | `nala_trace` unless deployment overrides it | API configuration | Required when Mongo is enabled. |
-| `MONGO_USERNAME` | secret | local secret-store value | Vault-injected value | `kv/data/nala-trace/mongodb` key `username`; API Mongo client | Required when the Mongo deployment enforces authentication. |
-| `MONGO_PASSWORD` | secret | local secret-store value | Vault-injected value | `kv/data/nala-trace/mongodb` key `password`; API Mongo client | Required when the Mongo deployment enforces authentication. |
 | `MONGO_CONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `MONGO_PING_TIMEOUT` | ordinary duration | `2s` | `2s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `MONGO_DISCONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
-| `CODEX_TRACE_API_TOKEN` | secret | local secret-store value | Vault-injected value | `kv/data/nala-trace/ingestion` key `api_token`; hook ingestion handler | Required before authenticated ingestion is enabled; compare without logging either value. |
+| `CODEX_TRACE_API_TOKEN` | secret | local secret-store value | Vault-injected value | `kv/data/nala-labs/nala-trace` key `CODEX_TRACE_API_TOKEN`; hook ingestion handler | Required before authenticated ingestion is enabled; compare without logging either value. |
 | `NALA_LABS_AUTH_URL` | ordinary URL | `http://127.0.0.1:18080` | deployment-supplied Nala Labs auth service URL | API authentication configuration | Required for shared JWT validation; use only an approved network endpoint and never embed credentials. |
 | `SESSION_COOKIE_NAME` | ordinary | `nala_trace_session` | `nala_trace_session` | API session configuration | Stable, non-secret cookie name. |
 | `SESSION_TTL` | ordinary duration | `24h` unless product policy overrides it | deployment policy | API session configuration | Required duration; reject invalid or non-positive values. |
-| `SESSION_SECRET` | secret | local secret-store value | Vault-injected value | `kv/data/nala-trace/session` key `secret`; optional Nala Trace session only | Must never be used to validate or forge a Nala Labs JWT; never log or persist in fixtures. |
+| `SESSION_SECRET` | secret | local secret-store value | Vault-injected value | `kv/data/nala-labs/nala-trace` key `SESSION_SECRET`; optional Nala Trace session only | Must never be used to validate or forge a Nala Labs JWT; never log or persist in fixtures. |
 | `VAULT_ENABLED` | ordinary | `false` when values are loaded by local process environment | `true` for Vault-backed workload configuration | API/deployment configuration | When `true`, workload identity and Vault path settings are required. |
 | `VAULT_ADDR` | ordinary URL | `http://127.0.0.1:8200` through a local port-forward | `http://vault.nala-labs.svc.cluster.local:8200` | API/deployment configuration | Required when Vault is enabled. |
 | `VAULT_KV_MOUNT` | ordinary | `kv` | `kv` | API/deployment configuration | Required when Vault is enabled. |
-| `VAULT_KV_PATH` | ordinary path | `nala-trace/config` | `nala-trace/config` | API/deployment configuration | Required when Vault is enabled; must not be used as a secret value. |
+| `VAULT_KV_PATH` | ordinary path | `nala-labs/nala-trace` | `nala-labs/nala-trace` | API/deployment configuration | Required when Vault is enabled; must not be used as a secret value. |
 | `VAULT_TOKEN` | secret or workload identity | local secret-store value only | prefer Kubernetes auth role `nala-trace-api` | `auth/kubernetes/role/nala-trace-api`; local secret-store injection if needed | Never check in a static token. Prefer workload identity in Kubernetes. |
 | `VAULT_ROLE_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_SECRET_ID`; never check in. |
 | `VAULT_SECRET_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_ROLE_ID`; never check in. |
@@ -48,9 +46,7 @@ The React package may read only non-secret `VITE_*` settings. The backend owns b
 
 The application workload is the owner of the following logical secret paths:
 
-- `kv/data/nala-trace/ingestion`: hook ingestion API token.
-- `kv/data/nala-trace/mongodb`: Mongo username and password.
-- `kv/data/nala-trace/session`: session secret.
+- `kv/data/nala-labs/nala-trace`: Nala Trace runtime values, including the complete `MONGO_URI`, ingestion token, and session secret under their documented keys.
 - `auth/kubernetes/role/nala-trace-api`: preferred workload identity binding for reading the paths above. A static `VAULT_TOKEN` is a local-only fallback and has no checked-in value.
 
 For local development, copy the tracked root `.vault-config.example` to the ignored root `.vault-config` and fill `VAULT_TOKEN` from a protected secret source. If token auth is unavailable, leave `VAULT_TOKEN` empty and provide both `VAULT_ROLE_ID` and `VAULT_SECRET_ID` instead. Process environment values take precedence when the future Vault loader reads this transport file.
@@ -70,7 +66,7 @@ Kubernetes deployment manifests must map ordinary names through a ConfigMap and 
 
 - [ ] Every Go configuration field has exactly one table row and uses the listed environment name.
 - [ ] Every Kubernetes ConfigMap/Secret/Vault projection uses the listed environment name at the process boundary.
-- [ ] `MONGO_URI` has no embedded credentials in examples or manifests; Mongo credentials are separate secret fields.
+- [ ] `MONGO_URI` is the only Mongo connection secret; when credentials are required they are embedded in the Vault-supplied URI and never logged.
 - [ ] No secret-valued example is present in source, tests, fixtures, issue text, PR text, or logs.
 - [ ] `NALA_LABS_AUTH_URL` resolves to the approved Nala Labs auth service from the backend network.
 - [ ] The forwarded bearer token is validated by Nala Labs and never logged or persisted by Nala Trace.

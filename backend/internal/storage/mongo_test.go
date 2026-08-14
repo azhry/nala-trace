@@ -91,6 +91,23 @@ func TestNewMongoStoreSuccessAndClose(t *testing.T) {
 	}
 }
 
+func TestNewMongoStoreUsesCredentialsFromURI(t *testing.T) {
+	cfg := testMongoConfig()
+	cfg.URI = "mongodb://uri-user:uri-password@localhost:27017/nala_trace?authSource=admin"
+	fake := &fakeMongoClient{}
+	var receivedAuth *options.Credential
+	store, err := newMongoStore(context.Background(), cfg, func(_ context.Context, opts *options.ClientOptions) (mongoClient, error) {
+		receivedAuth = opts.Auth
+		return fake, nil
+	})
+	if err != nil || store == nil {
+		t.Fatalf("expected URI-authenticated store, store=%v err=%v", store, err)
+	}
+	if receivedAuth == nil || receivedAuth.Username != "uri-user" || receivedAuth.Password != "uri-password" || receivedAuth.AuthSource != "admin" {
+		t.Fatalf("Mongo driver did not receive URI credentials: %+v", receivedAuth)
+	}
+}
+
 func TestNewMongoStorePingTimeoutIsBoundedAndCloses(t *testing.T) {
 	cfg := testMongoConfig()
 	cfg.PingTimeout = 10 * time.Millisecond

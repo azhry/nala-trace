@@ -20,9 +20,6 @@ func TestLiveMongoStore(t *testing.T) {
 	if value := os.Getenv("MONGO_DATABASE"); value != "" {
 		cfg.Database = value
 	}
-	cfg.Username = os.Getenv("MONGO_USERNAME")
-	cfg.Password = os.Getenv("MONGO_PASSWORD")
-
 	store, err := NewMongoStore(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("live Mongo lifecycle failed: %v", err)

@@ -101,3 +101,6 @@ body { font-size: 16px; }
 @media (max-width: 720px) {
   .page-heading h1, .detail-heading h1 { font-size: 31px; }.page-heading p:not(.eyebrow), .detail-heading p:not(.eyebrow) { font-size: 15px; }.nav-item strong { font-size: 13px; }.nav-item small { font-size: 11px; }.workspace-stats span, .workspace-stats small { font-size: 12px; }.workspace-stats strong { font-size: 22px; }.panel-header h2 { font-size: 21px; }.panel-description { font-size: 14px; }.filter-tabs button, .trace-controls button { font-size: 13px; }.session-record-title strong { font-size: 15px; }.session-record-id, .session-captured { font-size: 12px; }.conversation-message p { font-size: 14px; }.tool-card-intent { font-size: 12px; }.code-block pre, .context-code pre { font-size: 12px; }.data-source-notice p { font-size: 13px; }
 }
+
+.sidebar-section-label { margin-top: 42px; }
+@media (max-width: 720px) { .sidebar-section-label { margin-top: 20px; } }

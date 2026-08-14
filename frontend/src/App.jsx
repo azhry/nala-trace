@@ -35,7 +35,6 @@ function Sidebar({ route, selectedSession, onNavigate, apiState }) {
   const source = dataSourceCopy(apiState)
   return <aside className="sidebar">
     <div className="brand-lockup"><BrandMark /><span>NALA<span className="brand-muted"> / TRACE</span></span></div>
-    <div className="workspace-switcher"><span className="workspace-avatar">NT</span><span><strong>Nala Trace</strong><small>Codex session viewer</small></span></div>
     <div className="sidebar-section-label">Navigate</div>
     <nav className="sidebar-nav" aria-label="Session navigation">
       <button type="button" className={`nav-item ${route.view === 'sessions' ? 'is-active' : ''}`} onClick={() => onNavigate('sessions')} aria-current={route.view === 'sessions' ? 'page' : undefined}>
@@ -54,7 +53,7 @@ function Topbar({ route, session, apiState }) {
   return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}</div></header>
 }
 
-function WorkspaceStats({ sessions }) {
+function SessionStats({ sessions }) {
   const tools = sessions.reduce((total, session) => total + (session.toolCalls || 0), 0)
   const attention = sessions.filter((session) => session.status === 'attention').length
   return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>captured in this source</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from the complete rollout</small></div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>current review signal</small></div><div><span>Last captured</span><strong>{sessions[0]?.capturedAt || '—'}</strong><small>source session timestamp</small></div></div>
@@ -68,7 +67,7 @@ function DataSourceNotice({ apiState }) {
 
 function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, apiState }) {
   const source = dataSourceCopy(apiState)
-  return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} /><WorkspaceStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} /></section>
+  return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} /><SessionStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} /></section>
 }
 
 function DetailPage({ session, onBack, apiState }) {

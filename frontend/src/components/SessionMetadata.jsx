@@ -47,6 +47,7 @@ export default function SessionMetadata({ session }) {
       <MetadataField label="Client" value={formatClient(metadata.client, metadata.clientVersion)} />
       <MetadataField label="Host source" value={metadata.source} />
       <MetadataField label="Thread source" value={metadata.threadSource} />
+      <MetadataField label="Recorded source" value={metadata.recordedFrom} />
     </div>
     <p className="session-metadata-provenance">{metadata.recordedFrom || 'Recorded session metadata'} · Missing fields remain “Not recorded”.</p>
   </section>

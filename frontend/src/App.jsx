@@ -1,420 +1,211 @@
 import { useEffect, useMemo, useState } from 'react'
+import { getHealth, getSessions } from './api'
+import InsightCards from './components/InsightCards'
+import SessionList from './components/SessionList'
+import TraceView from './components/TraceView'
 
 const navItems = [
-  { id: 'sessions', label: 'Sessions', count: '12', icon: '◌' },
-  { id: 'evals', label: 'Evals', count: '04', icon: '↗' },
-  { id: 'golden', label: 'Golden Set', count: '28', icon: '✳' },
+  { id: 'review', label: 'Review traces', hint: 'Find runs and inspect decisions', icon: '⌁' },
+  { id: 'evaluations', label: 'Measure quality', hint: 'See evals and judge alignment', icon: '◒' },
+  { id: 'reference', label: 'Reference set', hint: 'Protect trusted examples', icon: '✦' },
 ]
 
-const viewContent = {
-  sessions: {
-    eyebrow: 'Trace workspace / Sessions',
-    title: 'Read the trace before the failure.',
-    description:
-      'A quiet place to follow what the agent saw, chose, and changed — one captured run at a time.',
+const pageCopy = {
+  review: {
+    eyebrow: 'Trace review / workspace',
+    title: 'Understand the run, not just the result.',
+    description: 'Start with a captured session. Follow the conversation, open the tool rows, and see the evidence behind the final outcome.',
   },
-  evals: {
-    eyebrow: 'Trace workspace / Evals',
-    title: 'Measure what good looks like.',
-    description:
-      'Keep deterministic checks and human judgement in the same line of sight as the sessions they explain.',
+  evaluations: {
+    eyebrow: 'Measure quality / workspace',
+    title: 'Know when an agent is getting better.',
+    description: 'Pair deterministic checks with judge alignment so a passing score still has a human-readable reason behind it.',
   },
-  golden: {
-    eyebrow: 'Trace workspace / Golden Set',
-    title: 'Keep the reference close.',
-    description:
-      'A small, trusted collection of labelled traces gives every new evaluation a stable point of comparison.',
+  reference: {
+    eyebrow: 'Reference set / workspace',
+    title: 'Keep the examples that set the bar.',
+    description: 'A small, trusted set gives every new trace something concrete to learn from and compare against.',
   },
 }
 
-const sessions = [
+const demoSessions = [
   {
     id: 'sess_8f24',
-    label: 'Build the React shell',
-    status: 'captured',
-    age: '2 min ago',
+    title: 'Build the React shell',
+    status: 'passed',
+    capturedAt: '2 min ago',
+    startedAt: '09:14:02',
+    duration: '08m 12s',
     events: 38,
-    tools: 12,
-    latest: 'apply_patch',
+    toolCalls: 12,
+    skills: 3,
+    files: 8,
+    latestTool: 'apply_patch',
+    latestTime: '09:22:14',
+    outcome: 'Passed',
+    outcomeNote: '4 of 4 evals passed',
+    insights: { evalPasses: 4, evalTotal: 4, judgeAlignment: 94, reviewSignal: 'Clear' },
+    eventsList: [
+      { id: 'e1', type: 'assistant', role: 'assistant', time: '09:14:08', body: 'I’ll map the existing frontend first, then shape the review flow around the trace data instead of starting from a blank dashboard.' },
+      { id: 'e2', type: 'tool', index: '01', tool: 'rg', intent: 'Find the current app entrypoint and test seams', duration: '0.4s', status: 'success', skills: ['zoom-out'], files: ['frontend/src/App.jsx'], input: 'rg --files frontend/src', responseLabel: '12 files', response: 'frontend/src/App.jsx\nfrontend/src/main.jsx\nfrontend/src/__tests__/App.test.jsx' },
+      { id: 'e3', type: 'assistant', role: 'assistant', time: '09:15:02', body: 'The current surface is a landing shell. I’m keeping the useful navigation, but making the session list the first decision point and the trace the main reading experience.' },
+      { id: 'e4', type: 'tool', index: '02', tool: 'Get-Content', intent: 'Read the existing component and styling contract', duration: '0.2s', status: 'success', skills: ['frontend-design'], files: ['frontend/src/styles.css'], input: 'Get-Content frontend/src/styles.css', responseLabel: 'read', response: 'Current UI is a landing shell with compact type and no conversation/tool detail pane.' },
+      { id: 'e5', type: 'tool', index: '03', tool: 'apply_patch', intent: 'Build the trace-review component model', duration: '1.8s', status: 'success', skills: ['frontend-design', 'tdd'], files: ['components/TraceView.jsx', 'components/ToolCallCard.jsx'], input: 'Add SessionList, TraceView, ToolCallCard, and InsightCards', responseLabel: 'applied', response: 'Applied component structure and interaction states.' },
+      { id: 'e6', type: 'assistant', role: 'assistant', time: '09:22:14', body: 'The trace now reads as a sequence: find a run, follow what happened, and judge the evidence. The same structure carries across desktop and mobile.' },
+    ],
   },
   {
     id: 'sess_4c19',
-    label: 'Review auth boundary',
-    status: 'captured',
-    age: '18 min ago',
+    title: 'Review auth boundary',
+    status: 'passed',
+    capturedAt: '18 min ago',
+    startedAt: '08:51:11',
+    duration: '05m 44s',
     events: 24,
-    tools: 8,
-    latest: 'linear_get_issue',
+    toolCalls: 8,
+    skills: 2,
+    files: 5,
+    latestTool: 'linear_get_issue',
+    latestTime: '08:56:55',
+    outcome: 'Passed',
+    outcomeNote: '3 of 3 evals passed',
+    insights: { evalPasses: 3, evalTotal: 3, judgeAlignment: 91, reviewSignal: 'Clear' },
+    eventsList: [
+      { id: 'a1', type: 'assistant', role: 'assistant', time: '08:51:15', body: 'I’m checking the issue contract and the existing identity boundary before touching the service configuration.' },
+      { id: 'a2', type: 'tool', index: '01', tool: 'linear_get_issue', intent: 'Read the implementation contract and acceptance criteria', duration: '0.7s', status: 'success', skills: ['linear-issue-management'], files: ['.agents/workflows/delivery.md'], input: '{ "issue": "AZH-452" }', responseLabel: 'loaded', response: 'Issue loaded: shared Nala Labs IAM, Vault-backed runtime configuration, health contract.' },
+      { id: 'a3', type: 'assistant', role: 'assistant', time: '08:56:55', body: 'The browser should receive the Nala Labs token, while the API keeps the service-to-service boundary explicit. I’ll verify that the same token is accepted by nala-trace.' },
+    ],
   },
   {
     id: 'sess_1b07',
-    label: 'Trace proxy failure',
+    title: 'Trace proxy failure',
     status: 'attention',
-    age: '1 hr ago',
+    capturedAt: '1 hr ago',
+    startedAt: '08:04:33',
+    duration: '03m 19s',
     events: 17,
-    tools: 6,
-    latest: 'shell_command',
+    toolCalls: 6,
+    skills: 1,
+    files: 3,
+    latestTool: 'shell_command',
+    latestTime: '08:07:52',
+    outcome: 'Needs review',
+    outcomeNote: '1 eval needs attention',
+    insights: { evalPasses: 3, evalTotal: 4, judgeAlignment: 72, reviewSignal: 'Investigate' },
+    eventsList: [
+      { id: 'p1', type: 'assistant', role: 'assistant', time: '08:04:37', body: 'I’m reproducing the local health response and checking whether the service is talking to the configured dependencies or an old process.' },
+      { id: 'p2', type: 'tool', index: '01', tool: 'shell_command', intent: 'Reproduce the local backend response', duration: '2.1s', status: 'attention', skills: ['diagnose'], files: ['frontend/vite.config.js'], input: 'Invoke-WebRequest http://localhost:3003/healthz', responseLabel: 'degraded', response: 'casdoor: not_configured\nvault: not_configured\nProcess has not restarted with current runtime configuration.' },
+      { id: 'p3', type: 'assistant', role: 'assistant', time: '08:07:52', body: 'The result is not a live dependency check yet. This run needs a restart and a second capture before it can be considered healthy.' },
+    ],
   },
 ]
 
-const evalModes = {
-  latest: {
-    score: '92.6',
-    period: 'latest 40 sessions',
-    updated: '8 min ago',
-    checks: [
-      { label: 'Files read before write', value: '98.4%', tone: 'lilac' },
-      { label: 'Tool budget respected', value: '94.1%', tone: 'blue' },
-      { label: 'Human label agreement', value: '91.8%', tone: 'amber' },
-    ],
-  },
-  baseline: {
-    score: '89.8',
-    period: 'baseline 120 sessions',
-    updated: 'yesterday',
-    checks: [
-      { label: 'Files read before write', value: '96.7%', tone: 'lilac' },
-      { label: 'Tool budget respected', value: '92.5%', tone: 'blue' },
-      { label: 'Human label agreement', value: '89.1%', tone: 'amber' },
-    ],
-  },
-}
-
-const goldenRows = [
-  { id: 'gold_014', label: 'Correctly routes API errors', tag: 'routing', reviewed: 'Today' },
-  { id: 'gold_011', label: 'Reads context before editing', tag: 'workflow', reviewed: 'Yesterday' },
-  { id: 'gold_008', label: 'Keeps secrets out of the client', tag: 'security', reviewed: 'Aug 12' },
+const referenceRows = [
+  { id: 'gold_014', title: 'Correctly routes API errors', category: 'routing', score: '100%', reviewed: 'Today' },
+  { id: 'gold_011', title: 'Reads context before editing', category: 'workflow', score: '100%', reviewed: 'Yesterday' },
+  { id: 'gold_008', title: 'Keeps secrets out of the client', category: 'security', score: '98%', reviewed: 'Aug 12' },
 ]
 
 function viewFromHash(hash = window.location.hash) {
-  const candidate = hash.replace('#', '')
-  return navItems.some((item) => item.id === candidate) ? candidate : 'sessions'
+  const candidate = hash.replace('#/', '').replace('#', '')
+  return navItems.some((item) => item.id === candidate) ? candidate : 'review'
 }
 
-function StatusChip({ tone = 'lilac', children }) {
-  return <span className={`status-chip ${tone}`}>{children}</span>
+function BrandMark() {
+  return <span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
 }
 
-function NavLink({ item, activeView, onNavigate }) {
-  const isActive = activeView === item.id
-
-  return (
-    <a
-      className={`nav-link ${isActive ? 'is-active' : ''}`}
-      href={`#${item.id}`}
-      aria-current={isActive ? 'page' : undefined}
-      onClick={() => onNavigate(item.id)}
-    >
-      <span className="nav-link-icon" aria-hidden="true">{item.icon}</span>
-      <span>{item.label}</span>
-      <span className="nav-count">{item.count}</span>
-    </a>
-  )
-}
-
-function Sidebar({ activeView, onNavigate }) {
+function Sidebar({ activeView, onNavigate, apiState }) {
   return (
     <aside className="sidebar">
-      <div className="brand-block">
-        <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>
-        <div>
-          <p className="brand-name">Nala Trace</p>
-          <p className="brand-subtitle">agent observability</p>
-        </div>
-      </div>
+      <div className="brand-lockup"><BrandMark /><span>NALA<span className="brand-muted"> / TRACE</span></span></div>
+      <div className="workspace-switcher"><span className="workspace-avatar">NL</span><span><strong>Nala Labs</strong><small>Trace workspace</small></span><span className="switcher-chevron">⌄</span></div>
 
-      <div className="workspace-switcher" aria-label="Current workspace">
-        <span className="workspace-avatar">NL</span>
-        <span className="workspace-name"><small>Workspace</small><strong>Nala Labs</strong></span>
-        <span className="chevron" aria-hidden="true">⌄</span>
-      </div>
-
-      <nav className="primary-nav" aria-label="Primary navigation">
-        <p className="nav-label">Observe</p>
+      <div className="sidebar-section-label">Workspace</div>
+      <nav className="sidebar-nav" aria-label="Workspace navigation">
         {navItems.map((item) => (
-          <NavLink key={item.id} item={item} activeView={activeView} onNavigate={onNavigate} />
+          <button key={item.id} type="button" className={`nav-item ${activeView === item.id ? 'is-active' : ''}`} onClick={() => onNavigate(item.id)} aria-current={activeView === item.id ? 'page' : undefined}>
+            <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+            <span><strong>{item.label}</strong><small>{item.hint}</small></span>
+          </button>
         ))}
       </nav>
 
-      <div className="sidebar-footer">
-        <span className="mini-signal" aria-hidden="true" />
-        <span>Development mode</span>
-        <span className="footer-version">v0.1</span>
+      <div className="sidebar-bottom">
+        <div className="capture-status"><span className={`status-dot ${apiState === 'connected' ? 'connected' : ''}`} /><span><strong>{apiState === 'connected' ? 'Go API connected' : 'Demo data active'}</strong><small>{apiState === 'connected' ? 'Live sessions can load here' : 'Showing representative traces'}</small></span></div>
+        <div className="sidebar-footer"><span>nala-trace</span><span>v0.4.0</span></div>
       </div>
     </aside>
   )
 }
 
 function Topbar({ activeView }) {
-  return (
-    <header className="topbar">
-      <div className="breadcrumb" aria-label="Breadcrumb">
-        <span>Workspace</span><b>/</b><strong>{viewContent[activeView].eyebrow.split(' / ')[1]}</strong>
-      </div>
-      <div className="topbar-status">
-        <span className="proxy-status"><span className="live-dot" /> proxy ready</span>
-        <span className="proxy-path">/api <b>→</b> local Go service</span>
-      </div>
-    </header>
-  )
+  const label = pageCopy[activeView].eyebrow.split(' / ')[0]
+  return <header className="topbar"><div className="breadcrumb"><span>Nala Labs</span><span>/</span><strong>{label}</strong></div><div className="topbar-right"><span className="capture-chip"><span className="pulse-dot" />Capturing now</span><span className="keyboard-hint"><kbd>⌘</kbd><kbd>K</kbd> command menu</span></div></header>
 }
 
-function TracePulse() {
-  return (
-    <div className="trace-pulse" aria-label="Live trace pulse">
-      <div className="pulse-orbit pulse-orbit-one" />
-      <div className="pulse-orbit pulse-orbit-two" />
-      <div className="pulse-core"><span>NT</span></div>
-      <div className="pulse-bars" aria-hidden="true">
-        <i style={{ height: '35%' }} /><i style={{ height: '58%' }} /><i style={{ height: '44%' }} />
-        <i className="is-hot" style={{ height: '84%' }} /><i style={{ height: '64%' }} /><i style={{ height: '49%' }} />
-      </div>
-      <span className="pulse-caption">signal / 01</span>
-    </div>
-  )
+function PageIntro({ activeView }) {
+  const copy = pageCopy[activeView]
+  return <section className="page-intro"><div><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p className="page-description">{copy.description}</p></div><div className="intro-mark" aria-hidden="true"><span className="intro-orbit orbit-one" /><span className="intro-orbit orbit-two" /><span className="intro-core">{activeView === 'review' ? '⌁' : activeView === 'evaluations' ? '◒' : '✦'}</span></div></section>
 }
 
-function Hero({ activeView, onNavigate }) {
-  const currentView = viewContent[activeView]
-
-  return (
-    <section className="hero" aria-labelledby="page-title">
-      <div className="hero-copy">
-        <p className="eyebrow">{currentView.eyebrow}</p>
-        <h1 id="page-title">{currentView.title}</h1>
-        <p className="hero-description">{currentView.description}</p>
-        <a className="hero-link" href="#sessions" onClick={() => onNavigate('sessions')}>
-          Open session explorer <span aria-hidden="true">↗</span>
-        </a>
-      </div>
-      <TracePulse />
-    </section>
-  )
+function WorkspaceStats({ sessions }) {
+  const toolCalls = sessions.reduce((sum, session) => sum + session.toolCalls, 0)
+  const attention = sessions.filter((session) => session.status === 'attention').length
+  return <div className="workspace-stats" aria-label="Workspace summary"><div><span>Captured sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>last 24 hours</small></div><div><span>Tool calls reviewed</span><strong>{toolCalls}</strong><small>across current sample</small></div><div><span>Needs attention</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>{attention ? 'open review signal' : 'all clear'}</small></div><div><span>Latest capture</span><strong>09:22</strong><small>2 minutes ago</small></div></div>
 }
 
-function SummaryStrip() {
-  return (
-    <section className="stat-strip" aria-label="Workspace summary">
-      <div className="stat-card"><strong>12</strong><span>captured sessions</span></div>
-      <div className="stat-card"><strong>04</strong><span>active evals</span></div>
-      <div className="stat-card"><strong>28</strong><span>golden traces</span></div>
-      <div className="stat-note"><span className="live-dot" />Last event received <strong>2m ago</strong></div>
-    </section>
-  )
+function ReferenceView() {
+  return <section className="secondary-page" aria-labelledby="reference-title"><div className="secondary-heading"><div><p className="section-label">Trusted examples</p><h2 id="reference-title">Trusted trace reference set</h2><p>These are the traces your team has already agreed are worth emulating. Use them to calibrate reviews and spot regressions.</p></div><span className="record-count">28 examples</span></div><div className="reference-panel panel"><div className="reference-table-head"><span>Example</span><span>Category</span><span>Score</span><span>Last reviewed</span></div>{referenceRows.map((row) => <div className="reference-row" key={row.id}><div><strong>{row.title}</strong><small>{row.id}</small></div><span className="trace-tag blue">{row.category}</span><strong className="text-green">{row.score}</strong><span>{row.reviewed}</span><span className="row-arrow" aria-hidden="true">↗</span></div>)}</div><div className="method-note"><span className="method-icon">✦</span><div><strong>Why keep a reference set?</strong><p>A passing eval tells you what happened. A trusted trace shows the team what good looks like, including the reasoning and tool choices.</p></div></div></section>
 }
 
-function SessionsView() {
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState('all')
-  const [selectedId, setSelectedId] = useState(sessions[0].id)
-  const filteredSessions = useMemo(() => sessions.filter((session) => {
-    const matchesFilter = filter === 'all' || session.status === filter
-    const searchable = `${session.label} ${session.id} ${session.latest}`.toLowerCase()
-    return matchesFilter && searchable.includes(query.toLowerCase())
-  }), [filter, query])
-  const selectedSession = filteredSessions.find((session) => session.id === selectedId) || filteredSessions[0]
-
-  return (
-    <div className="content-grid sessions-grid">
-      <section className="panel session-index" aria-labelledby="sessions-heading">
-        <div className="panel-heading panel-heading-stack">
-          <div>
-            <p className="panel-kicker">Session index / 03 shown</p>
-            <h2 id="sessions-heading">Stay close to the evidence.</h2>
-          </div>
-          <label className="search-field">
-            <span className="sr-only">Search sessions</span>
-            <span aria-hidden="true">⌕</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search traces" />
-          </label>
-        </div>
-        <div className="filter-bar" aria-label="Session filters">
-          {['all', 'attention'].map((option) => (
-            <button
-              className={`filter-button ${filter === option ? 'is-selected' : ''}`}
-              key={option}
-              type="button"
-              aria-pressed={filter === option}
-              onClick={() => setFilter(option)}
-            >
-              {option === 'all' ? 'All traces' : 'Needs review'}
-              <span>{option === 'all' ? '03' : '01'}</span>
-            </button>
-          ))}
-        </div>
-        <div className="session-list" role="list">
-          {filteredSessions.length > 0 ? filteredSessions.map((session) => (
-            <div className="session-row-wrap" key={session.id} role="listitem">
-              <button
-                className={`session-row ${selectedSession?.id === session.id ? 'is-selected' : ''}`}
-                type="button"
-                aria-pressed={selectedSession?.id === session.id}
-                onClick={() => setSelectedId(session.id)}
-              >
-                <span className={`status-dot ${session.status}`} aria-hidden="true" />
-                <span className="session-main"><strong>{session.label}</strong><span>{session.id}</span></span>
-                <span className="session-meta"><span>{session.age}</span><span>{session.events} events</span></span>
-                <span className="row-arrow" aria-hidden="true">↗</span>
-              </button>
-            </div>
-          )) : (
-            <p className="empty-state">No traces match “{query}”.</p>
-          )}
-        </div>
-      </section>
-
-      <aside className="panel detail-panel" aria-labelledby="detail-heading">
-        <div className="panel-heading">
-          <div><p className="panel-kicker">Selected trace</p><h2 id="detail-heading">{selectedSession?.label || 'No trace selected'}</h2></div>
-          <StatusChip tone={selectedSession?.status === 'attention' ? 'amber' : 'lilac'}>
-            {selectedSession?.status === 'attention' ? 'review' : 'captured'}
-          </StatusChip>
-        </div>
-        {selectedSession ? (
-          <div className="detail-body">
-            <div className="detail-code"><span>trace_id</span><strong>{selectedSession.id}</strong></div>
-            <div className="detail-metrics">
-              <div><strong>{selectedSession.events}</strong><span>events</span></div>
-              <div><strong>{selectedSession.tools}</strong><span>tool calls</span></div>
-              <div><strong>{selectedSession.age.replace(' ago', '')}</strong><span>last seen</span></div>
-            </div>
-            <div className="latest-event"><span className="event-marker" /><span><small>Latest event</small><strong>{selectedSession.latest}</strong></span><StatusChip tone="blue">done</StatusChip></div>
-          </div>
-        ) : <p className="empty-state">Select a trace to inspect its signal.</p>}
-      </aside>
-
-      <section className="panel signal-panel" aria-labelledby="signal-heading">
-        <div className="panel-heading">
-          <div><p className="panel-kicker">Stream monitor</p><h2 id="signal-heading">The last 60 minutes.</h2></div>
-          <StatusChip tone="blue"><span className="live-dot" /> live</StatusChip>
-        </div>
-        <div className="signal-chart" aria-label="Captured event signal over the last hour">
-          <div className="signal-lines" aria-hidden="true" />
-          <div className="signal-bars" aria-hidden="true">
-            <i style={{ height: '32%' }} /><i style={{ height: '48%' }} /><i style={{ height: '42%' }} />
-            <i style={{ height: '70%' }} /><i style={{ height: '54%' }} /><i className="is-hot" style={{ height: '88%' }} />
-            <i style={{ height: '61%' }} /><i style={{ height: '76%' }} /><i style={{ height: '44%' }} /><i style={{ height: '66%' }} />
-            <i style={{ height: '50%' }} /><i style={{ height: '82%' }} />
-          </div>
-        </div>
-        <div className="chart-axis"><span>−60m</span><span>now</span></div>
-        <div className="signal-note"><span className="signal-note-mark">!</span><span>One session needs a second look.</span></div>
-      </section>
-    </div>
-  )
-}
-
-function EvalsView({ onNavigate }) {
-  const [mode, setMode] = useState('latest')
-  const currentMode = evalModes[mode]
-
-  return (
-    <div className="content-grid evals-grid">
-      <section className="panel score-panel" aria-labelledby="evals-heading">
-        <div className="panel-heading panel-heading-stack">
-          <div><p className="panel-kicker">Evaluation signal</p><h2 id="evals-heading">A healthy signal, with edges.</h2></div>
-          <div className="segmented-control" role="group" aria-label="Evaluation range">
-            {Object.keys(evalModes).map((option) => (
-              <button key={option} type="button" className={mode === option ? 'is-selected' : ''} aria-pressed={mode === option} onClick={() => setMode(option)}>
-                {option === 'latest' ? 'Latest' : 'Baseline'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="score-lockup"><strong>{currentMode.score}</strong><span>/ 100</span></div>
-        <div className="score-orbit" aria-hidden="true"><span>PASS</span></div>
-        <p className="panel-copy">The {currentMode.period} hold steady. Review the checks below when a trace drifts.</p>
-        <div className="score-footer"><span>Last refreshed {currentMode.updated}</span><a href="#sessions" onClick={() => onNavigate('sessions')}>Review evidence <span aria-hidden="true">↗</span></a></div>
-      </section>
-
-      <section className="panel checks-panel" aria-labelledby="checks-heading">
-        <div className="panel-heading"><div><p className="panel-kicker">Code-based checks</p><h2 id="checks-heading">Where the score comes from.</h2></div><StatusChip tone="lilac">3 signals</StatusChip></div>
-        <div className="check-list">
-          {currentMode.checks.map((check) => (
-            <div className="check-row" key={check.label}>
-              <span className={`check-marker ${check.tone}`} />
-              <span>{check.label}</span>
-              <strong>{check.value}</strong>
-            </div>
-          ))}
-        </div>
-        <div className="checks-footnote"><span className="info-mark">i</span><span>Deterministic checks are paired with human labels before they become a gate.</span></div>
-      </section>
-    </div>
-  )
-}
-
-function GoldenSetView() {
-  const [query, setQuery] = useState('')
-  const [tag, setTag] = useState('all')
-  const [selectedId, setSelectedId] = useState(goldenRows[0].id)
-  const tags = ['all', ...new Set(goldenRows.map((row) => row.tag))]
-  const filteredRows = useMemo(() => goldenRows.filter((row) => {
-    const matchesTag = tag === 'all' || row.tag === tag
-    return matchesTag && `${row.label} ${row.id} ${row.tag}`.toLowerCase().includes(query.toLowerCase())
-  }), [query, tag])
-  const selectedRow = goldenRows.find((row) => row.id === selectedId)
-
-  return (
-    <section className="panel golden-panel" aria-labelledby="golden-heading">
-      <div className="panel-heading panel-heading-stack">
-        <div><p className="panel-kicker">Labelled reference traces</p><h2 id="golden-heading">The examples worth protecting.</h2></div>
-        <label className="search-field"><span className="sr-only">Search golden set</span><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search records" /></label>
-      </div>
-      <div className="filter-bar golden-filters" aria-label="Golden set filters">
-        {tags.map((option) => (
-          <button key={option} type="button" className={`filter-button ${tag === option ? 'is-selected' : ''}`} aria-pressed={tag === option} onClick={() => setTag(option)}>
-            {option === 'all' ? 'All records' : option}
-          </button>
-        ))}
-      </div>
-      <div className="golden-list" role="list">
-        {filteredRows.length > 0 ? filteredRows.map((row, index) => (
-          <div className="golden-row-wrap" key={row.id} role="listitem">
-            <button className={`golden-row ${selectedId === row.id ? 'is-selected' : ''}`} type="button" aria-pressed={selectedId === row.id} onClick={() => setSelectedId(row.id)}>
-              <span className="golden-index">0{index + 1}</span>
-              <span className="golden-main"><strong>{row.label}</strong><span>{row.id}</span></span>
-              <StatusChip tone="blue">{row.tag}</StatusChip>
-              <span className="golden-reviewed">Reviewed {row.reviewed}</span>
-              <span className="row-arrow" aria-hidden="true">↗</span>
-            </button>
-          </div>
-        )) : <p className="empty-state">No reference traces match “{query}”.</p>}
-      </div>
-      <div className="golden-footer"><span className="lock-mark" aria-hidden="true">✦</span><span>Golden traces stay versioned so evals can move without moving the goalposts.</span><strong aria-live="polite">Selected: {selectedRow?.id || 'none'}</strong></div>
-    </section>
-  )
-}
-
-function ViewContent({ activeView, onNavigate }) {
-  if (activeView === 'evals') return <EvalsView onNavigate={onNavigate} />
-  if (activeView === 'golden') return <GoldenSetView />
-  return <SessionsView />
+function EvaluationView({ sessions, onNavigate }) {
+  const total = sessions.reduce((sum, session) => sum + session.insights.evalTotal, 0)
+  const passed = sessions.reduce((sum, session) => sum + session.insights.evalPasses, 0)
+  const alignment = Math.round(sessions.reduce((sum, session) => sum + session.insights.judgeAlignment, 0) / sessions.length)
+  return <section className="secondary-page" aria-labelledby="evaluation-title"><div className="secondary-heading"><div><p className="section-label">Quality overview</p><h2 id="evaluation-title">Evaluation workspace</h2><p>Read the aggregate signal first, then jump into a session when a check and a judge disagree.</p></div><button type="button" className="text-button" onClick={() => onNavigate('review')}>Review a session <span aria-hidden="true">↗</span></button></div><div className="evaluation-overview"><div className="evaluation-number"><span>Sample eval pass rate</span><strong>{passed}/{total}</strong><small>checks passing in the captured sample</small></div><div className="evaluation-number purple"><span>Average judge alignment</span><strong>{alignment}%</strong><small>agreement with human review labels</small></div><div className="evaluation-method"><span className="section-label">How to read this</span><p>Deterministic checks catch regressions. Judge alignment tells you whether those checks still describe a useful run.</p></div></div><InsightCards insights={{ evalPasses: passed, evalTotal: total, judgeAlignment: alignment, reviewSignal: 'Stable' }} /></section>
 }
 
 export default function App() {
   const [activeView, setActiveView] = useState(() => viewFromHash())
-
-  const navigate = (view) => {
-    setActiveView(view)
-    if (window.location.hash !== `#${view}`) window.location.hash = view
-  }
+  const [sessions, setSessions] = useState(demoSessions)
+  const [selectedId, setSelectedId] = useState(demoSessions[0].id)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('all')
+  const [apiState, setApiState] = useState('demo')
 
   useEffect(() => {
-    const handleHashChange = () => setActiveView(viewFromHash())
-    window.addEventListener('hashchange', handleHashChange)
-    return () => window.removeEventListener('hashchange', handleHashChange)
+    const onHashChange = () => setActiveView(viewFromHash())
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  return (
-    <div className="app-shell">
-      <Sidebar activeView={activeView} onNavigate={navigate} />
-      <main className="main-content">
-        <Topbar activeView={activeView} />
-        <Hero activeView={activeView} onNavigate={navigate} />
-        <SummaryStrip />
-        <ViewContent activeView={activeView} onNavigate={navigate} />
-      </main>
-    </div>
-  )
+  useEffect(() => {
+    let mounted = true
+    Promise.resolve().then(() => getHealth()).then(() => {
+      if (mounted) setApiState('connected')
+    }).catch(() => {
+      if (mounted) setApiState('demo')
+    })
+    Promise.resolve().then(() => getSessions()).then((payload) => {
+      if (mounted && Array.isArray(payload?.sessions) && payload.sessions.length) setSessions(payload.sessions)
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
+
+  const visibleSessions = useMemo(() => sessions.filter((session) => {
+    const matchesFilter = filter === 'all' || session.status === filter
+    const text = `${session.title} ${session.id} ${session.latestTool}`.toLowerCase()
+    return matchesFilter && text.includes(query.toLowerCase())
+  }), [filter, query, sessions])
+
+  const activeSelectedId = visibleSessions.some((session) => session.id === selectedId) ? selectedId : visibleSessions[0]?.id
+  const selectedSession = sessions.find((session) => session.id === activeSelectedId) || visibleSessions[0] || sessions[0]
+
+  function navigate(view) {
+    setActiveView(view)
+    window.location.hash = `/${view}`
+  }
+
+  return <div className="app-shell"><Sidebar activeView={activeView} onNavigate={navigate} apiState={apiState} /><main className="main-content"><Topbar activeView={activeView} /><PageIntro activeView={activeView} />{activeView === 'review' && selectedSession && <><WorkspaceStats sessions={sessions} /><div className="review-layout"><SessionList sessions={sessions} selectedId={activeSelectedId} onSelect={setSelectedId} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} /><TraceView session={selectedSession} /><InsightCards insights={selectedSession.insights} /></div></>}{activeView === 'evaluations' && <EvaluationView sessions={sessions} onNavigate={navigate} />}{activeView === 'reference' && <ReferenceView />}</main></div>
 }

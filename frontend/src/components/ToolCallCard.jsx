@@ -23,7 +23,7 @@ export default function ToolCallCard({ event, defaultOpen = false }) {
           <span className="tool-card-intent">{event.intent}</span>
           <span className="tool-tags">
             <Tag tone="blue">{event.action || 'call'}</Tag>
-            {skills.map((skill) => <Tag key={`skill-${skill}`} tone="purple">skill / {skill}</Tag>)}
+            {skills.map((skill) => <Tag key={`skill-${skill}`} tone="purple">inferred / {skill}</Tag>)}
             {files.map((file) => <Tag key={`file-${file}`} tone="green">file / {file}</Tag>)}
           </span>
         </span>

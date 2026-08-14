@@ -12,7 +12,7 @@ const instructionFilePattern = /agents|AGENTS\.md|SKILL\.md|TOOLING\.md|CONTEXT\
 
 function SkillTags({ skills = [] }) {
   if (!skills.length) return null
-  return <span className="message-tags">{skills.map((skill) => <span className="message-tag" key={skill}>skill / {skill}</span>)}</span>
+  return <span className="message-tags">{skills.map((skill) => <span className="message-tag" key={skill}>inferred / {skill}</span>)}</span>
 }
 
 function ConversationMessage({ event }) {
@@ -35,9 +35,9 @@ function ContextRow({ event }) {
   return <article className={`context-row ${event.contextType}`}>
     <div className="context-row-header">
       <div><span className="context-row-kind">{title}</span><strong>{source}</strong><small>record {event.record} · {event.time}</small></div>
-      <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} skills</span>
+      <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} inferred tags</span>
     </div>
-    <div className="context-row-tags">{(event.files || []).map((file) => <span className="context-tag file" key={`file-${file}`}>file / {file}</span>)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>skill / {skill}</span>)}</div>
+    <div className="context-row-tags">{(event.files || []).map((file) => <span className="context-tag file" key={`file-${file}`}>file / {file}</span>)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
     <details open={isPrompt}>
       <summary>{event.contextType === 'instruction-read' ? 'Show command and content read' : 'Show recorded prompt'}</summary>
       {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : 'context'}</span><pre>{event.body}</pre></div>}
@@ -53,14 +53,27 @@ function SkillInventory({ events }) {
     events.forEach((event) => (event.skills || []).forEach((skill) => counts.set(skill, (counts.get(skill) || 0) + 1)))
     return [...counts.entries()].sort(([, left], [, right]) => right - left)
   }, [events])
-  const invocationCount = skillCounts.reduce((total, [, count]) => total + count, 0)
+  const skillReadCounts = useMemo(() => {
+    const counts = new Map()
+    events.forEach((event) => (event.files || []).forEach((file) => {
+      const normalized = file.replaceAll('\\', '/').replaceAll('//', '/')
+      const match = normalized.match(/\.agents\/skills\/([^/]+)\/SKILL\.md$/i)
+      if (match) counts.set(match[1], (counts.get(match[1]) || 0) + 1)
+    }))
+    return [...counts.entries()].sort(([, left], [, right]) => right - left)
+  }, [events])
+  const inferredTagCount = skillCounts.reduce((total, [, count]) => total + count, 0)
+  const skillReadCount = skillReadCounts.reduce((total, [, count]) => total + count, 0)
+  const formatCount = (count, singular, plural = `${singular}s`) => `${count.toLocaleString()} ${count === 1 ? singular : plural}`
 
-  return <div className="skill-inventory" aria-label="Skill invocation summary">
+  return <div className="skill-inventory" aria-label="Skill evidence summary">
     <div className="skill-inventory-heading">
-      <div><span className="section-label">Observed skills</span><strong>Skill invocations</strong><small>{invocationCount.toLocaleString()} invocations · {skillCounts.length} unique skills</small></div>
+      <div><span className="section-label">Skill evidence</span><strong>What the audit actually recorded</strong><small>{formatCount(skillReadCount, 'SKILL.md read')} across {formatCount(skillReadCounts.length, 'unique skill document')} · {formatCount(inferredTagCount, 'inferred tag occurrence')} across {formatCount(skillCounts.length, 'inferred label')}</small></div>
       <span className="record-count">from tool trace</span>
     </div>
-    {skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, count]) => <span className="skill-inventory-item" key={skill}><span>skill / {skill}</span><strong>{count.toLocaleString()}</strong></span>)}</div> : <p className="skill-inventory-empty">No skill invocations were recorded in this session.</p>}
+    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Skill documents actually read</span><strong>{formatCount(skillReadCount, 'read')} · {formatCount(skillReadCounts.length, 'unique skill doc')}</strong></div>{skillReadCounts.length ? <div className="skill-inventory-list">{skillReadCounts.map(([skill, count]) => <span className="skill-inventory-item" key={`read-${skill}`}><span>skill / {skill}</span><strong>{count.toLocaleString()}</strong></span>)}</div> : <p className="skill-inventory-empty">No SKILL.md file read was recorded.</p>}</div>
+    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Inferred tags attached to operations</span><strong>{formatCount(inferredTagCount, 'tag occurrence')} · {formatCount(skillCounts.length, 'label')}</strong></div>{skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, count]) => <span className="skill-inventory-item inferred" key={`tag-${skill}`}><span>inferred / {skill}</span><strong>{count.toLocaleString()}</strong></span>)}</div> : null}</div>
+    <p className="skill-inventory-note">No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.</p>
   </div>
 }
 

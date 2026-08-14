@@ -1,6 +1,9 @@
-// Sanitized snapshot of the current Codex session captured from the local rollout.
-// Counts describe the complete session; eventsList keeps the real conversation and
-// representative tool rows readable in the browser without embedding credentials.
+import { currentSessionEvents } from './currentSessionEvents'
+
+// Metadata and the complete sanitized event timeline for the current Codex rollout.
+// Tool inputs/outputs are clipped and credential-like values are redacted before they
+// reach the browser. The rendered timeline contains every audited user/assistant turn,
+// tool call, tool output pairing, context event, and compaction marker.
 export const currentSession = {
   id: '019fff58-a4f9-7c73-a83e-95ed8fd361a7',
   title: 'Current Codex session',
@@ -9,13 +12,15 @@ export const currentSession = {
   startedAt: '08:17:08',
   duration: '05h 23m',
   events: 1408,
+  renderedRows: currentSessionEvents.length,
   rawEvents: 3737,
   transcriptChunks: 1467,
   toolCalls: 602,
+  renderedToolRows: 623,
   messages: 112,
   userTurns: 12,
-  skills: 9,
-  files: 8,
+  skills: 7,
+  files: 156,
   latestTool: 'shell_command',
   latestTime: '13:40:16',
   outcome: 'Needs review',
@@ -26,53 +31,12 @@ export const currentSession = {
     judgeAlignment: null,
     reviewSignal: 'Needs review',
     metrics: [
-      { label: 'Transcript', value: '1,408', detail: 'semantic records in the complete rollout' },
+      { label: 'Semantic records', value: '1,408', detail: 'complete audited session timeline' },
       { label: 'Tool calls', value: '602', detail: 'real Codex operations captured' },
-      { label: 'User turns', value: '12', detail: 'requests in this session' },
+      { label: 'Rendered rows', value: currentSessionEvents.length.toLocaleString(), detail: 'turns, tools, outputs, and context events' },
     ],
   },
-  eventsList: [
-    { id: 'm01', type: 'user', role: 'user', time: '08:17:10', body: '/goal do task from task AZH-449 to AZH-455' },
-    { id: 'm02', type: 'assistant', role: 'assistant', time: '08:17:22', body: 'I’ll handle AZH-449 through AZH-455 as one tracked delivery: inspect the issues and dependencies, complete the implementation, verify it, then commit/push and update the tracker/PR handoff.' },
-    { id: 't01', type: 'tool', index: '001', tool: 'mcp__codex_apps__linear_get_issue', intent: 'Read the seven task contracts and dependency graph', duration: 'completed', status: 'success', skills: ['linear-issue-management'], files: ['AZH-449', 'AZH-455'], input: '{ "issues": ["AZH-449", "AZH-450", "AZH-451", "AZH-452", "AZH-453", "AZH-454", "AZH-455"] }', responseLabel: 'read', response: 'Seven issues loaded. All were Todo; the dependency graph was sequential.' },
-    { id: 'm03', type: 'assistant', role: 'assistant', time: '08:18:45', body: 'All seven issues are currently Todo, with no comments. The dependency graph is sequential: AZH-449 unlocks the backend/frontend foundation, then AZH-453/454/455 depend on AZH-450/451.' },
-    { id: 't02', type: 'tool', index: '002', tool: 'shell_command', intent: 'Inspect the repository, workflows, and implementation surface', duration: 'completed', status: 'success', skills: ['zoom-out'], files: ['AGENTS.md', '.agents/workflows/backend.md', '.agents/workflows/frontend.md'], input: 'git status --short --branch; rg --files -g "AGENTS.md" -g ".agents/**" -g "src/**" -g "backend/**"', responseLabel: 'read', response: 'The repository was a clean documentation-only baseline on main.' },
-    { id: 'm04', type: 'assistant', role: 'assistant', time: '08:21:08', body: 'The repository is a clean, documentation-only baseline on main; there is no existing Go, React, Mongo, or CI implementation to preserve. I’ve also confirmed the Nala Trace project contract: hook events flow into a Go ingestion API backed by MongoDB, with a React viewer and CI verification.' },
-    { id: 't03', type: 'tool', index: '003', tool: 'mcp__codex_apps__linear_save_issue', intent: 'Add implementation-ready contracts to the tasks', duration: 'completed', status: 'success', skills: ['linear-issue-management'], files: ['AZH-449', 'AZH-450', 'AZH-451', 'AZH-455'], input: 'Update the issue descriptions with scope, plan, DoD, and correctness checks.', responseLabel: 'saved', response: 'Readiness gate passed for AZH-449 through AZH-455.' },
-    { id: 'm05', type: 'assistant', role: 'assistant', time: '08:26:30', body: 'The required frontend delegation gate is active. I’m assigning AZH-451’s frontend/ write set to a dedicated implementation worker while I handle the non-overlapping configuration, Go, Mongo, health, and CI work on the task branch.' },
-    { id: 't04', type: 'tool', index: '004', tool: 'multi_agent_v1__spawn_agent', intent: 'Delegate the frontend slice in an isolated worktree', duration: 'completed', status: 'success', skills: ['frontend-design'], files: ['frontend/src/App.jsx', 'frontend/src/components'], input: 'Implement the frontend trace-review component model and browser-verify desktop/mobile behavior.', responseLabel: 'delegated', response: 'Frontend worker assigned a disjoint frontend write set.' },
-    { id: 'm06', type: 'assistant', role: 'assistant', time: '08:36:27', body: 'The parent implementation now covers AZH-449’s knowledge contract, the Go service foundation, Mongo lifecycle, /healthz, and baseline integration/CI scaffolding. I’m running the backend workflow’s unfiltered build, tests, coverage, and vet checks while the delegated frontend worker finishes its disjoint frontend work.' },
-    { id: 'm07', type: 'assistant', time: '09:01:55', role: 'assistant', body: 'Completed AZH-449–455. Implemented configuration/Vault/Casdoor docs, Go API, Mongo lifecycle, /healthz, React/Vite shell, tests, Makefile, and CI. Branch: task/azh-449-455-foundation. Draft PR #1 is open.' },
-    { id: 'm08', type: 'user', role: 'user', time: '09:09:25', body: 'i think the response schema of healthz endpoint should be the same as healthz on other services such as nala-svc or nala-labs' },
-    { id: 'm09', type: 'assistant', role: 'assistant', time: '09:13:25', body: 'Both sibling services confirm the common wire shape: top-level status plus a dependencies object whose values are { status: ... }; they also use dependency-aware readiness semantics.' },
-    { id: 't05', type: 'tool', index: '005', tool: 'apply_patch', intent: 'Align the health response contract with sibling services', duration: 'completed', status: 'success', skills: ['backend'], files: ['backend/internal/server/health.go', 'backend/internal/server/health_test.go'], input: 'Replace the empty dependencies map with the sibling dependency key set.', responseLabel: 'applied', response: 'Health schema changed and regression coverage added.' },
-    { id: 'm10', type: 'user', role: 'user', time: '09:19:28', body: 'and i think for casdoor iam management, we should use existing nala-labs iam. for example we logged in with the account of nala-labs, get the jwt token and then the token can also be used on nala-trace' },
-    { id: 'm11', type: 'assistant', role: 'assistant', time: '09:22:39', body: 'The safest contract is: Nala Trace accepts the same Nala Labs application-session bearer token, but validates it through Nala Labs’ existing GET /api/auth/session authority rather than sharing the HS256 signing secret or accepting raw Casdoor tokens.' },
-    { id: 'm12', type: 'user', role: 'user', time: '09:32:02', body: 'and there should be also .vault-config for hashicorp vault' },
-    { id: 't06', type: 'tool', index: '006', tool: 'shell_command', intent: 'Compare the sibling Vault configuration convention', duration: 'completed', status: 'success', skills: ['backend'], files: ['.vault-config.example', '.gitignore'], input: 'Inspect the sibling root Vault config template and ignore rules.', responseLabel: 'read', response: 'Sibling convention uses a tracked .vault-config.example and ignored local .vault-config.' },
-    { id: 'm13', type: 'assistant', role: 'assistant', time: '09:48:33', body: 'Done. Added .vault-config.example with safe Vault/AppRole placeholders. Kept .vault-config ignored and untracked. Aligned configuration on VAULT_KV_PATH; updated docs and tests.' },
-    { id: 'm14', type: 'user', role: 'user', time: '09:48:34', body: 'for vault kv path, why dont we just use nala-labs/nala-trace ? and mongo configuration should be used as connection string so that we only store one secret/variables in vault for mongodb connection and for default port, set backend port to 3003 and frontend port to 5005 and the frontend UI should use the components from this https://www.beautifului.dev/' },
-    { id: 't07', type: 'tool', index: '007', tool: 'web__run', intent: 'Inspect the requested Beautiful UI visual reference', duration: 'completed', status: 'success', skills: ['frontend-design'], files: ['frontend/src/App.jsx', 'frontend/src/styles.css'], input: 'Open https://www.beautifului.dev/ and inspect the component language.', responseLabel: 'read', response: 'Reference uses a dark workspace, persistent navigation, compact rows, data tables, and outlined panels.' },
-    { id: 'm15', type: 'assistant', role: 'assistant', time: '10:05:28', body: 'The frontend files are now fully rewritten, including the new styles, tests, README, and port config. I’m waiting for the worker’s own test/browser handoff before reviewing and integrating the combined diff.' },
-    { id: 'm16', type: 'assistant', role: 'assistant', time: '10:22:53', body: 'Implemented and delivered in PR #1, latest commit 01873ea. Vault path is secret/data/nala-labs/nala-trace; MongoDB uses one complete MONGO_URI; backend defaults to 3003 and frontend to 5005.' },
-    { id: 'm17', type: 'user', role: 'user', time: '12:19:46', body: 'the PR format is broken please fix' },
-    { id: 't08', type: 'tool', index: '008', tool: 'mcp__codex_apps__github_update_pull_request', intent: 'Repair the existing PR body formatting', duration: 'completed', status: 'success', skills: ['github-delivery'], files: ['.agents/templates/linear-issue-description.md'], input: 'Rebuild the PR body with real Markdown line breaks and tables.', responseLabel: 'updated', response: 'PR #1 body re-read as a multiline Markdown document.' },
-    { id: 'm18', type: 'user', role: 'user', time: '12:26:25', body: 'why the dependencies empty json? http://localhost:3003/healthz it should use the same dependencies as the other projects' },
-    { id: 'm19', type: 'assistant', role: 'assistant', time: '12:28:18', body: 'The sibling comparison confirms the intended contract: nala-svc always returns six dependency keys—casdoor, vault, postgresql, mongodb, redis, and kafka—with each value containing a status.' },
-    { id: 't09', type: 'tool', index: '009', tool: 'shell_command', intent: 'Run the rebuilt health endpoint and dependency checks', duration: 'completed', status: 'success', skills: ['diagnose'], files: ['backend/internal/server/health.go', 'backend/internal/server/health_test.go'], input: 'Start the rebuilt service and request GET http://localhost:3004/healthz.', responseLabel: 'read', response: 'Initial response exposed not_configured values; this was later rejected by the user.' },
-    { id: 'm20', type: 'user', role: 'user', time: '12:40:29', body: 'wdym you conflated???? ALL THE DEPENDENCIES SHOULD BE HEALTHY' },
-    { id: 'm21', type: 'assistant', role: 'assistant', time: '12:53:00', body: 'The rebuilt endpoint is now proving real results: PostgreSQL, MongoDB, Redis, and Kafka are ok; Casdoor and Vault are unavailable because the local default ports are not currently forwarded.' },
-    { id: 'm22', type: 'user', role: 'user', time: '12:59:46', body: 'what the fucking casdoor and vault port forwards??? the connection string exist in nala-labs/platform kv value and you can copy that to the nala-trace kv' },
-    { id: 'm23', type: 'assistant', role: 'assistant', time: '13:01:27', body: 'The real Vault layout is secret/ (KV v2). secret/data/nala-labs/platform contains MONGODB_URI; the trace destination now contains only MONGO_URI with the copied value, keeping the value entirely in memory.' },
-    { id: 't10', type: 'tool', index: '010', tool: 'shell_command', intent: 'Load runtime Mongo configuration from the real Vault KV path', duration: 'completed', status: 'success', skills: ['backend'], files: ['backend/internal/config/config.go', '.vault-config.example'], input: 'Read secret/data/nala-labs/nala-trace and validate MONGO_URI before startup.', responseLabel: 'verified', response: 'Vault-backed startup succeeded without port forwards and Mongo reported ok.' },
-    { id: 'm24', type: 'assistant', role: 'assistant', time: '13:10:58', body: 'The actual KV mount is secret (KV v2). Source is secret/data/nala-labs/platform:MONGODB_URI. Destination is secret/data/nala-labs/nala-trace:MONGO_URI. config.Load() reads the destination KV at startup when VAULT_ENABLED=true.' },
-    { id: 'm25', type: 'user', role: 'user', time: '13:10:59', body: 'the font of the UI is too small i dont understand what every page in the UI is for. i thought the requirements in the plans are clear that we would build something like this: App.jsx with sidebar nav + session list + detail pane; api.js wrappers; SessionList; TraceView; ToolCallCard; InsightCards' },
-    { id: 'm26', type: 'assistant', role: 'assistant', time: '13:11:07', body: 'I’ll fix the UI around the intended product model, not just increase the font size. I’m reshaping the pages around session list → trace detail → tool-call timeline → insight cards, with readable type and clear page-purpose labels.' },
-    { id: 't11', type: 'tool', index: '011', tool: 'multi_agent_v1__spawn_agent', intent: 'Delegate the frontend implementation to an isolated worker', duration: 'completed', status: 'success', skills: ['frontend-design'], files: ['frontend/src/App.jsx', 'frontend/src/api.js', 'frontend/src/components'], input: 'Implement the frontend correction in an isolated worktree and verify desktop/mobile interactions.', responseLabel: 'delegated', response: 'Frontend worker completed and pushed commit 04f365a.' },
-    { id: 'm27', type: 'assistant', role: 'assistant', time: '13:35:28', body: 'The frontend worktree is complete: browser checks passed at desktop and mobile widths, including filtering, navigation, and expandable tool rows. I’m reviewing the exact commit and integrating it into the existing PR branch now.' },
-    { id: 't12', type: 'tool', index: '012', tool: 'git', intent: 'Integrate and publish the frontend correction', duration: 'completed', status: 'success', skills: ['github-delivery'], files: ['frontend/src/App.jsx', 'frontend/src/styles.css', 'frontend/src/components'], input: 'git cherry-pick 04f365a; git push origin task/azh-449-455-foundation', responseLabel: 'published', response: 'PR #1 updated to 0d9e424 and CI reported green.' },
-    { id: 'm28', type: 'assistant', role: 'assistant', time: '13:40:28', body: 'Fixed and pushed to PR #1. Changes include larger typography, clear pages, session records, conversation stream, expandable tool-call timeline, tool_input/tool_response inspection, insight cards, and responsive layout.' },
-  ],
+  eventsList: currentSessionEvents,
 }
 
 export const currentSessions = [currentSession]

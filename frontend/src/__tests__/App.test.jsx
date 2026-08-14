@@ -51,6 +51,11 @@ describe('Nala Trace session workspace', () => {
     expect(screen.getByText('Files the agent referenced and read')).toBeInTheDocument()
     expect(screen.getAllByText('file / AGENTS.md')).toHaveLength(2)
 
+    fireEvent.click(screen.getByRole('button', { name: /^conversation$/i }))
+    expect(screen.getByText('Instruction read')).toBeInTheDocument()
+    expect(screen.getAllByText('file / AGENTS.md')).toHaveLength(2)
+    expect(screen.getByText('Show command and content read')).toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: /prompts & context/i }))
     expect(screen.getByText('User prompt')).toBeInTheDocument()
     expect(screen.getByText('Instruction read')).toBeInTheDocument()

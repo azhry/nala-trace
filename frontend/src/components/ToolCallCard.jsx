@@ -1,7 +1,13 @@
 import { useState } from 'react'
+import { getInstructionScope, isInstructionFile } from './instructionScope'
 
 function Tag({ children, tone = 'purple' }) {
   return <span className={`trace-tag ${tone}`}>{children}</span>
+}
+
+function FileTag({ file }) {
+  const scope = isInstructionFile(file) ? getInstructionScope(file) : null
+  return <Tag tone="green"><span>file / {file}</span>{scope && <span className={`instruction-scope-badge ${scope.kind}`}>{scope.shortLabel}</span>}</Tag>
 }
 
 export default function ToolCallCard({ event, defaultOpen = false }) {
@@ -24,7 +30,7 @@ export default function ToolCallCard({ event, defaultOpen = false }) {
           <span className="tool-tags">
             <Tag tone="blue">{event.action || 'call'}</Tag>
             {skills.map((skill) => <Tag key={`skill-${skill}`} tone="purple">inferred / {skill}</Tag>)}
-            {files.map((file) => <Tag key={`file-${file}`} tone="green">file / {file}</Tag>)}
+            {files.map((file) => <FileTag file={file} key={`file-${file}`} />)}
           </span>
         </span>
         <span className="tool-card-status">{event.status} · record {event.record}<span className="tool-card-chevron" aria-hidden="true">⌄</span></span>

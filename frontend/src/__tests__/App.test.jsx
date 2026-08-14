@@ -58,6 +58,8 @@ describe('Nala Trace session workspace', () => {
     expect(screen.getAllByText('inferred / frontend-design')).toHaveLength(2)
     expect(screen.getByText('Files the agent referenced and read')).toBeInTheDocument()
     expect(screen.getAllByText('file / AGENTS.md')).toHaveLength(2)
+    expect(screen.getAllByText('Global instruction').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Local project instruction').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: /^conversation$/i }))
     expect(screen.getByText('Instruction read')).toBeInTheDocument()

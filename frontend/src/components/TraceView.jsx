@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import ToolCallCard from './ToolCallCard'
+import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
 
 const filters = [
   ['all', 'Everything'],
@@ -8,11 +9,6 @@ const filters = [
   ['context', 'Prompts & context'],
 ]
 const EMPTY_EVENTS = []
-const instructionFilePattern = /agents|AGENTS\.md|SKILL\.md|TOOLING\.md|CONTEXT\.md|workflow/i
-
-function normalizePath(file) {
-  return file.replaceAll('\\', '/').replaceAll('//', '/').replace(/(\.md|\.ps1|\.yml)\/n$/i, '$1')
-}
 
 function isInstructionEvent(event) {
   return event.type === 'tool' && (event.files || []).some((file) => instructionFilePattern.test(file))
@@ -36,6 +32,15 @@ function SystemEvent({ event }) {
   return <div className="system-event"><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body}</small></span><span className="system-event-line" /></div>
 }
 
+function InstructionScopeBadge({ scope, compact = false }) {
+  return <span className={`instruction-scope-badge ${scope.kind}`}>{compact ? scope.shortLabel : scope.label}</span>
+}
+
+function FileTag({ file }) {
+  const scope = isInstructionFile(file) ? getInstructionScope(file) : null
+  return <span className="context-tag file"><span>file / {file}</span>{scope && <InstructionScopeBadge scope={scope} compact />}</span>
+}
+
 function ContextRow({ event, inline = false }) {
   const isPrompt = event.contextType !== 'instruction-read'
   const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
@@ -45,7 +50,7 @@ function ContextRow({ event, inline = false }) {
       <div><span className="context-row-kind">{title}</span><strong>{source}</strong><small>record {event.record} · {event.time}</small></div>
       <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} inferred tags</span>
     </div>
-    <div className="context-row-tags">{(event.files || []).map((file) => <span className="context-tag file" key={`file-${file}`}>file / {file}</span>)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
+    <div className="context-row-tags">{(event.files || []).map((file) => <FileTag file={file} key={`file-${file}`} />)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
     <details open={isPrompt}>
       <summary>{event.contextType === 'instruction-read' ? 'Show command and content read' : 'Show recorded prompt'}</summary>
       {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : 'context'}</span><pre>{event.body}</pre></div>}
@@ -99,10 +104,15 @@ function InstructionInventory({ events }) {
     return [...counts.entries()].sort(([, left], [, right]) => right.reads - left.reads || right.references - left.references)
   }, [events])
   const readRecords = sources.reduce((total, [, count]) => total + count.reads, 0)
+  const scopeCounts = sources.reduce((counts, [path]) => {
+    const scope = getInstructionScope(path)
+    counts[scope.kind] += 1
+    return counts
+  }, { global: 0, project: 0, unknown: 0 })
 
   return <div className="instruction-inventory" aria-label="Instruction source inventory">
-    <div className="instruction-inventory-heading"><div><span className="section-label">Instruction sources</span><strong>Files the agent referenced and read</strong><small>{readRecords.toLocaleString()} read records · {sources.length} unique instruction sources</small></div><span className="record-count">root + .agents</span></div>
-    {sources.length ? <div className="instruction-source-list">{sources.map(([path, count]) => <span className="instruction-source-item" key={path}><span>file / {path}</span><strong>{count.reads.toLocaleString()} reads</strong><small>{count.references.toLocaleString()} refs</small></span>)}</div> : <p className="skill-inventory-empty">No instruction-source references were recorded.</p>}
+    <div className="instruction-inventory-heading"><div><span className="section-label">Instruction sources</span><strong>Files the agent referenced and read</strong><small>{readRecords.toLocaleString()} read records · {sources.length} unique instruction sources · {scopeCounts.global} global · {scopeCounts.project} local project</small></div><div className="instruction-scope-legend" aria-label="Instruction scope legend"><InstructionScopeBadge scope={{ kind: 'global', label: 'Global instruction', shortLabel: 'Global' }} /><InstructionScopeBadge scope={{ kind: 'project', label: 'Local project instruction', shortLabel: 'Local project' }} /></div></div>
+    {sources.length ? <div className="instruction-source-list">{sources.map(([path, count]) => { const scope = getInstructionScope(path); return <span className="instruction-source-item" key={path}><span className="instruction-source-path">file / {path}</span><InstructionScopeBadge scope={scope} /><strong>{count.reads.toLocaleString()} reads</strong><small>{count.references.toLocaleString()} refs</small></span> })}</div> : <p className="skill-inventory-empty">No instruction-source references were recorded.</p>}
     <p className="instruction-inventory-note">Includes AGENTS.md, .agents/workflows, .agents/skills, templates, and project knowledge. Open “Prompts & context” to inspect each recorded command and content read.</p>
   </div>
 }

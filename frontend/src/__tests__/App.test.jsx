@@ -16,7 +16,7 @@ describe('Nala Trace shell', () => {
     expect(screen.getByRole('link', { name: /sessions/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /evals/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /golden set/i })).toBeInTheDocument()
-    expect(screen.getByText('/api → local Go service')).toBeInTheDocument()
+    expect(screen.getByText(/local Go service/)).toBeInTheDocument()
   })
 
   it('changes the visible workspace when navigation links are selected', () => {
@@ -30,5 +30,33 @@ describe('Nala Trace shell', () => {
     expect(screen.getByRole('heading', { name: /keep the reference close/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /the examples worth protecting/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /golden set/i })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('filters sessions and updates the selected trace detail', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: /needs review/i }))
+    expect(screen.queryByRole('button', { name: /build the react shell/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /trace proxy failure/i })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('link', { name: /sessions/i }))
+    fireEvent.click(screen.getByRole('button', { name: /all traces/i }))
+    fireEvent.click(screen.getByRole('button', { name: /review auth boundary/i }))
+    expect(screen.getByRole('heading', { name: /review auth boundary/i })).toBeInTheDocument()
+    expect(screen.getByText('linear_get_issue')).toBeInTheDocument()
+  })
+
+  it('makes eval range and golden-set filters observable', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('link', { name: /evals/i }))
+    fireEvent.click(screen.getByRole('button', { name: /baseline/i }))
+    expect(screen.getByText('89.8')).toBeInTheDocument()
+    expect(screen.getByText(/baseline 120 sessions/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: /golden set/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^security$/i }))
+    expect(screen.getByRole('button', { name: /keeps secrets out of the client/i })).toBeInTheDocument()
+    expect(screen.getByText('Selected: gold_014')).toBeInTheDocument()
   })
 })

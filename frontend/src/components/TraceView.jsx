@@ -10,6 +10,10 @@ const filters = [
 const EMPTY_EVENTS = []
 const instructionFilePattern = /agents|AGENTS\.md|SKILL\.md|TOOLING\.md|CONTEXT\.md|workflow/i
 
+function normalizePath(file) {
+  return file.replaceAll('\\', '/').replaceAll('//', '/').replace(/(\.md|\.ps1|\.yml)\/n$/i, '$1')
+}
+
 function SkillTags({ skills = [] }) {
   if (!skills.length) return null
   return <span className="message-tags">{skills.map((skill) => <span className="message-tag" key={skill}>inferred / {skill}</span>)}</span>
@@ -56,7 +60,7 @@ function SkillInventory({ events }) {
   const skillReadCounts = useMemo(() => {
     const counts = new Map()
     events.forEach((event) => (event.files || []).forEach((file) => {
-      const normalized = file.replaceAll('\\', '/').replaceAll('//', '/')
+      const normalized = normalizePath(file)
       const match = normalized.match(/\.agents\/skills\/([^/]+)\/SKILL\.md$/i)
       if (match) counts.set(match[1], (counts.get(match[1]) || 0) + 1)
     }))
@@ -74,6 +78,28 @@ function SkillInventory({ events }) {
     <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Skill documents actually read</span><strong>{formatCount(skillReadCount, 'read')} · {formatCount(skillReadCounts.length, 'unique skill doc')}</strong></div>{skillReadCounts.length ? <div className="skill-inventory-list">{skillReadCounts.map(([skill, count]) => <span className="skill-inventory-item" key={`read-${skill}`}><span>skill / {skill}</span><strong>{count.toLocaleString()}</strong></span>)}</div> : <p className="skill-inventory-empty">No SKILL.md file read was recorded.</p>}</div>
     <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Inferred tags attached to operations</span><strong>{formatCount(inferredTagCount, 'tag occurrence')} · {formatCount(skillCounts.length, 'label')}</strong></div>{skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, count]) => <span className="skill-inventory-item inferred" key={`tag-${skill}`}><span>inferred / {skill}</span><strong>{count.toLocaleString()}</strong></span>)}</div> : null}</div>
     <p className="skill-inventory-note">No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.</p>
+  </div>
+}
+
+function InstructionInventory({ events }) {
+  const sources = useMemo(() => {
+    const counts = new Map()
+    events.forEach((event) => (event.files || []).forEach((file) => {
+      if (!instructionFilePattern.test(file)) return
+      const path = normalizePath(file)
+      const current = counts.get(path) || { references: 0, reads: 0 }
+      current.references += 1
+      if (event.action === 'read') current.reads += 1
+      counts.set(path, current)
+    }))
+    return [...counts.entries()].sort(([, left], [, right]) => right.reads - left.reads || right.references - left.references)
+  }, [events])
+  const readRecords = sources.reduce((total, [, count]) => total + count.reads, 0)
+
+  return <div className="instruction-inventory" aria-label="Instruction source inventory">
+    <div className="instruction-inventory-heading"><div><span className="section-label">Instruction sources</span><strong>Files the agent referenced and read</strong><small>{readRecords.toLocaleString()} read records · {sources.length} unique instruction sources</small></div><span className="record-count">root + .agents</span></div>
+    {sources.length ? <div className="instruction-source-list">{sources.map(([path, count]) => <span className="instruction-source-item" key={path}><span>file / {path}</span><strong>{count.reads.toLocaleString()} reads</strong><small>{count.references.toLocaleString()} refs</small></span>)}</div> : <p className="skill-inventory-empty">No instruction-source references were recorded.</p>}
+    <p className="instruction-inventory-note">Includes AGENTS.md, .agents/workflows, .agents/skills, templates, and project knowledge. Open “Prompts & context” to inspect each recorded command and content read.</p>
   </div>
 }
 
@@ -126,6 +152,7 @@ export default function TraceView({ session }) {
       <div><span>Capture</span><strong>{session.startedAt}–{session.capturedAt}</strong><small>{(session.rawEvents || 0).toLocaleString()} raw events</small></div>
     </div>
     <SkillInventory events={events} />
+    <InstructionInventory events={events} />
     <div className="context-inventory" aria-label="Prompt and context summary">
       <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
       <span className="context-inventory-note">Use “Prompts & context” below</span>

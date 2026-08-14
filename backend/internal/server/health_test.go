@@ -16,7 +16,7 @@ func TestHealthRouteReturnsStableJSONWithoutDependencies(t *testing.T) {
 	if got := recorder.Header().Get("Content-Type"); got != "application/json" {
 		t.Fatalf("expected JSON content type, got %q", got)
 	}
-	if got := recorder.Body.String(); got != "{\"status\":\"ok\"}\n" {
+	if got := recorder.Body.String(); got != "{\"status\":\"ok\",\"dependencies\":{}}\n" {
 		t.Fatalf("unexpected health response: %q", got)
 	}
 }

@@ -77,3 +77,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--purple); ou
 @media (max-width: 720px) {
   .conversation-message { max-width: 94%; padding: 12px 13px; }.message-record { display: none; }.system-event { gap: 6px; font-size: 8px; }.system-event small { font-size: 7px; }
 }
+
+.skill-inventory { padding: 14px 20px; border-bottom: 1px solid var(--line); background: rgba(23,28,35,.72); }.skill-inventory-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }.skill-inventory-heading .section-label { margin-bottom: 4px; }.skill-inventory-heading strong, .skill-inventory-heading small { display: block; }.skill-inventory-heading strong { color: var(--text); font-size: 14px; }.skill-inventory-heading small { margin-top: 3px; color: var(--muted); font-size: 11px; }.skill-inventory-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }.skill-inventory-item { display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid rgba(187,165,255,.22); border-radius: 5px; background: rgba(187,165,255,.07); color: var(--purple); font-family: var(--mono); font-size: 10px; }.skill-inventory-item strong { padding-left: 7px; border-left: 1px solid rgba(187,165,255,.25); color: var(--text); font-size: 10px; }.skill-inventory-empty { margin: 10px 0 0; color: var(--faint); font-size: 11px; }
+
+@media (max-width: 720px) {
+  .skill-inventory { padding: 13px 16px; }.skill-inventory-heading .record-count { display: none; }.skill-inventory-item { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

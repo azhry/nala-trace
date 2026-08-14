@@ -6,9 +6,11 @@ function Tag({ children, tone = 'purple' }) {
 
 export default function ToolCallCard({ event, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
+  const skills = event.skills || []
+  const files = event.files || []
 
   return (
-    <article className={`tool-card ${open ? 'is-open' : ''}`}>
+    <article className={`tool-card ${open ? 'is-open' : ''} ${event.status === 'attention' ? 'has-attention' : ''}`}>
       <button
         type="button"
         className="tool-card-toggle"
@@ -17,14 +19,15 @@ export default function ToolCallCard({ event, defaultOpen = false }) {
       >
         <span className="tool-card-index">{event.index}</span>
         <span className="tool-card-summary">
-          <span className="tool-card-name"><strong>{event.tool}</strong><span>{event.duration}</span></span>
+          <span className="tool-card-name"><strong>{event.tool}</strong><span>{event.time} · {event.duration}</span></span>
           <span className="tool-card-intent">{event.intent}</span>
           <span className="tool-tags">
-            {event.skills.map((skill) => <Tag key={skill} tone="purple">skill / {skill}</Tag>)}
-            {event.files.map((file) => <Tag key={file} tone="green">file / {file}</Tag>)}
+            <Tag tone="blue">{event.action || 'call'}</Tag>
+            {skills.map((skill) => <Tag key={`skill-${skill}`} tone="purple">skill / {skill}</Tag>)}
+            {files.map((file) => <Tag key={`file-${file}`} tone="green">file / {file}</Tag>)}
           </span>
         </span>
-        <span className="tool-card-status">{event.status}<span className="tool-card-chevron" aria-hidden="true">⌄</span></span>
+        <span className="tool-card-status">{event.status} · record {event.record}<span className="tool-card-chevron" aria-hidden="true">⌄</span></span>
       </button>
       {open && (
         <div className="tool-card-body">

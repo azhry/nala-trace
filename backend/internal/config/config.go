@@ -1,7 +1,10 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,7 +26,7 @@ const (
 	defaultCookieName        = "nala_trace_session"
 	defaultSessionTTL        = 24 * time.Hour
 	defaultVaultAddr         = "http://127.0.0.1:8200"
-	defaultVaultMount        = "kv"
+	defaultVaultMount        = "secret"
 	defaultVaultPath         = "nala-labs/nala-trace"
 	defaultConnectTimeout    = 5 * time.Second
 	defaultPingTimeout       = 2 * time.Second
@@ -86,14 +89,19 @@ type VaultConfig struct {
 	SecretID string
 }
 
-// Load reads process environment first and optional local .env files second.
-// Explicit process values always win over local files.
+// Load reads optional local transport files, resolves enabled Vault KV values,
+// and then applies explicit process environment overrides.
 func Load() (Config, error) {
 	values := loadDotEnvFiles()
+	processValues := make(map[string]string)
 	for _, key := range knownKeys() {
 		if value, ok := os.LookupEnv(key); ok {
 			values[key] = value
+			processValues[key] = value
 		}
+	}
+	if err := loadVaultValues(values, processValues, &http.Client{Timeout: defaultConnectTimeout}); err != nil {
+		return Config{}, err
 	}
 	return LoadFrom(values)
 }
@@ -269,6 +277,76 @@ func loadDotEnvFiles() map[string]string {
 		}
 	}
 	return values
+}
+
+// loadVaultValues resolves the configured KV v2 record before parsing the
+// runtime configuration. Vault values supply secrets and deployment values;
+// explicit process environment variables remain the highest-priority source.
+func loadVaultValues(values, processValues map[string]string, client *http.Client) error {
+	lookup := func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	}
+	if !boolOr(lookup, "VAULT_ENABLED", false) {
+		return nil
+	}
+	address := valueOr(lookup, "VAULT_ADDR", defaultVaultAddr)
+	mount := valueOr(lookup, "VAULT_KV_MOUNT", defaultVaultMount)
+	path := valueOr(lookup, "VAULT_KV_PATH", defaultVaultPath)
+	token := strings.TrimSpace(values["VAULT_TOKEN"])
+	if token == "" {
+		return fmt.Errorf("missing required settings: VAULT_TOKEN")
+	}
+	secretValues, err := readVaultKV(client, address, mount, path, token)
+	if err != nil {
+		return err
+	}
+	for key, value := range secretValues {
+		if _, explicitlyConfigured := processValues[key]; !explicitlyConfigured {
+			values[key] = value
+		}
+	}
+	return nil
+}
+
+func readVaultKV(client *http.Client, address, mount, path, token string) (map[string]string, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	parsedAddress, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || parsedAddress.Scheme == "" || parsedAddress.Host == "" {
+		return nil, fmt.Errorf("invalid VAULT_ADDR")
+	}
+	mount = strings.Trim(mount, "/")
+	path = strings.Trim(path, "/")
+	if mount == "" || path == "" || strings.Contains(mount, "..") || strings.Contains(path, "..") {
+		return nil, fmt.Errorf("invalid Vault KV path")
+	}
+	requestURL := strings.TrimRight(address, "/") + "/v1/" + mount + "/data/" + path
+	request, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create Vault request: %w", err)
+	}
+	request.Header.Set("X-Vault-Token", token)
+	request.Header.Set("Accept", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("send Vault request: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		_, _ = io.Copy(io.Discard, response.Body)
+		return nil, fmt.Errorf("Vault request returned HTTP %d", response.StatusCode)
+	}
+	var payload struct {
+		Data struct {
+			Data map[string]string `json:"data"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode Vault response: %w", err)
+	}
+	return payload.Data.Data, nil
 }
 
 func parseDotEnv(path string) (map[string]string, error) {

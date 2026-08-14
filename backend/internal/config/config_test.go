@@ -1,6 +1,8 @@
 package config
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -11,7 +13,7 @@ func TestLoadFromUsesSafeDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
 	}
-	if cfg.ListenAddr != ":3003" || cfg.FrontendURL != "http://localhost:5005/" || cfg.AllowedOrigin != "http://localhost:5005" || cfg.Mongo.URI != "mongodb://127.0.0.1:27017" || cfg.Auth.NalaLabsAuthURL != "http://127.0.0.1:18080" || cfg.Vault.KVPath != "nala-labs/nala-trace" || cfg.Health.PostgreSQLAddress != "127.0.0.1:5432" || cfg.Health.RedisAddress != "127.0.0.1:6379" || cfg.Health.KafkaAddress != "127.0.0.1:9092" {
+	if cfg.ListenAddr != ":3003" || cfg.FrontendURL != "http://localhost:5005/" || cfg.AllowedOrigin != "http://localhost:5005" || cfg.Mongo.URI != "mongodb://127.0.0.1:27017" || cfg.Auth.NalaLabsAuthURL != "http://127.0.0.1:18080" || cfg.Vault.KVMount != "secret" || cfg.Vault.KVPath != "nala-labs/nala-trace" || cfg.Health.PostgreSQLAddress != "127.0.0.1:5432" || cfg.Health.RedisAddress != "127.0.0.1:6379" || cfg.Health.KafkaAddress != "127.0.0.1:9092" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.Mongo.Enabled {
@@ -38,6 +40,39 @@ func TestLoadFromUsesVaultKVPath(t *testing.T) {
 	}
 	if cfg.Vault.KVMount != "kv" || cfg.Vault.KVPath != "nala-trace/test" {
 		t.Fatalf("unexpected Vault path configuration: %+v", cfg.Vault)
+	}
+}
+
+func TestLoadVaultValuesUsesKVV2AndPreservesProcessOverrides(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/secret/data/nala-labs/nala-trace" {
+			t.Fatalf("Vault request path = %q", r.URL.Path)
+		}
+		if r.Header.Get("X-Vault-Token") != "test-token" {
+			t.Fatalf("Vault token header was not sent")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"data":{"MONGO_URI":"vault-mongo-uri","SESSION_SECRET":"vault-session"}}}`))
+	}))
+	defer server.Close()
+
+	values := map[string]string{
+		"VAULT_ENABLED":  "true",
+		"VAULT_ADDR":     server.URL,
+		"VAULT_KV_MOUNT": "secret",
+		"VAULT_KV_PATH":  "nala-labs/nala-trace",
+		"VAULT_TOKEN":    "test-token",
+		"SESSION_SECRET": "process-session",
+	}
+	processValues := map[string]string{"SESSION_SECRET": "process-session"}
+	if err := loadVaultValues(values, processValues, server.Client()); err != nil {
+		t.Fatalf("load Vault values: %v", err)
+	}
+	if values["MONGO_URI"] != "vault-mongo-uri" {
+		t.Fatalf("MONGO_URI = %q, want Vault value", values["MONGO_URI"])
+	}
+	if values["SESSION_SECRET"] != "process-session" {
+		t.Fatalf("SESSION_SECRET = %q, want process override", values["SESSION_SECRET"])
 	}
 }
 

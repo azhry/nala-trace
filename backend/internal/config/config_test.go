@@ -26,6 +26,21 @@ func TestLoadFromRejectsInvalidNalaLabsAuthURL(t *testing.T) {
 	}
 }
 
+func TestLoadFromUsesVaultKVPath(t *testing.T) {
+	cfg, err := LoadFrom(map[string]string{
+		"VAULT_ENABLED":  "true",
+		"VAULT_ADDR":     "http://vault.example",
+		"VAULT_KV_MOUNT": "kv",
+		"VAULT_KV_PATH":  "nala-trace/test",
+	})
+	if err != nil {
+		t.Fatalf("LoadFrom returned error: %v", err)
+	}
+	if cfg.Vault.KVMount != "kv" || cfg.Vault.KVPath != "nala-trace/test" {
+		t.Fatalf("unexpected Vault path configuration: %+v", cfg.Vault)
+	}
+}
+
 func TestLoadFromRejectsEnabledMongoWithoutRequiredSettings(t *testing.T) {
 	_, err := LoadFrom(map[string]string{"MONGO_ENABLED": "true"})
 	if err == nil {

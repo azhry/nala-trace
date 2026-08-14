@@ -37,8 +37,10 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `VAULT_ENABLED` | ordinary | `false` when values are loaded by local process environment | `true` for Vault-backed workload configuration | API/deployment configuration | When `true`, workload identity and Vault path settings are required. |
 | `VAULT_ADDR` | ordinary URL | `http://127.0.0.1:8200` through a local port-forward | `http://vault.nala-labs.svc.cluster.local:8200` | API/deployment configuration | Required when Vault is enabled. |
 | `VAULT_KV_MOUNT` | ordinary | `kv` | `kv` | API/deployment configuration | Required when Vault is enabled. |
-| `VAULT_CONFIG_PATH` | ordinary path | `nala-trace/config` | `nala-trace/config` | API/deployment configuration | Required when Vault is enabled; must not be used as a secret value. |
+| `VAULT_KV_PATH` | ordinary path | `nala-trace/config` | `nala-trace/config` | API/deployment configuration | Required when Vault is enabled; must not be used as a secret value. |
 | `VAULT_TOKEN` | secret or workload identity | local secret-store value only | prefer Kubernetes auth role `nala-trace-api` | `auth/kubernetes/role/nala-trace-api`; local secret-store injection if needed | Never check in a static token. Prefer workload identity in Kubernetes. |
+| `VAULT_ROLE_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_SECRET_ID`; never check in. |
+| `VAULT_SECRET_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_ROLE_ID`; never check in. |
 
 The React package may read only non-secret `VITE_*` settings. The backend owns bearer-token forwarding, validation responses, optional session material, and all secret values. A `VITE_API_TOKEN`, provider secret, session secret, Mongo password, Vault token, or signing key is forbidden.
 
@@ -50,6 +52,8 @@ The application workload is the owner of the following logical secret paths:
 - `kv/data/nala-trace/mongodb`: Mongo username and password.
 - `kv/data/nala-trace/session`: session secret.
 - `auth/kubernetes/role/nala-trace-api`: preferred workload identity binding for reading the paths above. A static `VAULT_TOKEN` is a local-only fallback and has no checked-in value.
+
+For local development, copy the tracked root `.vault-config.example` to the ignored root `.vault-config` and fill `VAULT_TOKEN` from a protected secret source. If token auth is unavailable, leave `VAULT_TOKEN` empty and provide both `VAULT_ROLE_ID` and `VAULT_SECRET_ID` instead. Process environment values take precedence when the future Vault loader reads this transport file.
 
 Kubernetes deployment manifests must map ordinary names through a ConfigMap and secret names through the Vault injector or an equivalent Secret projection. The Go process must receive the same environment names listed above; manifest-specific key names must not silently diverge.
 

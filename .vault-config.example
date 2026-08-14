@@ -1,0 +1,10 @@
+# Copy this file to .vault-config and fill secret values from a protected source.
+# The real .vault-config is ignored and must never be committed.
+VAULT_ADDR=http://127.0.0.1:8200
+VAULT_TOKEN=
+VAULT_KV_MOUNT=kv
+VAULT_KV_PATH=nala-trace/config
+
+# Alternatively, omit VAULT_TOKEN and provide both AppRole values.
+# VAULT_ROLE_ID=
+# VAULT_SECRET_ID=

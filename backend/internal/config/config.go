@@ -65,11 +65,13 @@ type SessionConfig struct {
 }
 
 type VaultConfig struct {
-	Enabled    bool
-	Addr       string
-	KVMount    string
-	ConfigPath string
-	Token      string
+	Enabled  bool
+	Addr     string
+	KVMount  string
+	KVPath   string
+	Token    string
+	RoleID   string
+	SecretID string
 }
 
 // Load reads process environment first and optional local .env files second.
@@ -117,11 +119,13 @@ func LoadFrom(values map[string]string) (Config, error) {
 			Secret:     values["SESSION_SECRET"],
 		},
 		Vault: VaultConfig{
-			Enabled:    boolOr(lookup, "VAULT_ENABLED", false),
-			Addr:       valueOr(lookup, "VAULT_ADDR", defaultVaultAddr),
-			KVMount:    valueOr(lookup, "VAULT_KV_MOUNT", defaultVaultMount),
-			ConfigPath: valueOr(lookup, "VAULT_CONFIG_PATH", defaultVaultPath),
-			Token:      values["VAULT_TOKEN"],
+			Enabled:  boolOr(lookup, "VAULT_ENABLED", false),
+			Addr:     valueOr(lookup, "VAULT_ADDR", defaultVaultAddr),
+			KVMount:  valueOr(lookup, "VAULT_KV_MOUNT", defaultVaultMount),
+			KVPath:   valueOr(lookup, "VAULT_KV_PATH", defaultVaultPath),
+			Token:    values["VAULT_TOKEN"],
+			RoleID:   values["VAULT_ROLE_ID"],
+			SecretID: values["VAULT_SECRET_ID"],
 		},
 	}
 
@@ -172,7 +176,7 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 		invalid = append(invalid, "SESSION_TTL")
 	}
 	if cfg.Vault.Enabled {
-		for _, key := range []string{"VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_CONFIG_PATH"} {
+		for _, key := range []string{"VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH"} {
 			if strings.TrimSpace(values[key]) == "" {
 				missing = append(missing, key)
 			}
@@ -217,7 +221,7 @@ func knownKeys() []string {
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
 		"CODEX_TRACE_API_TOKEN", "MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE", "MONGO_USERNAME", "MONGO_PASSWORD",
 		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL", "SESSION_COOKIE_NAME",
-		"SESSION_TTL", "SESSION_SECRET", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_CONFIG_PATH", "VAULT_TOKEN",
+		"SESSION_TTL", "SESSION_SECRET", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}
 }
 

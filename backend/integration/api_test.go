@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,5 +22,24 @@ func TestHealthEndpointThroughConfiguredServer(t *testing.T) {
 
 	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("unexpected health response: status=%d content-type=%q", recorder.Code, recorder.Header().Get("Content-Type"))
+	}
+	var response struct {
+		Status       string                       `json:"status"`
+		Dependencies map[string]map[string]string `json:"dependencies"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if response.Status != "ok" {
+		t.Fatalf("health status = %q, want ok", response.Status)
+	}
+	wantDependencies := []string{"casdoor", "vault", "postgresql", "mongodb", "redis", "kafka"}
+	if len(response.Dependencies) != len(wantDependencies) {
+		t.Fatalf("dependency count = %d, want %d", len(response.Dependencies), len(wantDependencies))
+	}
+	for _, name := range wantDependencies {
+		if response.Dependencies[name]["status"] != "not_configured" {
+			t.Fatalf("dependency %q = %+v, want not_configured", name, response.Dependencies[name])
+		}
 	}
 }

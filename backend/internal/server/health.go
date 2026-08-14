@@ -11,10 +11,27 @@ type healthResponse struct {
 	Dependencies map[string]healthDependency `json:"dependencies"`
 }
 
+var healthDependencyNames = []string{
+	"casdoor",
+	"vault",
+	"postgresql",
+	"mongodb",
+	"redis",
+	"kafka",
+}
+
+func siblingHealthDependencies() map[string]healthDependency {
+	dependencies := make(map[string]healthDependency, len(healthDependencyNames))
+	for _, name := range healthDependencyNames {
+		dependencies[name] = healthDependency{Status: "not_configured"}
+	}
+	return dependencies
+}
+
 func HealthRoute() Route {
 	response := healthResponse{
 		Status:       "ok",
-		Dependencies: map[string]healthDependency{},
+		Dependencies: siblingHealthDependencies(),
 	}
 
 	return Route{

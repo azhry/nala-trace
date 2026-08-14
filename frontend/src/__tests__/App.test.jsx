@@ -42,5 +42,8 @@ describe('Nala Trace session workspace', () => {
     expect(screen.queryByText('/inspect this session')).not.toBeInTheDocument()
     expect(screen.getByText('tool_input')).toBeInTheDocument()
     expect(screen.getByText('tool_response')).toBeInTheDocument()
+    expect(screen.getByText('Skill invocations')).toBeInTheDocument()
+    expect(screen.getByText('1 invocations · 1 unique skills')).toBeInTheDocument()
+    expect(screen.getAllByText('skill / frontend-design')).toHaveLength(2)
   })
 })

@@ -32,9 +32,9 @@ export default function SessionList({
     <section className="panel session-list-panel" aria-labelledby="session-list-title">
       <div className="panel-header session-list-header">
         <div>
-          <p className="section-label">01 / Find a run</p>
+          <p className="section-label">Records</p>
           <h2 id="session-list-title">Session records</h2>
-          <p className="panel-description">Choose a captured run to follow its conversation, tools, and outcome.</p>
+          <p className="panel-description">Every row is a captured session. Select one to open the complete detail view.</p>
         </div>
         <span className="record-count">{visibleSessions.length} of {sessions.length}</span>
       </div>

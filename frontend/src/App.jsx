@@ -63,7 +63,7 @@ function WorkspaceStats({ sessions }) {
 function DataSourceNotice({ apiState }) {
   const source = dataSourceCopy(apiState)
   if (apiState === 'connected') return null
-  return <div className="data-source-notice" role="status"><span className="section-label">Data provenance</span><strong>{source.label}</strong><p>{source.detail}. No synthetic, demo, or placeholder session records are being presented.</p></div>
+  return <div className="data-source-notice" role="status"><span className="section-label">Data provenance</span><strong>{source.label}</strong><p>{source.detail}. Only the captured records from this source are being presented.</p></div>
 }
 
 function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, apiState }) {

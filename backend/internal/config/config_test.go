@@ -35,7 +35,6 @@ func TestLoadFromUsesVaultKVPath(t *testing.T) {
 		"VAULT_KV_MOUNT":        "kv",
 		"VAULT_KV_PATH":         "nala-trace/test",
 		"CODEX_TRACE_API_TOKEN": "test-ingest-token",
-		"SESSION_SECRET":        "test-session-secret",
 	})
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
@@ -54,27 +53,27 @@ func TestLoadVaultValuesUsesKVV2AndPreservesProcessOverrides(t *testing.T) {
 			t.Fatalf("Vault token header was not sent")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"data":{"MONGO_URI":"vault-mongo-uri","SESSION_SECRET":"vault-session"}}}`))
+		_, _ = w.Write([]byte(`{"data":{"data":{"MONGO_URI":"vault-mongo-uri","NALA_LABS_API_KEY":"vault-api-key"}}}`))
 	}))
 	defer server.Close()
 
 	values := map[string]string{
-		"VAULT_ENABLED":  "true",
-		"VAULT_ADDR":     server.URL,
-		"VAULT_KV_MOUNT": "secret",
-		"VAULT_KV_PATH":  "nala-labs/nala-trace",
-		"VAULT_TOKEN":    "test-token",
-		"SESSION_SECRET": "process-session",
+		"VAULT_ENABLED":     "true",
+		"VAULT_ADDR":        server.URL,
+		"VAULT_KV_MOUNT":    "secret",
+		"VAULT_KV_PATH":     "nala-labs/nala-trace",
+		"VAULT_TOKEN":       "test-token",
+		"NALA_LABS_API_KEY": "process-api-key",
 	}
-	processValues := map[string]string{"SESSION_SECRET": "process-session"}
+	processValues := map[string]string{"NALA_LABS_API_KEY": "process-api-key"}
 	if err := loadVaultValues(values, processValues, server.Client()); err != nil {
 		t.Fatalf("load Vault values: %v", err)
 	}
 	if values["MONGO_URI"] != "vault-mongo-uri" {
 		t.Fatalf("MONGO_URI = %q, want Vault value", values["MONGO_URI"])
 	}
-	if values["SESSION_SECRET"] != "process-session" {
-		t.Fatalf("SESSION_SECRET = %q, want process override", values["SESSION_SECRET"])
+	if values["NALA_LABS_API_KEY"] != "process-api-key" {
+		t.Fatalf("NALA_LABS_API_KEY = %q, want process override", values["NALA_LABS_API_KEY"])
 	}
 }
 
@@ -101,7 +100,7 @@ func TestLoadFromRejectsEnabledVaultWithoutRequiredRuntimeSecrets(t *testing.T) 
 		"VAULT_KV_MOUNT": "secret",
 		"VAULT_KV_PATH":  "nala-labs/nala-trace",
 	})
-	if err == nil || !strings.Contains(err.Error(), "CODEX_TRACE_API_TOKEN") || !strings.Contains(err.Error(), "SESSION_SECRET") {
+	if err == nil || !strings.Contains(err.Error(), "CODEX_TRACE_API_TOKEN") {
 		t.Fatalf("expected safe missing Vault runtime error, got %v", err)
 	}
 	if strings.Contains(err.Error(), "secret") {
@@ -110,8 +109,8 @@ func TestLoadFromRejectsEnabledVaultWithoutRequiredRuntimeSecrets(t *testing.T) 
 }
 
 func TestLoadFromRejectsInvalidDurationWithoutEchoingValue(t *testing.T) {
-	_, err := LoadFrom(map[string]string{"SESSION_TTL": "not-a-duration"})
-	if err == nil || !strings.Contains(err.Error(), "SESSION_TTL") {
+	_, err := LoadFrom(map[string]string{"AUTH_REQUEST_TIMEOUT": "not-a-duration"})
+	if err == nil || !strings.Contains(err.Error(), "AUTH_REQUEST_TIMEOUT") {
 		t.Fatalf("expected named duration error, got %v", err)
 	}
 	if strings.Contains(err.Error(), "not-a-duration") {
@@ -136,12 +135,11 @@ func TestLoadFromParsesOverrides(t *testing.T) {
 		"MONGO_URI":             "mongodb://localhost:27017",
 		"MONGO_DATABASE":        "test_trace",
 		"MONGO_CONNECT_TIMEOUT": "3s",
-		"SESSION_TTL":           "30m",
 	})
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
 	}
-	if cfg.ListenAddr != ":18080" || cfg.Mongo.Database != "test_trace" || cfg.Mongo.ConnectTimeout != 3*time.Second || cfg.Session.TTL != 30*time.Minute {
+	if cfg.ListenAddr != ":18080" || cfg.Mongo.Database != "test_trace" || cfg.Mongo.ConnectTimeout != 3*time.Second {
 		t.Fatalf("overrides were not parsed: %+v", cfg)
 	}
 }

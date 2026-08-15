@@ -1,13 +1,11 @@
 package auth
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -34,46 +32,23 @@ func NewIAMClient(cfg config.AuthConfig) *IAMClient {
 	return &IAMClient{baseURL: strings.TrimRight(cfg.NalaLabsAuthURL, "/"), client: &http.Client{Timeout: timeout}, timeout: timeout}
 }
 
-func (c *IAMClient) Login(ctx context.Context, username, password string) (User, error) {
-	if strings.TrimSpace(username) == "" || password == "" {
-		return User{}, ErrUnauthenticated
-	}
-	body, err := json.Marshal(map[string]string{"username": username, "password": password})
-	if err != nil {
-		return User{}, ErrProviderUnavailable
-	}
-	return c.requestUser(ctx, http.MethodPost, "/api/auth/login", body, "")
-}
-
 func (c *IAMClient) ValidateBearer(ctx context.Context, token string) (User, error) {
 	if strings.TrimSpace(token) == "" {
 		return User{}, ErrUnauthenticated
 	}
-	return c.requestUser(ctx, http.MethodGet, "/api/auth/session", nil, token)
+	return c.requestUser(ctx, token)
 }
 
-func (c *IAMClient) Callback(ctx context.Context, code string) (User, error) {
-	if strings.TrimSpace(code) == "" {
-		return User{}, ErrUnauthenticated
-	}
-	return c.requestUser(ctx, http.MethodGet, "/api/auth/callback?code="+url.QueryEscape(code), nil, "")
-}
-
-func (c *IAMClient) requestUser(ctx context.Context, method, path string, body []byte, token string) (User, error) {
+func (c *IAMClient) requestUser(ctx context.Context, token string) (User, error) {
 	if c == nil || c.client == nil || c.baseURL == "" {
 		return User{}, ErrProviderUnavailable
 	}
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/auth/session", nil)
 	if err != nil {
 		return User{}, ErrProviderUnavailable
 	}
 	request.Header.Set("Accept", "application/json")
-	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	if token != "" {
-		request.Header.Set("Authorization", "Bearer "+token)
-	}
+	request.Header.Set("Authorization", "Bearer "+token)
 	response, err := c.client.Do(request)
 	if err != nil {
 		return User{}, ErrProviderUnavailable
@@ -89,7 +64,7 @@ func (c *IAMClient) requestUser(ctx context.Context, method, path string, body [
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return User{}, ErrProviderUnavailable
 	}
-	user, err := decodeUser(responseBody, token != "")
+	user, err := decodeUser(responseBody, true)
 	if err != nil {
 		return User{}, err
 	}

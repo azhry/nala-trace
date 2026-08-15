@@ -23,17 +23,6 @@ type User struct {
 	Entitlements []string `json:"entitlements,omitempty"`
 }
 
-type Session struct {
-	UserID string `json:"sub"`
-	Name   string `json:"name,omitempty"`
-	Email  string `json:"email,omitempty"`
-	Tier   Tier   `json:"tier"`
-}
-
-func (s Session) Valid() bool {
-	return s.UserID != "" && (s.Tier == TierAdmin || s.Tier == TierDeveloper || s.Tier == TierFree)
-}
-
 func (u User) Valid() bool {
 	return u.ID != "" && (u.Tier == TierAdmin || u.Tier == TierDeveloper || u.Tier == TierFree)
 }

@@ -49,9 +49,7 @@ func run() error {
 		mongoProbe = mongoStore.Ping
 	}
 	health := server.NewHealthChecker(cfg, mongoProbe)
-	authRoutes := server.NewAuthRoutes(cfg)
 	routes := []server.Route{server.HealthRoute(health)}
-	routes = append(routes, server.AuthRouteSet(authRoutes)...)
 	api := server.New(cfg, routes...)
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

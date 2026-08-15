@@ -23,18 +23,13 @@ func UserFromContext(ctx context.Context) (User, bool) {
 }
 
 type Middleware struct {
-	sessions *SessionManager
-	iam      *IAMClient
-	apiKey   string
-	origin   string
+	iam    *IAMClient
+	apiKey string
+	origin string
 }
 
-func NewMiddleware(cfg config.Config, sessions *SessionManager, iam *IAMClient) *Middleware {
-	apiKey := cfg.Auth.APIKey
-	if apiKey == "" {
-		apiKey = cfg.IngestToken
-	}
-	return &Middleware{sessions: sessions, iam: iam, apiKey: apiKey, origin: strings.TrimRight(cfg.AllowedOrigin, "/")}
+func NewMiddleware(cfg config.Config, iam *IAMClient) *Middleware {
+	return &Middleware{iam: iam, apiKey: cfg.Auth.APIKey, origin: strings.TrimRight(cfg.AllowedOrigin, "/")}
 }
 
 func (m *Middleware) Handler(next http.Handler) http.Handler {
@@ -64,11 +59,6 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 func (m *Middleware) authenticate(request *http.Request) (User, int, string) {
 	if m == nil {
 		return User{}, http.StatusUnauthorized, "unauthenticated"
-	}
-	if m.sessions != nil {
-		if session, err := m.sessions.Get(request); err == nil {
-			return User{ID: session.UserID, Name: session.Name, Email: session.Email, Tier: session.Tier}, http.StatusOK, ""
-		}
 	}
 	if apiKey := firstHeader(request, "X-Nala-Labs-API-Key", "X-API-Key"); apiKey != "" && m.apiKey != "" && constantTimeEqual(apiKey, m.apiKey) {
 		return User{ID: "nala-labs-api-key", Tier: TierAdmin}, http.StatusOK, ""

@@ -42,11 +42,13 @@ redirect flow.
   `.agents/knowledge/nala-trace/configuration.md`.
 - Nala Trace does not own `CASDOOR_CLIENT_ID`, `CASDOOR_CLIENT_SECRET`,
   Casdoor callback settings, or a copy of the Nala Labs signing secret.
-- `SESSION_COOKIE_NAME`, `SESSION_TTL`, and `SESSION_SECRET` are reserved for
-  an optional Nala Trace application session; they must never be used to
-  validate or forge a Nala Labs JWT.
-- The React app may hold a short-lived bearer token only for the approved
-  session flow. It must not receive provider credentials or signing keys.
+- Nala Trace does not own a login form, callback, logout route, or signed
+  application session. It verifies Nala Labs-issued JWTs through the shared
+  validation endpoint and accepts the configured Nala Labs API key for machine
+  access.
+- The React app may hold a short-lived Nala Labs bearer token only for the
+  approved upstream flow. It must not receive provider credentials or signing
+  keys.
 
 ## Pre-authentication validation checklist
 

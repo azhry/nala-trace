@@ -29,3 +29,14 @@ make test-frontend-build
 ```
 
 The backend integration command is credential-free and exercises the configured HTTP server and `/healthz` route. MongoDB lifecycle tests use fakes by default. A future live-Mongo integration suite must be run only with an explicitly configured service and must not add credentials to the repository.
+
+## Production images
+
+Build the services from their own contexts so ignored local configuration and generated artifacts are not sent to Docker:
+
+```powershell
+docker build --file backend/Dockerfile --tag nala-trace-backend:local backend
+docker build --file frontend/Dockerfile --tag nala-trace-frontend:local frontend
+```
+
+The backend listens on port `3003` and keeps `/healthz` available for liveness. The frontend serves the Vite output on port `8080` with SPA fallback and uses relative API paths. Runtime secrets are supplied outside the images.

@@ -30,10 +30,12 @@ func TestLoadFromRejectsInvalidNalaLabsAuthURL(t *testing.T) {
 
 func TestLoadFromUsesVaultKVPath(t *testing.T) {
 	cfg, err := LoadFrom(map[string]string{
-		"VAULT_ENABLED":  "true",
-		"VAULT_ADDR":     "http://vault.example",
-		"VAULT_KV_MOUNT": "kv",
-		"VAULT_KV_PATH":  "nala-trace/test",
+		"VAULT_ENABLED":         "true",
+		"VAULT_ADDR":            "http://vault.example",
+		"VAULT_KV_MOUNT":        "kv",
+		"VAULT_KV_PATH":         "nala-trace/test",
+		"CODEX_TRACE_API_TOKEN": "test-ingest-token",
+		"SESSION_SECRET":        "test-session-secret",
 	})
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
@@ -89,6 +91,21 @@ func TestLoadFromRejectsEnabledMongoWithoutRequiredSettings(t *testing.T) {
 	}
 	if strings.Contains(message, "mongodb://") {
 		t.Fatalf("error leaked a connection value: %q", message)
+	}
+}
+
+func TestLoadFromRejectsEnabledVaultWithoutRequiredRuntimeSecrets(t *testing.T) {
+	_, err := LoadFrom(map[string]string{
+		"VAULT_ENABLED":  "true",
+		"VAULT_ADDR":     "http://vault.example",
+		"VAULT_KV_MOUNT": "secret",
+		"VAULT_KV_PATH":  "nala-labs/nala-trace",
+	})
+	if err == nil || !strings.Contains(err.Error(), "CODEX_TRACE_API_TOKEN") || !strings.Contains(err.Error(), "SESSION_SECRET") {
+		t.Fatalf("expected safe missing Vault runtime error, got %v", err)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("error leaked a secret value: %v", err)
 	}
 }
 

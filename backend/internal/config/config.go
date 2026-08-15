@@ -25,13 +25,14 @@ const (
 	defaultKafkaAddress      = "127.0.0.1:9092"
 	defaultCookieName        = "nala_trace_session"
 	defaultSessionTTL        = 24 * time.Hour
-	defaultVaultAddr         = "http://127.0.0.1:8200"
+	defaultVaultAddr         = "http://vault.nala-labs.svc.cluster.local:8200"
 	defaultVaultMount        = "secret"
 	defaultVaultPath         = "nala-labs/nala-trace"
 	defaultConnectTimeout    = 5 * time.Second
 	defaultPingTimeout       = 2 * time.Second
 	defaultDisconnectTimeout = 5 * time.Second
 	defaultShutdownTimeout   = 10 * time.Second
+	defaultAuthTimeout       = 5 * time.Second
 )
 
 // Config contains only parsed runtime configuration. Secret values are held in
@@ -61,6 +62,8 @@ type MongoConfig struct {
 
 type AuthConfig struct {
 	NalaLabsAuthURL string
+	APIKey          string
+	Timeout         time.Duration
 }
 
 // HealthConfig contains non-secret dependency addresses used by /healthz.
@@ -74,9 +77,11 @@ type HealthConfig struct {
 }
 
 type SessionConfig struct {
-	CookieName string
-	TTL        time.Duration
-	Secret     string
+	CookieName     string
+	TTL            time.Duration
+	Secret         string
+	CookieSecure   bool
+	CookieSameSite string
 }
 
 type VaultConfig struct {
@@ -130,6 +135,8 @@ func LoadFrom(values map[string]string) (Config, error) {
 		},
 		Auth: AuthConfig{
 			NalaLabsAuthURL: valueOr(lookup, "NALA_LABS_AUTH_URL", defaultNalaLabsAuthURL),
+			APIKey:          values["NALA_LABS_API_KEY"],
+			Timeout:         durationOr(lookup, "AUTH_REQUEST_TIMEOUT", defaultAuthTimeout),
 		},
 		Health: HealthConfig{
 			PostgreSQLAddress: valueOr(lookup, "POSTGRESQL_ADDRESS", defaultPostgreSQLAddress),
@@ -138,9 +145,11 @@ func LoadFrom(values map[string]string) (Config, error) {
 			Timeout:           durationOr(lookup, "HEALTHCHECK_TIMEOUT", defaultPingTimeout),
 		},
 		Session: SessionConfig{
-			CookieName: valueOr(lookup, "SESSION_COOKIE_NAME", defaultCookieName),
-			TTL:        durationOr(lookup, "SESSION_TTL", defaultSessionTTL),
-			Secret:     values["SESSION_SECRET"],
+			CookieName:     valueOr(lookup, "SESSION_COOKIE_NAME", defaultCookieName),
+			TTL:            durationOr(lookup, "SESSION_TTL", defaultSessionTTL),
+			Secret:         values["SESSION_SECRET"],
+			CookieSecure:   boolOr(lookup, "SESSION_COOKIE_SECURE", false),
+			CookieSameSite: valueOr(lookup, "SESSION_COOKIE_SAMESITE", "Lax"),
 		},
 		Vault: VaultConfig{
 			Enabled:  boolOr(lookup, "VAULT_ENABLED", false),
@@ -193,6 +202,9 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 	if _, err := url.ParseRequestURI(cfg.Auth.NalaLabsAuthURL); err != nil || !strings.HasPrefix(cfg.Auth.NalaLabsAuthURL, "http") {
 		invalid = append(invalid, "NALA_LABS_AUTH_URL")
 	}
+	if cfg.Auth.Timeout <= 0 {
+		invalid = append(invalid, "AUTH_REQUEST_TIMEOUT")
+	}
 	if cfg.Health.Timeout <= 0 {
 		invalid = append(invalid, "HEALTHCHECK_TIMEOUT")
 	}
@@ -202,8 +214,16 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 	if cfg.Session.TTL <= 0 {
 		invalid = append(invalid, "SESSION_TTL")
 	}
+	if !validSameSite(cfg.Session.CookieSameSite) {
+		invalid = append(invalid, "SESSION_COOKIE_SAMESITE")
+	}
 	if cfg.Vault.Enabled {
 		for _, key := range []string{"VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH"} {
+			if strings.TrimSpace(values[key]) == "" {
+				missing = append(missing, key)
+			}
+		}
+		for _, key := range []string{"CODEX_TRACE_API_TOKEN", "SESSION_SECRET"} {
 			if strings.TrimSpace(values[key]) == "" {
 				missing = append(missing, key)
 			}
@@ -249,7 +269,7 @@ func knownKeys() []string {
 		"CODEX_TRACE_API_TOKEN", "MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
 		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL",
 		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "SESSION_COOKIE_NAME",
-		"SESSION_TTL", "SESSION_SECRET", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
+		"SESSION_TTL", "SESSION_SECRET", "SESSION_COOKIE_SECURE", "SESSION_COOKIE_SAMESITE", "AUTH_REQUEST_TIMEOUT", "NALA_LABS_API_KEY", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}
 }
 
@@ -398,4 +418,13 @@ func durationOr(lookup func(string) (string, bool), key string, fallback time.Du
 		return 0
 	}
 	return parsed
+}
+
+func validSameSite(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "lax", "strict", "none":
+		return true
+	default:
+		return false
+	}
 }

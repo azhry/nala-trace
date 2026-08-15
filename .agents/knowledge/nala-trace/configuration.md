@@ -28,13 +28,17 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `MONGO_PING_TIMEOUT` | ordinary duration | `2s` | `2s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `MONGO_DISCONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `CODEX_TRACE_API_TOKEN` | secret | local secret-store value | Vault-injected value | `kv/data/nala-labs/nala-trace` key `CODEX_TRACE_API_TOKEN`; hook ingestion handler | Required before authenticated ingestion is enabled; compare without logging either value. |
+| `NALA_LABS_API_KEY` | secret | local secret-store value when machine/API-key auth is enabled | Vault-injected value | Nala Trace auth middleware | Optional; compare in constant time and never expose or log the value. |
 | `NALA_LABS_AUTH_URL` | ordinary URL | `http://127.0.0.1:18080` | deployment-supplied Nala Labs auth service URL | API authentication configuration | Required for shared JWT validation; use only an approved network endpoint and never embed credentials. |
+| `AUTH_REQUEST_TIMEOUT` | ordinary duration | `5s` | `5s` unless deployment overrides it | API authentication client | Bounded timeout for Nala Labs validation/login calls. |
 | `POSTGRESQL_ADDRESS` | ordinary address | `127.0.0.1:5432` | `postgresql.nala-labs.svc.cluster.local:5432` | `/healthz` PostgreSQL probe | TCP health address for the shared PostgreSQL dependency. |
 | `REDIS_ADDRESS` | ordinary address | `127.0.0.1:6379` | `redis-master.nala-labs.svc.cluster.local:6379` | `/healthz` Redis probe | TCP health address for the shared Redis dependency. |
 | `KAFKA_ADDRESS` | ordinary address | `127.0.0.1:9092` | `kafka.nala-labs.svc.cluster.local:9092` | `/healthz` Kafka probe | TCP health address for the shared Kafka dependency. |
 | `HEALTHCHECK_TIMEOUT` | ordinary duration | `2s` | `2s` unless deployment overrides it | API `/healthz` | Per-dependency bounded probe timeout. |
 | `SESSION_COOKIE_NAME` | ordinary | `nala_trace_session` | `nala_trace_session` | API session configuration | Stable, non-secret cookie name. |
 | `SESSION_TTL` | ordinary duration | `24h` unless product policy overrides it | deployment policy | API session configuration | Required duration; reject invalid or non-positive values. |
+| `SESSION_COOKIE_SECURE` | ordinary boolean | `false` for local HTTP | `true` for HTTPS deployment | API session cookie configuration | Controls the Secure attribute; never weakens production TLS policy. |
+| `SESSION_COOKIE_SAMESITE` | ordinary enum | `Lax` | `Lax` or deployment-approved value | API session cookie configuration | Accepts Lax, Strict, or None; reject unknown values. |
 | `SESSION_SECRET` | secret | local secret-store value | Vault-injected value | `kv/data/nala-labs/nala-trace` key `SESSION_SECRET`; optional Nala Trace session only | Must never be used to validate or forge a Nala Labs JWT; never log or persist in fixtures. |
 | `VAULT_ENABLED` | ordinary | `false` when values are loaded by local process environment | `true` for Vault-backed workload configuration | API/deployment configuration | When `true`, workload identity and Vault path settings are required. |
 | `VAULT_ADDR` | ordinary URL | `http://127.0.0.1:8200` through a local port-forward | `http://vault.nala-labs.svc.cluster.local:8200` | API/deployment configuration | Required when Vault is enabled. |

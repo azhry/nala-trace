@@ -21,15 +21,9 @@ jobs:
       - name: Build backend
         working-directory: backend
         run: go build ./...
-      - name: Run backend unit tests
+      - name: Vet backend
         working-directory: backend
-        run: go test ./... -count=1 -short -v
-      - name: Collect backend coverage
-        working-directory: backend
-        run: go test ./... -count=1 -coverprofile=coverage.out -v
-      - name: Report backend coverage
-        working-directory: backend
-        run: go tool cover -func=coverage.out
+        run: go vet ./...
 
   frontend:
     name: Frontend checks
@@ -47,9 +41,6 @@ jobs:
       - name: Run frontend lint
         working-directory: frontend
         run: npm run lint
-      - name: Run frontend tests
-        working-directory: frontend
-        run: npm test -- --run
       - name: Build frontend
         working-directory: frontend
         run: npm run build

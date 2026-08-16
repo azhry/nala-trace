@@ -25,24 +25,37 @@ the Vite development server listens on `http://localhost:5005`. Vite proxies
 session detail URL is `http://localhost:5005/#/sessions/<id>`; `/sessions/<id>`
 is not a frontend route implemented by this app.
 
-Run the baseline checks from the repository root:
+Run the build and live verification from the repository root:
 
 ```powershell
-make test
-make test-backend-cover
-make test-frontend-lint
-make test-frontend-build
+make verify
 ```
 
 Hook installation, runtime environment, best-effort failure behavior, and
 known Codex coverage gaps are documented in [backend/HOOKS.md](backend/HOOKS.md).
 
-`make test-backend-integration` is a live verification command. It loads the
+`make verify-backend-live` is a live verification command. It loads the
 Vault-backed configuration, connects to MongoDB, probes Nala Labs auth, Vault,
 PostgreSQL, Redis, and Kafka through `/healthz`, then exercises real `/ingest`
-and `/sessions` requests with the configured Nala Labs API key. It fails when
-the real dependency environment is unavailable; it does not substitute fake
+and `/sessions` requests with a real Nala Labs API key supplied to the test
+process as `CODEX_TRACE_API_TOKEN`. Nala Trace validates the key locally by
+hashing it and querying the shared Nala Labs PostgreSQL `api_key` table, then
+stores the returned owner ID with the event. The test fails when the real
+dependency environment or key is unavailable; it does not substitute fake
 servers or mock databases.
+
+Manual endpoint verification uses `curl.exe` against the running API:
+
+```powershell
+$env:CODEX_TRACE_API_TOKEN = '<real key created by Nala Labs; keep it local>'
+curl.exe -i http://127.0.0.1:3003/healthz
+curl.exe -i -X POST http://127.0.0.1:3003/ingest `
+  -H "Content-Type: application/json" `
+  -H "X-Nala-Labs-API-Key: $env:CODEX_TRACE_API_TOKEN" `
+  --data '{"session_id":"curl-live-check","hook_event_name":"Stop"}'
+curl.exe -i "http://127.0.0.1:3003/sessions?limit=10" `
+  -H "X-Nala-Labs-API-Key: $env:CODEX_TRACE_API_TOKEN"
+```
 
 ## Production images
 

@@ -2,11 +2,11 @@ package auth
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/azhry/nala-trace/backend/internal/config"
 )
@@ -23,13 +23,19 @@ func UserFromContext(ctx context.Context) (User, bool) {
 }
 
 type Middleware struct {
-	iam    *IAMClient
-	apiKey string
-	origin string
+	iam         *IAMClient
+	apiKeyStore *APIKeyStore
+	origin      string
+	authTimeout time.Duration
 }
 
-func NewMiddleware(cfg config.Config, iam *IAMClient) *Middleware {
-	return &Middleware{iam: iam, apiKey: cfg.Auth.APIKey, origin: strings.TrimRight(cfg.AllowedOrigin, "/")}
+func NewMiddleware(cfg config.Config, iam *IAMClient, apiKeyStore *APIKeyStore) *Middleware {
+	return &Middleware{
+		iam:         iam,
+		apiKeyStore: apiKeyStore,
+		origin:      strings.TrimRight(cfg.AllowedOrigin, "/"),
+		authTimeout: cfg.Auth.Timeout,
+	}
 }
 
 func (m *Middleware) Handler(next http.Handler) http.Handler {
@@ -60,8 +66,24 @@ func (m *Middleware) authenticate(request *http.Request) (User, int, string) {
 	if m == nil {
 		return User{}, http.StatusUnauthorized, "unauthenticated"
 	}
-	if apiKey := firstHeader(request, "X-Nala-Labs-API-Key", "X-API-Key"); apiKey != "" && m.apiKey != "" && constantTimeEqual(apiKey, m.apiKey) {
-		return User{ID: "nala-labs-api-key", Tier: TierAdmin}, http.StatusOK, ""
+	if apiKey := firstHeader(request, "X-Nala-Labs-API-Key", "X-API-Key"); apiKey != "" {
+		if m.apiKeyStore == nil {
+			return User{}, http.StatusServiceUnavailable, "auth_provider_unavailable"
+		}
+		ctx := request.Context()
+		if m.authTimeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, m.authTimeout)
+			defer cancel()
+		}
+		user, err := m.apiKeyStore.Validate(ctx, apiKey)
+		if err == nil && user.Valid() {
+			return user, http.StatusOK, ""
+		}
+		if errors.Is(err, ErrProviderUnavailable) || errors.Is(err, ErrMalformedProviderData) {
+			return User{}, http.StatusServiceUnavailable, "auth_provider_unavailable"
+		}
+		return User{}, http.StatusUnauthorized, "unauthenticated"
 	}
 	authorization := strings.TrimSpace(request.Header.Get("Authorization"))
 	if authorization == "" {
@@ -104,13 +126,6 @@ func firstHeader(request *http.Request, names ...string) string {
 		}
 	}
 	return ""
-}
-
-func constantTimeEqual(left, right string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
 }
 
 func WriteAuthError(w http.ResponseWriter, status int, code string) {

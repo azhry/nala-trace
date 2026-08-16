@@ -64,8 +64,8 @@ func TestLiveDependenciesAndMongoPersistence(t *testing.T) {
 	api := server.New(
 		cfg,
 		server.HealthRoute(server.NewHealthChecker(cfg, store.Ping)),
-		server.ProtectedRoute("/ingest", server.NewIngestHandler(repository), auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth))),
-		server.ProtectedRoute("/sessions", server.NewSessionsHandler(repository), auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth))),
+		server.ProtectedRoute("/ingest", server.NewIngestHandler(repository), auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth), nil)),
+		server.ProtectedRoute("/sessions", server.NewSessionsHandler(repository), auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth), nil)),
 	)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -89,7 +89,7 @@ func TestLiveDependenciesAndMongoPersistence(t *testing.T) {
 
 	baseURL := "http://" + listener.Addr().String()
 	client := &http.Client{Timeout: 10 * time.Second}
-	health := getLiveResponse(t, client, baseURL+"/healthz", cfg.Auth.APIKey)
+	health := getLiveResponse(t, client, baseURL+"/healthz", "")
 	if health.StatusCode != http.StatusOK {
 		health.Body.Close()
 		t.Fatalf("live /healthz status = %d, want 200", health.StatusCode)
@@ -158,8 +158,12 @@ func TestLiveTraceAPIWithNalaLabsAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load Vault-backed configuration: %v", err)
 	}
-	if strings.TrimSpace(cfg.Auth.APIKey) == "" {
-		t.Fatal("NALA_LABS_API_KEY was not loaded from Vault-backed configuration")
+	apiKey := strings.TrimSpace(os.Getenv("CODEX_TRACE_API_TOKEN"))
+	if apiKey == "" {
+		t.Fatal("CODEX_TRACE_API_TOKEN was not supplied; provide a real Nala Labs API key to the integration process")
+	}
+	if strings.TrimSpace(cfg.DatabaseURL) == "" {
+		t.Fatal("DATABASE_URL was not loaded; local Nala Trace API-key validation requires the shared Nala Labs PostgreSQL connection")
 	}
 	store, err := storage.NewMongoStore(context.Background(), cfg.Mongo)
 	if err != nil {
@@ -173,12 +177,17 @@ func TestLiveTraceAPIWithNalaLabsAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create live MongoDB repository: %v", err)
 	}
+	apiKeyStore, err := auth.NewAPIKeyStore(cfg.DatabaseURL)
+	if err != nil {
+		t.Fatalf("connect to live Nala Labs PostgreSQL API-key store: %v", err)
+	}
+	defer func() { _ = apiKeyStore.Close() }()
 
 	api := server.New(
 		cfg,
 		server.HealthRoute(server.NewHealthChecker(cfg, store.Ping)),
-		server.ProtectedRoute("/ingest", server.NewIngestHandler(repository), auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth))),
-		server.ProtectedRoute("/sessions", server.NewSessionsHandler(repository), auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth))),
+		server.ProtectedRoute("/ingest", server.NewIngestHandler(repository), auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth), apiKeyStore)),
+		server.ProtectedRoute("/sessions", server.NewSessionsHandler(repository), auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth), apiKeyStore)),
 	)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -216,7 +225,7 @@ func TestLiveTraceAPIWithNalaLabsAPIKey(t *testing.T) {
 		t.Fatalf("create live ingest request: %v", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Nala-Labs-API-Key", cfg.Auth.APIKey)
+	request.Header.Set("X-Nala-Labs-API-Key", apiKey)
 	insertResponse, err := client.Do(request)
 	if err != nil {
 		t.Fatalf("call live /ingest: %v", err)
@@ -226,7 +235,7 @@ func TestLiveTraceAPIWithNalaLabsAPIKey(t *testing.T) {
 		t.Fatalf("live /ingest status = %d, want 202", insertResponse.StatusCode)
 	}
 
-	sessions := getLiveResponse(t, client, baseURL+"/sessions?limit=10", cfg.Auth.APIKey)
+	sessions := getLiveResponse(t, client, baseURL+"/sessions?limit=10", apiKey)
 	if sessions.StatusCode != http.StatusOK {
 		sessions.Body.Close()
 		t.Fatalf("live /sessions status = %d, want 200", sessions.StatusCode)
@@ -272,7 +281,9 @@ func getLiveResponse(t *testing.T, client *http.Client, endpoint, apiKey string)
 		if requestErr != nil {
 			t.Fatalf("create live request: %v", requestErr)
 		}
-		request.Header.Set("X-Nala-Labs-API-Key", apiKey)
+		if strings.TrimSpace(apiKey) != "" {
+			request.Header.Set("X-Nala-Labs-API-Key", apiKey)
+		}
 		response, err = client.Do(request)
 		if err == nil {
 			return response

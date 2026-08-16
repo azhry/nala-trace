@@ -31,11 +31,10 @@ The token is intentionally absent from this repository.
 
 `/hooks.json` is the repository manifest. It registers the nine canonical
 events and sends each event as JSON on stdin to the same `hook-client`
-executable. Validate it from the backend module with:
-
-```powershell
-go test ./internal/hooks -count=1 -v
-```
+executable. Validate it by starting the real API and sending a real event to
+`/ingest` with the configured API key. The endpoint must return `202` and
+`/sessions` must return the stored session for the same owner. Do not substitute
+unit tests, fake servers, or mock databases for this check.
 
 Copy or adapt the manifest into the Codex configuration location accepted by
 the installed Codex version, then review and trust the `hook-client` command

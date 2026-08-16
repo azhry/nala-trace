@@ -46,12 +46,20 @@ func run() error {
 			return indexErr
 		}
 	}
+	var apiKeyStore *auth.APIKeyStore
+	if cfg.DatabaseURL != "" {
+		apiKeyStore, err = auth.NewAPIKeyStore(cfg.DatabaseURL)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = apiKeyStore.Close() }()
+	}
 	var mongoProbe func(context.Context) error
 	if mongoStore != nil {
 		mongoProbe = mongoStore.Ping
 	}
 	health := server.NewHealthChecker(cfg, mongoProbe)
-	middleware := auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth))
+	middleware := auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth), apiKeyStore)
 	routes := []server.Route{
 		server.HealthRoute(health),
 		server.ProtectedRoute("/ingest", server.NewIngestHandler(repository), middleware),

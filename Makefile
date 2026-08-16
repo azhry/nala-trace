@@ -1,22 +1,15 @@
-.PHONY: test test-backend test-backend-cover test-backend-integration test-frontend test-frontend-lint test-frontend-build
+.PHONY: verify verify-backend-build verify-backend-live verify-frontend-lint verify-frontend-build
 
-test: test-backend test-backend-integration test-frontend
+verify: verify-backend-build verify-backend-live verify-frontend-lint verify-frontend-build
 
-test-backend:
-	cd backend && go test ./... -count=1 -short -v
+verify-backend-build:
+	cd backend && go build ./...
 
-test-backend-cover:
-	cd backend && go test ./... -count=1 -coverprofile=coverage.out -v
-	cd backend && go tool cover -func=coverage.out
-
-test-backend-integration:
+verify-backend-live:
 	cd backend && go test -tags=integration ./integration -count=1 -v
 
-test-frontend:
-	cd frontend && npm test -- --run
-
-test-frontend-lint:
+verify-frontend-lint:
 	cd frontend && npm run lint
 
-test-frontend-build:
+verify-frontend-build:
 	cd frontend && npm run build

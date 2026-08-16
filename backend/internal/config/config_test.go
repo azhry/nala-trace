@@ -44,6 +44,21 @@ func TestLoadFromUsesVaultKVPath(t *testing.T) {
 	}
 }
 
+func TestLoadFromInfersVaultEnabledFromConfiguredTransport(t *testing.T) {
+	cfg, err := LoadFrom(map[string]string{
+		"VAULT_ADDR":            "http://vault.example",
+		"VAULT_TOKEN":           "test-token",
+		"VAULT_KV_PATH":         "nala-labs/nala-trace",
+		"CODEX_TRACE_API_TOKEN": "test-ingest-token",
+	})
+	if err != nil {
+		t.Fatalf("LoadFrom returned error: %v", err)
+	}
+	if !cfg.Vault.Enabled {
+		t.Fatal("Vault should be enabled when its transport is configured")
+	}
+}
+
 func TestLoadVaultValuesUsesKVV2AndPreservesProcessOverrides(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/secret/data/nala-labs/nala-trace" {
@@ -58,7 +73,6 @@ func TestLoadVaultValuesUsesKVV2AndPreservesProcessOverrides(t *testing.T) {
 	defer server.Close()
 
 	values := map[string]string{
-		"VAULT_ENABLED":     "true",
 		"VAULT_ADDR":        server.URL,
 		"VAULT_KV_MOUNT":    "secret",
 		"VAULT_KV_PATH":     "nala-labs/nala-trace",

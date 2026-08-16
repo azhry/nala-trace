@@ -134,7 +134,7 @@ func LoadFrom(values map[string]string) (Config, error) {
 			Timeout:           durationOr(lookup, "HEALTHCHECK_TIMEOUT", defaultPingTimeout),
 		},
 		Vault: VaultConfig{
-			Enabled:  boolOr(lookup, "VAULT_ENABLED", false),
+			Enabled:  vaultEnabled(lookup),
 			Addr:     valueOr(lookup, "VAULT_ADDR", defaultVaultAddr),
 			KVMount:  valueOr(lookup, "VAULT_KV_MOUNT", defaultVaultMount),
 			KVPath:   valueOr(lookup, "VAULT_KV_PATH", defaultVaultPath),
@@ -191,10 +191,14 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 		invalid = append(invalid, "HEALTHCHECK_TIMEOUT")
 	}
 	if cfg.Vault.Enabled {
-		for _, key := range []string{"VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH"} {
-			if strings.TrimSpace(values[key]) == "" {
-				missing = append(missing, key)
-			}
+		if strings.TrimSpace(cfg.Vault.Addr) == "" {
+			missing = append(missing, "VAULT_ADDR")
+		}
+		if strings.TrimSpace(cfg.Vault.KVMount) == "" {
+			missing = append(missing, "VAULT_KV_MOUNT")
+		}
+		if strings.TrimSpace(cfg.Vault.KVPath) == "" {
+			missing = append(missing, "VAULT_KV_PATH")
 		}
 		for _, key := range []string{"CODEX_TRACE_API_TOKEN"} {
 			if strings.TrimSpace(values[key]) == "" {
@@ -279,7 +283,7 @@ func loadVaultValues(values, processValues map[string]string, client *http.Clien
 		value, ok := values[key]
 		return value, ok
 	}
-	if !boolOr(lookup, "VAULT_ENABLED", false) {
+	if !vaultEnabled(lookup) {
 		return nil
 	}
 	address := valueOr(lookup, "VAULT_ADDR", defaultVaultAddr)
@@ -299,6 +303,17 @@ func loadVaultValues(values, processValues map[string]string, client *http.Clien
 		}
 	}
 	return nil
+}
+
+// vaultEnabled follows the shared Nala Labs runtime contract: a configured
+// Vault address is the activation signal. VAULT_ENABLED remains a backwards-
+// compatible fallback for callers that construct an environment map without
+// the transport settings.
+func vaultEnabled(lookup func(string) (string, bool)) bool {
+	if strings.TrimSpace(valueOr(lookup, "VAULT_ADDR", "")) != "" {
+		return true
+	}
+	return boolOr(lookup, "VAULT_ENABLED", false)
 }
 
 func readVaultKV(client *http.Client, address, mount, path, token string) (map[string]string, error) {

@@ -35,10 +35,9 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `REDIS_ADDRESS` | ordinary address | `127.0.0.1:6379` | `redis-master.nala-labs.svc.cluster.local:6379` | `/healthz` Redis probe | TCP health address for the shared Redis dependency. |
 | `KAFKA_ADDRESS` | ordinary address | `127.0.0.1:9092` | `kafka.nala-labs.svc.cluster.local:9092` | `/healthz` Kafka probe | TCP health address for the shared Kafka dependency. |
 | `HEALTHCHECK_TIMEOUT` | ordinary duration | `2s` | `2s` unless deployment overrides it | API `/healthz` | Per-dependency bounded probe timeout. |
-| `VAULT_ENABLED` | ordinary | `false` when values are loaded by local process environment | `true` for Vault-backed workload configuration | API/deployment configuration | When `true`, workload identity and Vault path settings are required. |
-| `VAULT_ADDR` | ordinary URL | `http://127.0.0.1:8200` through a local port-forward | `http://vault.nala-labs.svc.cluster.local:8200` | API/deployment configuration | Required when Vault is enabled. |
-| `VAULT_KV_MOUNT` | ordinary | `secret` | `secret` | API/deployment configuration | Required when Vault is enabled; this is the configured KV v2 mount. |
-| `VAULT_KV_PATH` | ordinary path | `nala-labs/nala-trace` | `nala-labs/nala-trace` | API/deployment configuration | Required when Vault is enabled; must not be used as a secret value. |
+| `VAULT_ADDR` | ordinary URL | `http://127.0.0.1:8200` through the configured local Vault transport | `http://vault.nala-labs.svc.cluster.local:8200` | API/deployment configuration | Presence activates Vault loading and health probing; use the shared `.vault-config` transport contract. |
+| `VAULT_KV_MOUNT` | ordinary | `secret` | `secret` | API/deployment configuration | KV v2 mount; defaults to `secret` when omitted. |
+| `VAULT_KV_PATH` | ordinary path | `nala-labs/nala-trace` | `nala-labs/nala-trace` | API/deployment configuration | KV v2 path; defaults to `nala-labs/nala-trace` when omitted and must not be used as a secret value. |
 | `VAULT_TOKEN` | secret or workload identity | local secret-store value only | prefer Kubernetes auth role `nala-trace-api` | `auth/kubernetes/role/nala-trace-api`; local secret-store injection if needed | Never check in a static token. Prefer workload identity in Kubernetes. |
 | `VAULT_ROLE_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_SECRET_ID`; never check in. |
 | `VAULT_SECRET_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_ROLE_ID`; never check in. |
@@ -52,7 +51,7 @@ The application workload is the owner of the following logical secret paths:
 - `secret/data/nala-labs/nala-trace`: Nala Trace runtime values, including the complete `MONGO_URI`, ingestion token, and Nala Labs API key under their documented keys.
 - `auth/kubernetes/role/nala-trace-api`: preferred workload identity binding for reading the paths above. A static `VAULT_TOKEN` is a local-only fallback and has no checked-in value.
 
-For local development, copy the tracked root `.vault-config.example` to the ignored root `.vault-config` and fill `VAULT_TOKEN` from a protected secret source. If token auth is unavailable, leave `VAULT_TOKEN` empty and provide both `VAULT_ROLE_ID` and `VAULT_SECRET_ID` instead. When `VAULT_ENABLED=true`, `config.Load` reads the configured KV v2 record before validation; explicit process environment values take precedence.
+For local development, copy the tracked root `.vault-config.example` to the ignored root `.vault-config` and fill the Vault transport credentials from a protected secret source. The presence of `VAULT_ADDR` activates the configured KV v2 read and health probe; no manual `VAULT_ENABLED` switch is required. Explicit process environment values take precedence.
 
 Kubernetes deployment manifests must map ordinary names through a ConfigMap and secret names through the Vault injector or an equivalent Secret projection. The Go process must receive the same environment names listed above; manifest-specific key names must not silently diverge.
 

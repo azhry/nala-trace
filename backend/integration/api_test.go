@@ -31,7 +31,6 @@ func TestHealthEndpointThroughConfiguredServer(t *testing.T) {
 	cfg, err := config.LoadFrom(map[string]string{
 		"AUTH_LISTEN_ADDR":      ":0",
 		"NALA_LABS_AUTH_URL":    dependencyHTTP.URL,
-		"VAULT_ENABLED":         "true",
 		"VAULT_ADDR":            dependencyHTTP.URL,
 		"VAULT_KV_MOUNT":        "secret",
 		"VAULT_KV_PATH":         "nala-trace/test",

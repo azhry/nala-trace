@@ -20,7 +20,7 @@ type Server struct {
 func New(cfg config.Config, routes ...Route) *Server {
 	return &Server{HTTP: &http.Server{
 		Addr:              cfg.ListenAddr,
-		Handler:           NewHandler(routes...),
+		Handler:           requestLogger(NewHandler(routes...), nil),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}}

@@ -24,8 +24,9 @@ or reimplementing the Casdoor password-grant exchange.
 
 ## Local authority routing
 
-Run the local Nala Labs backend on its alternate port when Nala Trace owns the
-default API port:
+Use the normal local Nala Labs port alongside the Nala Trace API. If the Nala
+Labs backend is intentionally started on a different port, override
+`NALA_LABS_AUTH_URL` with that configured authority URL:
 
 | Service | Local address | Nala Trace setting |
 | --- | --- | --- |

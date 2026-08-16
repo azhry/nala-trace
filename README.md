@@ -37,7 +37,12 @@ make test-frontend-build
 Hook installation, runtime environment, best-effort failure behavior, and
 known Codex coverage gaps are documented in [backend/HOOKS.md](backend/HOOKS.md).
 
-The backend integration command is credential-free and exercises the configured HTTP server and `/healthz` route. MongoDB lifecycle tests use fakes by default. A future live-Mongo integration suite must be run only with an explicitly configured service and must not add credentials to the repository.
+`make test-backend-integration` is a live verification command. It loads the
+Vault-backed configuration, connects to MongoDB, probes Nala Labs auth, Vault,
+PostgreSQL, Redis, and Kafka through `/healthz`, then exercises real `/ingest`
+and `/sessions` requests with the configured Nala Labs API key. It fails when
+the real dependency environment is unavailable; it does not substitute fake
+servers or mock databases.
 
 ## Production images
 

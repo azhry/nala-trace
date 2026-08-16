@@ -113,7 +113,7 @@ func LoadFrom(values map[string]string) (Config, error) {
 		AllowedOrigin:   valueOr(lookup, "AUTH_ALLOWED_ORIGIN", defaultAllowedOrigin),
 		ShutdownTimeout: durationOr(lookup, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
 		Mongo: MongoConfig{
-			Enabled:           boolOr(lookup, "MONGO_ENABLED", false),
+			Enabled:           strings.TrimSpace(values["MONGO_URI"]) != "",
 			URI:               valueOr(lookup, "MONGO_URI", defaultMongoURI),
 			Database:          valueOr(lookup, "MONGO_DATABASE", defaultMongoDatabase),
 			ConnectTimeout:    durationOr(lookup, "MONGO_CONNECT_TIMEOUT", defaultConnectTimeout),
@@ -163,10 +163,11 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 	}
 
 	if cfg.Mongo.Enabled {
-		for _, key := range []string{"MONGO_URI", "MONGO_DATABASE"} {
-			if strings.TrimSpace(values[key]) == "" {
-				missing = append(missing, key)
-			}
+		if strings.TrimSpace(cfg.Mongo.URI) == "" {
+			missing = append(missing, "MONGO_URI")
+		}
+		if strings.TrimSpace(cfg.Mongo.Database) == "" {
+			missing = append(missing, "MONGO_DATABASE")
 		}
 		if cfg.Mongo.ConnectTimeout <= 0 {
 			invalid = append(invalid, "MONGO_CONNECT_TIMEOUT")
@@ -236,7 +237,7 @@ func Redact(value string) string {
 func knownKeys() []string {
 	return []string{
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
-		"MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
+		"MONGO_URI", "MONGO_DATABASE",
 		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL",
 		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "AUTH_REQUEST_TIMEOUT", "NALA_LABS_API_KEY", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}

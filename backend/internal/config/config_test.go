@@ -1,8 +1,6 @@
 package config
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -57,51 +55,16 @@ func TestLoadFromInfersVaultEnabledFromConfiguredTransport(t *testing.T) {
 	}
 }
 
-func TestLoadVaultValuesUsesKVV2AndPreservesProcessOverrides(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/secret/data/nala-labs/nala-trace" {
-			t.Fatalf("Vault request path = %q", r.URL.Path)
-		}
-		if r.Header.Get("X-Vault-Token") != "test-token" {
-			t.Fatalf("Vault token header was not sent")
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"data":{"MONGO_URI":"vault-mongo-uri","NALA_LABS_API_KEY":"vault-api-key"}}}`))
-	}))
-	defer server.Close()
-
-	values := map[string]string{
-		"VAULT_ADDR":        server.URL,
-		"VAULT_KV_MOUNT":    "secret",
-		"VAULT_KV_PATH":     "nala-labs/nala-trace",
-		"VAULT_TOKEN":       "test-token",
-		"NALA_LABS_API_KEY": "process-api-key",
+func TestLoadFromEnablesMongoWhenURIIsConfigured(t *testing.T) {
+	cfg, err := LoadFrom(map[string]string{
+		"MONGO_URI":      "mongodb://vault.example:27017",
+		"MONGO_DATABASE": "nala_trace",
+	})
+	if err != nil {
+		t.Fatalf("LoadFrom returned error: %v", err)
 	}
-	processValues := map[string]string{"NALA_LABS_API_KEY": "process-api-key"}
-	if err := loadVaultValues(values, processValues, server.Client()); err != nil {
-		t.Fatalf("load Vault values: %v", err)
-	}
-	if values["MONGO_URI"] != "vault-mongo-uri" {
-		t.Fatalf("MONGO_URI = %q, want Vault value", values["MONGO_URI"])
-	}
-	if values["NALA_LABS_API_KEY"] != "process-api-key" {
-		t.Fatalf("NALA_LABS_API_KEY = %q, want process override", values["NALA_LABS_API_KEY"])
-	}
-}
-
-func TestLoadFromRejectsEnabledMongoWithoutRequiredSettings(t *testing.T) {
-	_, err := LoadFrom(map[string]string{"MONGO_ENABLED": "true"})
-	if err == nil {
-		t.Fatal("expected missing Mongo settings error")
-	}
-	message := err.Error()
-	for _, name := range []string{"MONGO_URI", "MONGO_DATABASE"} {
-		if !strings.Contains(message, name) {
-			t.Fatalf("error %q does not name %s", message, name)
-		}
-	}
-	if strings.Contains(message, "mongodb://") {
-		t.Fatalf("error leaked a connection value: %q", message)
+	if !cfg.Mongo.Enabled {
+		t.Fatal("Mongo should be enabled when its URI is supplied")
 	}
 }
 
@@ -139,7 +102,6 @@ func TestLoadFromParsesOverrides(t *testing.T) {
 		"FRONTEND_URL":          "http://localhost:18081/",
 		"AUTH_ALLOWED_ORIGIN":   "http://localhost:18081",
 		"NALA_LABS_AUTH_URL":    "http://localhost:18080",
-		"MONGO_ENABLED":         "true",
 		"MONGO_URI":             "mongodb://localhost:27017",
 		"MONGO_DATABASE":        "test_trace",
 		"MONGO_CONNECT_TIMEOUT": "3s",

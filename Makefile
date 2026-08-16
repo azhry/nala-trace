@@ -10,7 +10,7 @@ test-backend-cover:
 	cd backend && go tool cover -func=coverage.out
 
 test-backend-integration:
-	cd backend && go test ./integration -count=1 -v
+	cd backend && go test -tags=integration ./integration -count=1 -v
 
 test-frontend:
 	cd frontend && npm test -- --run

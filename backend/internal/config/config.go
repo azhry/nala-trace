@@ -19,19 +19,18 @@ const (
 	defaultAllowedOrigin     = "http://localhost:5005"
 	defaultMongoURI          = "mongodb://127.0.0.1:27017"
 	defaultMongoDatabase     = "nala_trace"
-	defaultNalaLabsAuthURL   = "http://127.0.0.1:18080"
+	defaultNalaLabsAuthURL   = "http://127.0.0.1:8080"
 	defaultPostgreSQLAddress = "127.0.0.1:5432"
 	defaultRedisAddress      = "127.0.0.1:6379"
 	defaultKafkaAddress      = "127.0.0.1:9092"
-	defaultCookieName        = "nala_trace_session"
-	defaultSessionTTL        = 24 * time.Hour
-	defaultVaultAddr         = "http://127.0.0.1:8200"
+	defaultVaultAddr         = "http://vault.nala-labs.svc.cluster.local:8200"
 	defaultVaultMount        = "secret"
 	defaultVaultPath         = "nala-labs/nala-trace"
 	defaultConnectTimeout    = 5 * time.Second
 	defaultPingTimeout       = 2 * time.Second
 	defaultDisconnectTimeout = 5 * time.Second
 	defaultShutdownTimeout   = 10 * time.Second
+	defaultAuthTimeout       = 5 * time.Second
 )
 
 // Config contains only parsed runtime configuration. Secret values are held in
@@ -41,13 +40,11 @@ type Config struct {
 	FrontendURL     string
 	AllowedOrigin   string
 	ShutdownTimeout time.Duration
-	IngestToken     string
 
-	Mongo   MongoConfig
-	Auth    AuthConfig
-	Health  HealthConfig
-	Session SessionConfig
-	Vault   VaultConfig
+	Mongo  MongoConfig
+	Auth   AuthConfig
+	Health HealthConfig
+	Vault  VaultConfig
 }
 
 type MongoConfig struct {
@@ -61,6 +58,8 @@ type MongoConfig struct {
 
 type AuthConfig struct {
 	NalaLabsAuthURL string
+	APIKey          string
+	Timeout         time.Duration
 }
 
 // HealthConfig contains non-secret dependency addresses used by /healthz.
@@ -71,12 +70,6 @@ type HealthConfig struct {
 	RedisAddress      string
 	KafkaAddress      string
 	Timeout           time.Duration
-}
-
-type SessionConfig struct {
-	CookieName string
-	TTL        time.Duration
-	Secret     string
 }
 
 type VaultConfig struct {
@@ -119,7 +112,6 @@ func LoadFrom(values map[string]string) (Config, error) {
 		FrontendURL:     valueOr(lookup, "FRONTEND_URL", defaultFrontendURL),
 		AllowedOrigin:   valueOr(lookup, "AUTH_ALLOWED_ORIGIN", defaultAllowedOrigin),
 		ShutdownTimeout: durationOr(lookup, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
-		IngestToken:     values["CODEX_TRACE_API_TOKEN"],
 		Mongo: MongoConfig{
 			Enabled:           boolOr(lookup, "MONGO_ENABLED", false),
 			URI:               valueOr(lookup, "MONGO_URI", defaultMongoURI),
@@ -130,6 +122,8 @@ func LoadFrom(values map[string]string) (Config, error) {
 		},
 		Auth: AuthConfig{
 			NalaLabsAuthURL: valueOr(lookup, "NALA_LABS_AUTH_URL", defaultNalaLabsAuthURL),
+			APIKey:          values["NALA_LABS_API_KEY"],
+			Timeout:         durationOr(lookup, "AUTH_REQUEST_TIMEOUT", defaultAuthTimeout),
 		},
 		Health: HealthConfig{
 			PostgreSQLAddress: valueOr(lookup, "POSTGRESQL_ADDRESS", defaultPostgreSQLAddress),
@@ -137,13 +131,8 @@ func LoadFrom(values map[string]string) (Config, error) {
 			KafkaAddress:      valueOr(lookup, "KAFKA_ADDRESS", defaultKafkaAddress),
 			Timeout:           durationOr(lookup, "HEALTHCHECK_TIMEOUT", defaultPingTimeout),
 		},
-		Session: SessionConfig{
-			CookieName: valueOr(lookup, "SESSION_COOKIE_NAME", defaultCookieName),
-			TTL:        durationOr(lookup, "SESSION_TTL", defaultSessionTTL),
-			Secret:     values["SESSION_SECRET"],
-		},
 		Vault: VaultConfig{
-			Enabled:  boolOr(lookup, "VAULT_ENABLED", false),
+			Enabled:  vaultEnabled(lookup),
 			Addr:     valueOr(lookup, "VAULT_ADDR", defaultVaultAddr),
 			KVMount:  valueOr(lookup, "VAULT_KV_MOUNT", defaultVaultMount),
 			KVPath:   valueOr(lookup, "VAULT_KV_PATH", defaultVaultPath),
@@ -193,20 +182,21 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 	if _, err := url.ParseRequestURI(cfg.Auth.NalaLabsAuthURL); err != nil || !strings.HasPrefix(cfg.Auth.NalaLabsAuthURL, "http") {
 		invalid = append(invalid, "NALA_LABS_AUTH_URL")
 	}
+	if cfg.Auth.Timeout <= 0 {
+		invalid = append(invalid, "AUTH_REQUEST_TIMEOUT")
+	}
 	if cfg.Health.Timeout <= 0 {
 		invalid = append(invalid, "HEALTHCHECK_TIMEOUT")
 	}
-	if cfg.Session.CookieName == "" {
-		missing = append(missing, "SESSION_COOKIE_NAME")
-	}
-	if cfg.Session.TTL <= 0 {
-		invalid = append(invalid, "SESSION_TTL")
-	}
 	if cfg.Vault.Enabled {
-		for _, key := range []string{"VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH"} {
-			if strings.TrimSpace(values[key]) == "" {
-				missing = append(missing, key)
-			}
+		if strings.TrimSpace(cfg.Vault.Addr) == "" {
+			missing = append(missing, "VAULT_ADDR")
+		}
+		if strings.TrimSpace(cfg.Vault.KVMount) == "" {
+			missing = append(missing, "VAULT_KV_MOUNT")
+		}
+		if strings.TrimSpace(cfg.Vault.KVPath) == "" {
+			missing = append(missing, "VAULT_KV_PATH")
 		}
 	}
 
@@ -246,10 +236,9 @@ func Redact(value string) string {
 func knownKeys() []string {
 	return []string{
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
-		"CODEX_TRACE_API_TOKEN", "MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
+		"MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
 		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL",
-		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "SESSION_COOKIE_NAME",
-		"SESSION_TTL", "SESSION_SECRET", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
+		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "AUTH_REQUEST_TIMEOUT", "NALA_LABS_API_KEY", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}
 }
 
@@ -287,7 +276,7 @@ func loadVaultValues(values, processValues map[string]string, client *http.Clien
 		value, ok := values[key]
 		return value, ok
 	}
-	if !boolOr(lookup, "VAULT_ENABLED", false) {
+	if !vaultEnabled(lookup) {
 		return nil
 	}
 	address := valueOr(lookup, "VAULT_ADDR", defaultVaultAddr)
@@ -307,6 +296,17 @@ func loadVaultValues(values, processValues map[string]string, client *http.Clien
 		}
 	}
 	return nil
+}
+
+// vaultEnabled follows the shared Nala Labs runtime contract: a configured
+// Vault address is the activation signal. VAULT_ENABLED remains a backwards-
+// compatible fallback for callers that construct an environment map without
+// the transport settings.
+func vaultEnabled(lookup func(string) (string, bool)) bool {
+	if strings.TrimSpace(valueOr(lookup, "VAULT_ADDR", "")) != "" {
+		return true
+	}
+	return boolOr(lookup, "VAULT_ENABLED", false)
 }
 
 func readVaultKV(client *http.Client, address, mount, path, token string) (map[string]string, error) {

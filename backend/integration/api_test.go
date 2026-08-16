@@ -32,6 +32,8 @@ func TestHealthEndpointThroughConfiguredServer(t *testing.T) {
 		"AUTH_LISTEN_ADDR":    ":0",
 		"NALA_LABS_AUTH_URL":  dependencyHTTP.URL,
 		"VAULT_ADDR":          dependencyHTTP.URL,
+		"VAULT_KV_MOUNT":      "secret",
+		"VAULT_KV_PATH":       "nala-trace/test",
 		"POSTGRESQL_ADDRESS":  listeners[0].Addr().String(),
 		"MONGO_URI":           fmt.Sprintf("mongodb://%s", listeners[1].Addr()),
 		"REDIS_ADDRESS":       listeners[2].Addr().String(),

@@ -47,8 +47,9 @@ type healthProbe func(context.Context) error
 // health contract. Probes are injectable so the HTTP contract can be tested
 // without requiring platform services.
 type HealthChecker struct {
-	probes  map[string]healthProbe
-	timeout time.Duration
+	probes   map[string]healthProbe
+	optional map[string]bool
+	timeout  time.Duration
 }
 
 // NewHealthChecker wires probes to the shared Nala Labs auth service, Vault,
@@ -65,16 +66,24 @@ func NewHealthChecker(cfg config.Config, mongoProbe func(context.Context) error)
 	if timeout <= 0 {
 		timeout = defaultHealthProbeTimeout
 	}
+	var vaultHealth healthProbe
+	optional := map[string]bool{}
+	if cfg.Vault.Enabled {
+		vaultHealth = httpHealthProbe(cfg.Vault.Addr, "/v1/sys/health")
+	} else {
+		optional["vault"] = true
+	}
 	return &HealthChecker{
 		probes: map[string]healthProbe{
 			"casdoor":    httpHealthProbe(cfg.Auth.NalaLabsAuthURL, "/healthz"),
-			"vault":      httpHealthProbe(cfg.Vault.Addr, "/v1/sys/health"),
+			"vault":      vaultHealth,
 			"postgresql": tcpHealthProbe(cfg.Health.PostgreSQLAddress),
 			"mongodb":    mongoHealth,
 			"redis":      tcpHealthProbe(cfg.Health.RedisAddress),
 			"kafka":      tcpHealthProbe(cfg.Health.KafkaAddress),
 		},
-		timeout: timeout,
+		optional: optional,
+		timeout:  timeout,
 	}
 }
 
@@ -111,7 +120,7 @@ func (h *HealthChecker) check(ctx context.Context) healthResponse {
 	allHealthy := true
 	for index, name := range healthDependencyNames {
 		dependencies[name] = statuses[index]
-		if statuses[index].Status != healthStatusOK {
+		if statuses[index].Status != healthStatusOK && !(statuses[index].Status == healthStatusNotConfigured && h.optional[name]) {
 			allHealthy = false
 		}
 	}

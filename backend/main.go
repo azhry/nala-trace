@@ -11,6 +11,7 @@ import (
 
 	"github.com/azhry/nala-trace/backend/internal/config"
 	"github.com/azhry/nala-trace/backend/internal/server"
+	"github.com/azhry/nala-trace/backend/internal/storage"
 )
 
 func main() {
@@ -26,8 +27,30 @@ func run() error {
 		return err
 	}
 
-	health := server.NewHealthChecker(cfg, nil)
-	api := server.New(cfg, server.HealthRoute(health))
+	mongoStore, err := storage.NewMongoStore(context.Background(), cfg.Mongo)
+	if err != nil {
+		return err
+	}
+	if mongoStore != nil {
+		defer func() { _ = mongoStore.Close(context.Background()) }()
+		repository, repositoryErr := storage.NewHookEventRepository(mongoStore.Database())
+		if repositoryErr != nil {
+			return repositoryErr
+		}
+		indexCtx, cancelIndex := context.WithTimeout(context.Background(), cfg.Mongo.ConnectTimeout)
+		indexErr := repository.EnsureIndexes(indexCtx)
+		cancelIndex()
+		if indexErr != nil {
+			return indexErr
+		}
+	}
+	var mongoProbe func(context.Context) error
+	if mongoStore != nil {
+		mongoProbe = mongoStore.Ping
+	}
+	health := server.NewHealthChecker(cfg, mongoProbe)
+	routes := []server.Route{server.HealthRoute(health)}
+	api := server.New(cfg, routes...)
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

@@ -1,0 +1,12 @@
+.env
+.env.*
+.vault-config
+.vault-config.*
+.git
+.codex
+coverage.out
+coverage
+.tmp-go-cache
+*.test
+*.exe
+tmp

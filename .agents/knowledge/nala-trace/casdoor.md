@@ -24,13 +24,14 @@ or reimplementing the Casdoor password-grant exchange.
 
 ## Local authority routing
 
-Run the local Nala Labs backend on its alternate port when Nala Trace owns the
-default API port:
+Use the normal local Nala Labs port alongside the Nala Trace API. If the Nala
+Labs backend is intentionally started on a different port, override
+`NALA_LABS_AUTH_URL` with that configured authority URL:
 
 | Service | Local address | Nala Trace setting |
 | --- | --- | --- |
 | Nala Trace API | `http://localhost:3003` | — |
-| Nala Labs auth API | `http://localhost:18080` | `NALA_LABS_AUTH_URL=http://127.0.0.1:18080` |
+| Nala Labs auth API | `http://localhost:8080` | `NALA_LABS_AUTH_URL=http://127.0.0.1:8080` |
 
 The deployment value is a non-secret, network-routable Nala Labs auth-service
 URL. Nala Trace owns no Casdoor callback and does not perform a provider
@@ -42,11 +43,13 @@ redirect flow.
   `.agents/knowledge/nala-trace/configuration.md`.
 - Nala Trace does not own `CASDOOR_CLIENT_ID`, `CASDOOR_CLIENT_SECRET`,
   Casdoor callback settings, or a copy of the Nala Labs signing secret.
-- `SESSION_COOKIE_NAME`, `SESSION_TTL`, and `SESSION_SECRET` are reserved for
-  an optional Nala Trace application session; they must never be used to
-  validate or forge a Nala Labs JWT.
-- The React app may hold a short-lived bearer token only for the approved
-  session flow. It must not receive provider credentials or signing keys.
+- Nala Trace does not own a login form, callback, logout route, or signed
+  application session. It verifies Nala Labs-issued JWTs through the shared
+  validation endpoint and accepts the configured Nala Labs API key for machine
+  access.
+- The React app may hold a short-lived Nala Labs bearer token only for the
+  approved upstream flow. It must not receive provider credentials or signing
+  keys.
 
 ## Pre-authentication validation checklist
 

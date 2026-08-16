@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/azhry/nala-trace/backend/internal/config"
 )
 
 func TestHealthRouteReturnsAllHealthyDependencyStatuses(t *testing.T) {
@@ -85,6 +87,19 @@ func TestHealthRouteBoundsProbeTimeout(t *testing.T) {
 	}
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", recorder.Code)
+	}
+}
+
+func TestNewHealthCheckerDoesNotProbeDisabledVault(t *testing.T) {
+	checker := NewHealthChecker(config.Config{
+		Auth:   config.AuthConfig{NalaLabsAuthURL: ""},
+		Vault:  config.VaultConfig{Enabled: false, Addr: "http://127.0.0.1:1"},
+		Health: config.HealthConfig{Timeout: 20 * time.Millisecond},
+	}, nil)
+
+	response := checker.check(context.Background())
+	if response.Dependencies["vault"].Status != healthStatusNotConfigured {
+		t.Fatalf("vault status = %q, want not_configured", response.Dependencies["vault"].Status)
 	}
 }
 

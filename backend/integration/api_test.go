@@ -29,14 +29,18 @@ func TestHealthEndpointThroughConfiguredServer(t *testing.T) {
 	}
 
 	cfg, err := config.LoadFrom(map[string]string{
-		"AUTH_LISTEN_ADDR":    ":0",
-		"NALA_LABS_AUTH_URL":  dependencyHTTP.URL,
-		"VAULT_ADDR":          dependencyHTTP.URL,
-		"POSTGRESQL_ADDRESS":  listeners[0].Addr().String(),
-		"MONGO_URI":           fmt.Sprintf("mongodb://%s", listeners[1].Addr()),
-		"REDIS_ADDRESS":       listeners[2].Addr().String(),
-		"KAFKA_ADDRESS":       listeners[3].Addr().String(),
-		"HEALTHCHECK_TIMEOUT": "1s",
+		"AUTH_LISTEN_ADDR":      ":0",
+		"NALA_LABS_AUTH_URL":    dependencyHTTP.URL,
+		"VAULT_ENABLED":         "true",
+		"VAULT_ADDR":            dependencyHTTP.URL,
+		"VAULT_KV_MOUNT":        "secret",
+		"VAULT_KV_PATH":         "nala-trace/test",
+		"CODEX_TRACE_API_TOKEN": "test-ingest-token",
+		"POSTGRESQL_ADDRESS":    listeners[0].Addr().String(),
+		"MONGO_URI":             fmt.Sprintf("mongodb://%s", listeners[1].Addr()),
+		"REDIS_ADDRESS":         listeners[2].Addr().String(),
+		"KAFKA_ADDRESS":         listeners[3].Addr().String(),
+		"HEALTHCHECK_TIMEOUT":   "1s",
 	})
 	if err != nil {
 		t.Fatalf("load config: %v", err)

@@ -27,7 +27,6 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `MONGO_CONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `MONGO_PING_TIMEOUT` | ordinary duration | `2s` | `2s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `MONGO_DISCONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
-| `CODEX_TRACE_API_TOKEN` | secret | local secret-store value | Vault-injected value | `kv/data/nala-labs/nala-trace` key `CODEX_TRACE_API_TOKEN`; hook ingestion handler | Required before authenticated ingestion is enabled; compare without logging either value. |
 | `NALA_LABS_API_KEY` | secret | local secret-store value when machine/API-key auth is enabled | Vault-injected value | Nala Trace auth middleware | Optional; compare in constant time and never expose or log the value. |
 | `NALA_LABS_AUTH_URL` | ordinary URL | `http://127.0.0.1:8080` | deployment-supplied Nala Labs auth service URL | API authentication configuration | Required for shared JWT validation; use only an approved network endpoint and never embed credentials. |
 | `AUTH_REQUEST_TIMEOUT` | ordinary duration | `5s` | `5s` unless deployment overrides it | API authentication client | Bounded timeout for Nala Labs JWT validation calls. |
@@ -42,13 +41,13 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `VAULT_ROLE_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_SECRET_ID`; never check in. |
 | `VAULT_SECRET_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_ROLE_ID`; never check in. |
 
-The React package may read only non-secret `VITE_*` settings. The backend owns bearer-token forwarding, validation responses, and all secret values. A `VITE_API_TOKEN`, provider secret, local session secret, Mongo password, Vault token, or signing key is forbidden.
+The React package may read only non-secret `VITE_*` settings. Nala Trace authenticates each protected request with the Nala Labs bearer JWT or configured Nala Labs API key; it does not own a separate ingest token. A `VITE_API_TOKEN`, provider secret, local session secret, Mongo password, Vault token, or signing key is forbidden.
 
 ## Vault ownership and Kubernetes mapping
 
 The application workload is the owner of the following logical secret paths:
 
-- `secret/data/nala-labs/nala-trace`: Nala Trace runtime values, including the complete `MONGO_URI`, ingestion token, and Nala Labs API key under their documented keys.
+- `secret/data/nala-labs/nala-trace`: Nala Trace runtime values, including the complete `MONGO_URI` and Nala Labs API key under their documented keys.
 - `auth/kubernetes/role/nala-trace-api`: preferred workload identity binding for reading the paths above. A static `VAULT_TOKEN` is a local-only fallback and has no checked-in value.
 
 For local development, copy the tracked root `.vault-config.example` to the ignored root `.vault-config` and fill the Vault transport credentials from a protected secret source. The presence of `VAULT_ADDR` activates the configured KV v2 read and health probe; no manual `VAULT_ENABLED` switch is required. Explicit process environment values take precedence.

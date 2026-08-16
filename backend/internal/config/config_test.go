@@ -30,11 +30,10 @@ func TestLoadFromRejectsInvalidNalaLabsAuthURL(t *testing.T) {
 
 func TestLoadFromUsesVaultKVPath(t *testing.T) {
 	cfg, err := LoadFrom(map[string]string{
-		"VAULT_ENABLED":         "true",
-		"VAULT_ADDR":            "http://vault.example",
-		"VAULT_KV_MOUNT":        "kv",
-		"VAULT_KV_PATH":         "nala-trace/test",
-		"CODEX_TRACE_API_TOKEN": "test-ingest-token",
+		"VAULT_ENABLED":  "true",
+		"VAULT_ADDR":     "http://vault.example",
+		"VAULT_KV_MOUNT": "kv",
+		"VAULT_KV_PATH":  "nala-trace/test",
 	})
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
@@ -46,10 +45,9 @@ func TestLoadFromUsesVaultKVPath(t *testing.T) {
 
 func TestLoadFromInfersVaultEnabledFromConfiguredTransport(t *testing.T) {
 	cfg, err := LoadFrom(map[string]string{
-		"VAULT_ADDR":            "http://vault.example",
-		"VAULT_TOKEN":           "test-token",
-		"VAULT_KV_PATH":         "nala-labs/nala-trace",
-		"CODEX_TRACE_API_TOKEN": "test-ingest-token",
+		"VAULT_ADDR":    "http://vault.example",
+		"VAULT_TOKEN":   "test-token",
+		"VAULT_KV_PATH": "nala-labs/nala-trace",
 	})
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
@@ -107,18 +105,14 @@ func TestLoadFromRejectsEnabledMongoWithoutRequiredSettings(t *testing.T) {
 	}
 }
 
-func TestLoadFromRejectsEnabledVaultWithoutRequiredRuntimeSecrets(t *testing.T) {
+func TestLoadFromDoesNotRequireIngestTokenForServerStartup(t *testing.T) {
 	_, err := LoadFrom(map[string]string{
-		"VAULT_ENABLED":  "true",
 		"VAULT_ADDR":     "http://vault.example",
 		"VAULT_KV_MOUNT": "secret",
 		"VAULT_KV_PATH":  "nala-labs/nala-trace",
 	})
-	if err == nil || !strings.Contains(err.Error(), "CODEX_TRACE_API_TOKEN") {
-		t.Fatalf("expected safe missing Vault runtime error, got %v", err)
-	}
-	if strings.Contains(err.Error(), "secret") {
-		t.Fatalf("error leaked a secret value: %v", err)
+	if err != nil {
+		t.Fatalf("server configuration unexpectedly requires ingest token: %v", err)
 	}
 }
 

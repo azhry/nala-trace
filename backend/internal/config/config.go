@@ -40,7 +40,6 @@ type Config struct {
 	FrontendURL     string
 	AllowedOrigin   string
 	ShutdownTimeout time.Duration
-	IngestToken     string
 
 	Mongo  MongoConfig
 	Auth   AuthConfig
@@ -113,7 +112,6 @@ func LoadFrom(values map[string]string) (Config, error) {
 		FrontendURL:     valueOr(lookup, "FRONTEND_URL", defaultFrontendURL),
 		AllowedOrigin:   valueOr(lookup, "AUTH_ALLOWED_ORIGIN", defaultAllowedOrigin),
 		ShutdownTimeout: durationOr(lookup, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
-		IngestToken:     values["CODEX_TRACE_API_TOKEN"],
 		Mongo: MongoConfig{
 			Enabled:           boolOr(lookup, "MONGO_ENABLED", false),
 			URI:               valueOr(lookup, "MONGO_URI", defaultMongoURI),
@@ -200,11 +198,6 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 		if strings.TrimSpace(cfg.Vault.KVPath) == "" {
 			missing = append(missing, "VAULT_KV_PATH")
 		}
-		for _, key := range []string{"CODEX_TRACE_API_TOKEN"} {
-			if strings.TrimSpace(values[key]) == "" {
-				missing = append(missing, key)
-			}
-		}
 	}
 
 	if len(missing) > 0 || len(invalid) > 0 {
@@ -243,7 +236,7 @@ func Redact(value string) string {
 func knownKeys() []string {
 	return []string{
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
-		"CODEX_TRACE_API_TOKEN", "MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
+		"MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
 		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL",
 		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "AUTH_REQUEST_TIMEOUT", "NALA_LABS_API_KEY", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}

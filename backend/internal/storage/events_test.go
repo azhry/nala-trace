@@ -106,3 +106,33 @@ func TestSessionSummaryPipelineGroupsAndSortsBySession(t *testing.T) {
 		}
 	}
 }
+
+func TestUserSessionSummaryRepositoryScopesAndBoundsAggregation(t *testing.T) {
+	var capturedUser string
+	var capturedLimit int
+	repository := &HookEventRepository{aggregateForUser: func(_ context.Context, userID string, limit int) ([]SessionSummary, error) {
+		capturedUser = userID
+		capturedLimit = limit
+		return []SessionSummary{{SessionID: "session-1", UserID: userID}}, nil
+	}}
+	rows, err := repository.ListSessionSummariesForUser(context.Background(), "user-1", 10)
+	if err != nil || len(rows) != 1 || capturedUser != "user-1" || capturedLimit != 10 {
+		t.Fatalf("user summary lookup = %#v, err=%v, captured=%q/%d", rows, err, capturedUser, capturedLimit)
+	}
+	if _, err := repository.ListSessionSummariesForUser(context.Background(), "", 10); err == nil {
+		t.Fatal("empty user ID was accepted")
+	}
+	if _, err := repository.ListSessionSummariesForUser(context.Background(), "user-1", 0); err == nil {
+		t.Fatal("invalid limit was accepted")
+	}
+
+	pipeline, err := json.Marshal(sessionSummaryPipelineForUser("user-1", 10))
+	if err != nil {
+		t.Fatalf("marshal user pipeline: %v", err)
+	}
+	for _, expected := range []string{"$match", "user-1", "$limit", "10"} {
+		if !strings.Contains(string(pipeline), expected) {
+			t.Fatalf("user pipeline missing %q: %s", expected, pipeline)
+		}
+	}
+}

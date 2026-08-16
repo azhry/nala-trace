@@ -15,6 +15,7 @@ import (
 const hookEventsCollectionName = "hook_events"
 
 type HookEvent struct {
+	ID            string
 	UserID        string
 	SessionID     string
 	TurnID        *string
@@ -86,9 +87,10 @@ func (e HookEvent) validate() error {
 }
 
 type HookEventRepository struct {
-	insert      func(context.Context, hookEventDocument) error
-	createIndex func(context.Context) error
-	aggregate   func(context.Context) ([]SessionSummary, error)
+	insert           func(context.Context, hookEventDocument) error
+	createIndex      func(context.Context) error
+	aggregate        func(context.Context) ([]SessionSummary, error)
+	aggregateForUser func(context.Context, string, int) ([]SessionSummary, error)
 }
 
 func NewHookEventRepository(database *mongo.Database) (*HookEventRepository, error) {
@@ -110,6 +112,18 @@ func NewHookEventRepository(database *mongo.Database) (*HookEventRepository, err
 		aggregate: func(ctx context.Context) ([]SessionSummary, error) {
 			pipeline := sessionSummaryPipeline()
 			cursor, err := collection.Aggregate(ctx, pipeline)
+			if err != nil {
+				return nil, err
+			}
+			defer cursor.Close(ctx)
+			var rows []SessionSummary
+			if err := cursor.All(ctx, &rows); err != nil {
+				return nil, err
+			}
+			return rows, nil
+		},
+		aggregateForUser: func(ctx context.Context, userID string, limit int) ([]SessionSummary, error) {
+			cursor, err := collection.Aggregate(ctx, sessionSummaryPipelineForUser(userID, limit))
 			if err != nil {
 				return nil, err
 			}
@@ -165,6 +179,26 @@ func (r *HookEventRepository) ListSessionSummaries(ctx context.Context) ([]Sessi
 	rows, err := r.aggregate(ctx)
 	if err != nil {
 		return nil, &RepositoryError{Operation: "aggregate_session_summaries"}
+	}
+	if rows == nil {
+		rows = make([]SessionSummary, 0)
+	}
+	return rows, nil
+}
+
+func (r *HookEventRepository) ListSessionSummariesForUser(ctx context.Context, userID string, limit int) ([]SessionSummary, error) {
+	if r == nil || r.aggregateForUser == nil {
+		return nil, &RepositoryError{Operation: "missing_user_aggregate_repository"}
+	}
+	if strings.TrimSpace(userID) == "" {
+		return nil, &RepositoryError{Operation: "missing_user_id"}
+	}
+	if limit <= 0 {
+		return nil, &RepositoryError{Operation: "invalid_session_limit"}
+	}
+	rows, err := r.aggregateForUser(ctx, userID, limit)
+	if err != nil {
+		return nil, &RepositoryError{Operation: "aggregate_user_session_summaries"}
 	}
 	if rows == nil {
 		rows = make([]SessionSummary, 0)

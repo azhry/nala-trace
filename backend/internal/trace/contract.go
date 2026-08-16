@@ -36,6 +36,7 @@ type TimelineEvent struct {
 	HookEventName string          `json:"hook_event_name"`
 	OccurredAt    time.Time       `json:"occurred_at"`
 	Kind          string          `json:"kind"`
+	PartialReason string          `json:"partial_reason,omitempty"`
 	ToolCallIndex *int            `json:"tool_call_index,omitempty"`
 	Raw           json.RawMessage `json:"raw"`
 }

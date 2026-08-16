@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "SessionStart": {"command": ["hook-client"], "stdin": "json"},
+    "UserPromptSubmit": {"command": ["hook-client"], "stdin": "json"},
+    "PreToolUse": {"command": ["hook-client"], "stdin": "json"},
+    "PostToolUse": {"command": ["hook-client"], "stdin": "json"},
+    "SubagentStart": {"command": ["hook-client"], "stdin": "json"},
+    "SubagentStop": {"command": ["hook-client"], "stdin": "json"},
+    "PreCompact": {"command": ["hook-client"], "stdin": "json"},
+    "PostCompact": {"command": ["hook-client"], "stdin": "json"},
+    "Stop": {"command": ["hook-client"], "stdin": "json"}
+  },
+  "known_gaps": ["unified_exec", "WebSearch"]
+}

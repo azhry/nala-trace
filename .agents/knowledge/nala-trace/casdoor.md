@@ -30,7 +30,7 @@ default API port:
 | Service | Local address | Nala Trace setting |
 | --- | --- | --- |
 | Nala Trace API | `http://localhost:3003` | — |
-| Nala Labs auth API | `http://localhost:18080` | `NALA_LABS_AUTH_URL=http://127.0.0.1:18080` |
+| Nala Labs auth API | `http://localhost:8080` | `NALA_LABS_AUTH_URL=http://127.0.0.1:8080` |
 
 The deployment value is a non-secret, network-routable Nala Labs auth-service
 URL. Nala Trace owns no Casdoor callback and does not perform a provider

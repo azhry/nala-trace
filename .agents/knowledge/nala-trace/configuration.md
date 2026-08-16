@@ -6,7 +6,7 @@ This is the application-specific configuration contract for the Go API and React
 
 | Profile | API address | Frontend origin | MongoDB endpoint | Nala Labs auth authority |
 | --- | --- | --- | --- | --- |
-| Local default | `:3003` | `http://localhost:5005/` | `mongodb://127.0.0.1:27017` | `http://127.0.0.1:18080` |
+| Local default | `:3003` | `http://localhost:5005/` | `mongodb://127.0.0.1:27017` | `http://127.0.0.1:8080` |
 | Local alternate | process override | `http://localhost:18081/` | process override | process-supplied Nala Labs auth URL |
 | Nala Labs Kubernetes | `:3003` unless deployment overrides it | deployment-supplied public origin | `mongodb://mongodb.nala-labs.svc.cluster.local:27017` | deployment-supplied Nala Labs auth URL |
 
@@ -29,7 +29,7 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `MONGO_DISCONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `CODEX_TRACE_API_TOKEN` | secret | local secret-store value | Vault-injected value | `kv/data/nala-labs/nala-trace` key `CODEX_TRACE_API_TOKEN`; hook ingestion handler | Required before authenticated ingestion is enabled; compare without logging either value. |
 | `NALA_LABS_API_KEY` | secret | local secret-store value when machine/API-key auth is enabled | Vault-injected value | Nala Trace auth middleware | Optional; compare in constant time and never expose or log the value. |
-| `NALA_LABS_AUTH_URL` | ordinary URL | `http://127.0.0.1:18080` | deployment-supplied Nala Labs auth service URL | API authentication configuration | Required for shared JWT validation; use only an approved network endpoint and never embed credentials. |
+| `NALA_LABS_AUTH_URL` | ordinary URL | `http://127.0.0.1:8080` | deployment-supplied Nala Labs auth service URL | API authentication configuration | Required for shared JWT validation; use only an approved network endpoint and never embed credentials. |
 | `AUTH_REQUEST_TIMEOUT` | ordinary duration | `5s` | `5s` unless deployment overrides it | API authentication client | Bounded timeout for Nala Labs JWT validation calls. |
 | `POSTGRESQL_ADDRESS` | ordinary address | `127.0.0.1:5432` | `postgresql.nala-labs.svc.cluster.local:5432` | `/healthz` PostgreSQL probe | TCP health address for the shared PostgreSQL dependency. |
 | `REDIS_ADDRESS` | ordinary address | `127.0.0.1:6379` | `redis-master.nala-labs.svc.cluster.local:6379` | `/healthz` Redis probe | TCP health address for the shared Redis dependency. |

@@ -13,7 +13,7 @@ func TestLoadFromUsesSafeDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
 	}
-	if cfg.ListenAddr != ":3003" || cfg.FrontendURL != "http://localhost:5005/" || cfg.AllowedOrigin != "http://localhost:5005" || cfg.Mongo.URI != "mongodb://127.0.0.1:27017" || cfg.Auth.NalaLabsAuthURL != "http://127.0.0.1:18080" || cfg.Vault.KVMount != "secret" || cfg.Vault.KVPath != "nala-labs/nala-trace" || cfg.Health.PostgreSQLAddress != "127.0.0.1:5432" || cfg.Health.RedisAddress != "127.0.0.1:6379" || cfg.Health.KafkaAddress != "127.0.0.1:9092" {
+	if cfg.ListenAddr != ":3003" || cfg.FrontendURL != "http://localhost:5005/" || cfg.AllowedOrigin != "http://localhost:5005" || cfg.Mongo.URI != "mongodb://127.0.0.1:27017" || cfg.Auth.NalaLabsAuthURL != "http://127.0.0.1:8080" || cfg.Vault.KVMount != "secret" || cfg.Vault.KVPath != "nala-labs/nala-trace" || cfg.Health.PostgreSQLAddress != "127.0.0.1:5432" || cfg.Health.RedisAddress != "127.0.0.1:6379" || cfg.Health.KafkaAddress != "127.0.0.1:9092" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.Mongo.Enabled {

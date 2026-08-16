@@ -19,7 +19,7 @@ const (
 	defaultAllowedOrigin     = "http://localhost:5005"
 	defaultMongoURI          = "mongodb://127.0.0.1:27017"
 	defaultMongoDatabase     = "nala_trace"
-	defaultNalaLabsAuthURL   = "http://127.0.0.1:18080"
+	defaultNalaLabsAuthURL   = "http://127.0.0.1:8080"
 	defaultPostgreSQLAddress = "127.0.0.1:5432"
 	defaultRedisAddress      = "127.0.0.1:6379"
 	defaultKafkaAddress      = "127.0.0.1:9092"

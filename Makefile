@@ -6,7 +6,7 @@ verify-backend-build:
 	cd backend && go build ./...
 
 verify-backend-live:
-	cd backend && go test -tags=integration ./integration -count=1 -v
+	powershell -NoProfile -ExecutionPolicy Bypass -File backend/verify-live.ps1
 
 verify-frontend-lint:
 	cd frontend && npm run lint

@@ -34,15 +34,13 @@ make verify
 Hook installation, runtime environment, best-effort failure behavior, and
 known Codex coverage gaps are documented in [backend/HOOKS.md](backend/HOOKS.md).
 
-`make verify-backend-live` is a live verification command. It loads the
-Vault-backed configuration, connects to MongoDB, probes Nala Labs auth, Vault,
-PostgreSQL, Redis, and Kafka through `/healthz`, then exercises real `/ingest`
-and `/sessions` requests with a real Nala Labs API key supplied to the test
-process as `CODEX_TRACE_API_TOKEN`. Nala Trace validates the key locally by
-hashing it and querying the shared Nala Labs PostgreSQL `api_key` table, then
-stores the returned owner ID with the event. The test fails when the real
-dependency environment or key is unavailable; it does not substitute fake
-servers or mock databases.
+`make verify-backend-live` runs `backend/verify-live.ps1`, which uses `curl.exe`
+against a running API backed by real Vault, MongoDB, PostgreSQL, Redis, and
+Kafka. It exercises `/healthz`, `/ingest`, and owner-scoped `/sessions` with a
+real Nala Labs API key supplied as `CODEX_TRACE_API_TOKEN`. Nala Trace validates
+the key locally by hashing it and querying the shared Nala Labs PostgreSQL
+`api_key` table, then stores the returned owner ID with the event. It does not
+substitute fake servers, mock databases, or test doubles.
 
 Manual endpoint verification uses `curl.exe` against the running API:
 

@@ -34,25 +34,65 @@ The PR description is the review and handoff record. Do not claim a check passed
 
 [Fixture: real configured fixture or exact command that creates it.]
 
-#### Step 0 — Authenticate and export the session token
+#### Step 0 — Check the required command-line tools
 
-```sh
-[create script here to get the auth token with the account from `.agents/.env`]
+```bash
+command -v curl
+command -v jq
 ```
 
-Login response:
+#### Step 1 — Load the real test account
 
-```json
-{"authenticated":true,"token":"<redacted>","user":{"id":"<fixture-user-id>","tier":"<fixture-tier>"}}
+```bash
+source .agents/.env
+export NALA_LABS_AUTH_URL="${NALA_LABS_AUTH_URL:-http://127.0.0.1:8080}"
+export NALA_LABS_USERNAME="$CASDOOR_ADMIN_TEST_USERNAME"
+export NALA_LABS_PASSWORD="$CASDOOR_ADMIN_TEST_PASSWORD"
 ```
 
-#### Step 1 — [behavior under test]
+#### Step 2 — Get the Nala Labs session JWT
+
+Expect HTTP 200. Keep the JWT only in the current shell:
+
+```bash
+export NALA_LABS_JWT="$(curl --silent --show-error --fail-with-body \
+  --header 'Content-Type: application/json' \
+  --data "$(jq -n --arg u "$NALA_LABS_USERNAME" --arg p "$NALA_LABS_PASSWORD" \
+    '{username: $u, password: $p}')" \
+  "$NALA_LABS_AUTH_URL/api/auth/login" | jq -er '.token')"
+```
+
+#### Step 3 — Create the Codex Trace API token
+
+Expect HTTP 201. This is the required step that creates the real Nala Labs
+API key used by Nala Trace. Store the one-time raw value only in
+`CODEX_TRACE_API_TOKEN`; never paste it into the PR:
+
+```bash
+export CODEX_TRACE_API_TOKEN="$(curl --silent --show-error --fail-with-body \
+  --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer $NALA_LABS_JWT" \
+  --data '{"name":"nala-trace-pr","permissions":["trace:read","trace:write"]}' \
+  "$NALA_LABS_AUTH_URL/api/auth/api-key" | jq -er '.apiKey')"
+```
+
+#### Step 4 — Remove temporary login values and set the API fixture
+
+```bash
+unset NALA_LABS_USERNAME NALA_LABS_PASSWORD NALA_LABS_JWT \
+  CASDOOR_ADMIN_TEST_USERNAME CASDOOR_ADMIN_TEST_PASSWORD
+export API_BASE_URL="${NALA_TRACE_URL:-http://127.0.0.1:3003}"
+export SESSION_ID="curl-live-$(date +%s%N)"
+export EVENT_JSON="{\"session_id\":\"$SESSION_ID\",\"hook_event_name\":\"Stop\"}"
+```
+
+#### Step 5 — [behavior under test]
 
 Request:
 
-```sh
+```bash
 curl \
-  --header "Authorization: Bearer $TOKEN" \
+  --header "X-Nala-Labs-API-Key: $CODEX_TRACE_API_TOKEN" \
   "$API_BASE_URL/<path>"
 ```
 

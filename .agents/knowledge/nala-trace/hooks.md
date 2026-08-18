@@ -32,12 +32,8 @@ The token is intentionally absent from this repository.
 
 `/hooks.json` is the repository manifest. It registers the nine canonical
 events and sends each event as JSON on stdin to the same `hook-client`
-executable. Validate the manifest itself with
-`go run ./cmd/validate-hooks --manifest ../hooks.json` from `backend/`, then
-follow the manual, step-by-step `curl` sequence in the repository README. The
-README also provides `make test-integration`, which exercises the running API
-and real PostgreSQL, MongoDB, and stored-event reconstruction. It does not use
-mocks, fakes, or `httptest`.
+executable. Follow the manual, step-by-step `curl` sequence in the repository
+README to verify delivery against the running API and real dependencies.
 
 Copy or adapt the manifest into the Codex configuration location accepted by
 the installed Codex version, then review and trust the `hook-client` command

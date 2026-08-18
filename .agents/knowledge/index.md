@@ -14,6 +14,7 @@ Read this index first, then open the knowledge file that matches the task.
 | [nala-labs/architecture-final.svg](nala-labs/architecture-final.svg) | Visual companion to the Nala Labs platform architecture document. |
 | [nala-trace/configuration.md](nala-trace/configuration.md) | Nala Trace application environment names, local/Kubernetes defaults, Vault ownership, workload mapping, startup validation, and redaction rules. |
 | [nala-trace/casdoor.md](nala-trace/casdoor.md) | Nala Trace Casdoor application, scopes, grant, callback overrides, secret ownership, and pre-authentication validation checklist. |
+| [nala-trace/hooks.md](nala-trace/hooks.md) | Nala Trace Codex hook delivery, runtime configuration, manifest validation, trust guidance, and known coverage gaps. |
 
 ## Reading order
 

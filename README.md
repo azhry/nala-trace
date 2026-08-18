@@ -32,7 +32,8 @@ make verify
 ```
 
 Hook installation, runtime environment, best-effort failure behavior, and
-known Codex coverage gaps are documented in [backend/HOOKS.md](backend/HOOKS.md).
+known Codex coverage gaps are documented in
+[.agents/knowledge/nala-trace/hooks.md](.agents/knowledge/nala-trace/hooks.md).
 
 Nala Trace's live behavior is verified manually, step by step, with `curl`
 against the running API backed by real Vault, MongoDB, PostgreSQL, Redis, and

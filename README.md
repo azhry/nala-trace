@@ -25,35 +25,96 @@ the Vite development server listens on `http://localhost:5005`. Vite proxies
 session detail URL is `http://localhost:5005/#/sessions/<id>`; `/sessions/<id>`
 is not a frontend route implemented by this app.
 
-Run the build and live verification from the repository root:
+Run the source checks from the repository root:
 
-```powershell
+```bash
 make verify
 ```
 
 Hook installation, runtime environment, best-effort failure behavior, and
 known Codex coverage gaps are documented in [backend/HOOKS.md](backend/HOOKS.md).
 
-`make verify-backend-live` runs `backend/verify-live.ps1`, which uses `curl.exe`
-against a running API backed by real Vault, MongoDB, PostgreSQL, Redis, and
-Kafka. It exercises `/healthz`, `/ingest`, and owner-scoped `/sessions` with a
-real Nala Labs API key supplied as `CODEX_TRACE_API_TOKEN`. Nala Trace validates
-the key locally by hashing it and querying the shared Nala Labs PostgreSQL
-`api_key` table, then stores the returned owner ID with the event. It does not
-substitute fake servers, mock databases, or test doubles.
+Nala Trace's live behavior is verified manually, step by step, with `curl`
+against the running API backed by real Vault, MongoDB, PostgreSQL, Redis, and
+Kafka. The API listens on port `3003` by default. Nala Trace validates the key
+locally by hashing it and querying the shared Nala Labs PostgreSQL `api_key`
+table, then stores the returned owner ID with the event.
 
-Manual endpoint verification uses `curl.exe` against the running API:
+1. Set the real key locally and identify the API:
 
-```powershell
-$env:CODEX_TRACE_API_TOKEN = '<real key created by Nala Labs; keep it local>'
-curl.exe -i http://127.0.0.1:3003/healthz
-curl.exe -i -X POST http://127.0.0.1:3003/ingest `
-  -H "Content-Type: application/json" `
-  -H "X-Nala-Labs-API-Key: $env:CODEX_TRACE_API_TOKEN" `
-  --data '{"session_id":"curl-live-check","hook_event_name":"Stop"}'
-curl.exe -i "http://127.0.0.1:3003/sessions?limit=10" `
-  -H "X-Nala-Labs-API-Key: $env:CODEX_TRACE_API_TOKEN"
-```
+   ```bash
+   export API_BASE_URL="${NALA_TRACE_URL:-http://127.0.0.1:3003}"
+   export CODEX_TRACE_API_TOKEN='<real key created by Nala Labs; keep it local>'
+   SESSION_ID="curl-live-$(date +%s%N)"
+   EVENT_JSON="{\"session_id\":\"$SESSION_ID\",\"hook_event_name\":\"Stop\"}"
+   ```
+
+2. Verify all real dependencies are healthy. Expect HTTP 200, `status` `ok`,
+   and `ok` for Casdoor, Vault, PostgreSQL, MongoDB, Redis, and Kafka:
+
+   ```bash
+   curl --silent --show-error --include "$API_BASE_URL/healthz"
+   ```
+
+3. Verify protected routes reject missing credentials. Expect HTTP 401 for
+   both requests:
+
+   ```bash
+   curl --silent --show-error --include "$API_BASE_URL/sessions?limit=10"
+   curl --silent --show-error --include \
+     --request POST \
+     --header 'Content-Type: application/json' \
+     --data "$EVENT_JSON" \
+     "$API_BASE_URL/ingest"
+   ```
+
+4. Ingest a valid event with the real Nala Labs API key. Expect HTTP 202 and
+   `{"accepted":true}`:
+
+   ```bash
+   curl --silent --show-error --include \
+     --request POST \
+     --header 'Content-Type: application/json' \
+     --header "X-Nala-Labs-API-Key: $CODEX_TRACE_API_TOKEN" \
+     --data "$EVENT_JSON" \
+     "$API_BASE_URL/ingest"
+   ```
+
+5. Verify malformed input is rejected before persistence. Expect HTTP 400 with
+   the `invalid_event` error code:
+
+   ```bash
+   curl --silent --show-error --include \
+     --request POST \
+     --header 'Content-Type: application/json' \
+     --header "X-Nala-Labs-API-Key: $CODEX_TRACE_API_TOKEN" \
+     --data '{"hook_event_name":"Stop"}' \
+     "$API_BASE_URL/ingest"
+   ```
+
+6. Deliver the same valid event again. Expect HTTP 202 again because ingestion
+   is append-only and does not silently deduplicate events:
+
+   ```bash
+   curl --silent --show-error --include \
+     --request POST \
+     --header 'Content-Type: application/json' \
+     --header "X-Nala-Labs-API-Key: $CODEX_TRACE_API_TOKEN" \
+     --data "$EVENT_JSON" \
+     "$API_BASE_URL/ingest"
+   ```
+
+7. Read sessions with the same real key. Find `$SESSION_ID` in the response
+   and confirm it contains the resolved `user_id` and `event_count` `2`, proving
+   API-key owner resolution, MongoDB persistence, and owner-scoped reads:
+
+   ```bash
+   curl --silent --show-error --include \
+     --header "X-Nala-Labs-API-Key: $CODEX_TRACE_API_TOKEN" \
+     "$API_BASE_URL/sessions?limit=100"
+   ```
+
+Never commit or paste the real key into this repository or a pull request.
 
 ## Production images
 

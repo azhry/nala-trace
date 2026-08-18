@@ -21,7 +21,8 @@ in `hooks.json`:
 
 ```text
 CODEX_TRACE_API_URL=https://trace.example.test/ingest
-CODEX_TRACE_API_TOKEN=<runtime Nala Labs bearer token or API key>
+# Set CODEX_TRACE_API_TOKEN to the raw key created by the README's Nala Labs
+# login and POST /api/auth/api-key steps. Keep it in the process environment.
 CODEX_TRACE_API_TIMEOUT=2s
 ```
 

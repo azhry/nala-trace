@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -108,12 +109,13 @@ func LoadFrom(values map[string]string) (Config, error) {
 		return value, ok
 	}
 
+	databaseURL := strings.TrimSpace(values["DATABASE_URL"])
 	cfg := Config{
 		ListenAddr:      valueOr(lookup, "AUTH_LISTEN_ADDR", defaultListenAddr),
 		FrontendURL:     valueOr(lookup, "FRONTEND_URL", defaultFrontendURL),
 		AllowedOrigin:   valueOr(lookup, "AUTH_ALLOWED_ORIGIN", defaultAllowedOrigin),
 		ShutdownTimeout: durationOr(lookup, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
-		DatabaseURL:     strings.TrimSpace(values["DATABASE_URL"]),
+		DatabaseURL:     databaseURL,
 		Mongo: MongoConfig{
 			Enabled:           strings.TrimSpace(values["MONGO_URI"]) != "",
 			URI:               valueOr(lookup, "MONGO_URI", defaultMongoURI),
@@ -127,7 +129,7 @@ func LoadFrom(values map[string]string) (Config, error) {
 			Timeout:         durationOr(lookup, "AUTH_REQUEST_TIMEOUT", defaultAuthTimeout),
 		},
 		Health: HealthConfig{
-			PostgreSQLAddress: valueOr(lookup, "POSTGRESQL_ADDRESS", defaultPostgreSQLAddress),
+			PostgreSQLAddress: postgresqlAddress(lookup, databaseURL),
 			RedisAddress:      valueOr(lookup, "REDIS_ADDRESS", defaultRedisAddress),
 			KafkaAddress:      valueOr(lookup, "KAFKA_ADDRESS", defaultKafkaAddress),
 			Timeout:           durationOr(lookup, "HEALTHCHECK_TIMEOUT", defaultPingTimeout),
@@ -401,6 +403,21 @@ func boolOr(lookup func(string) (string, bool), key string, fallback bool) bool 
 		return false
 	}
 	return parsed
+}
+
+func postgresqlAddress(lookup func(string) (string, bool), databaseURL string) string {
+	if value, ok := lookup("POSTGRESQL_ADDRESS"); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	parsed, err := url.Parse(strings.TrimSpace(databaseURL))
+	if err != nil || parsed.Hostname() == "" {
+		return defaultPostgreSQLAddress
+	}
+	port := parsed.Port()
+	if port == "" {
+		port = "5432"
+	}
+	return net.JoinHostPort(parsed.Hostname(), port)
 }
 
 func durationOr(lookup func(string) (string, bool), key string, fallback time.Duration) time.Duration {

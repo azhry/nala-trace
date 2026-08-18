@@ -29,7 +29,7 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `MONGO_DISCONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `NALA_LABS_AUTH_URL` | ordinary URL | `http://127.0.0.1:8080` | deployment-supplied Nala Labs auth service URL | API authentication configuration | Required for shared JWT validation; API-key validation is local through `DATABASE_URL`. |
 | `AUTH_REQUEST_TIMEOUT` | ordinary duration | `5s` | `5s` unless deployment overrides it | API authentication client | Bounded timeout for Nala Labs JWT validation calls. |
-| `POSTGRESQL_ADDRESS` | ordinary address | `127.0.0.1:5432` | `postgresql.nala-labs.svc.cluster.local:5432` | `/healthz` PostgreSQL probe | TCP health address for the shared PostgreSQL dependency. |
+| `POSTGRESQL_ADDRESS` | ordinary address | derived from `DATABASE_URL` | deployment override when needed | `/healthz` PostgreSQL probe | Optional TCP override; when absent, the probe uses the host and port from the Vault-backed `DATABASE_URL`. |
 | `REDIS_ADDRESS` | ordinary address | `127.0.0.1:6379` | `redis-master.nala-labs.svc.cluster.local:6379` | `/healthz` Redis probe | TCP health address for the shared Redis dependency. |
 | `KAFKA_ADDRESS` | ordinary address | `127.0.0.1:9092` | `kafka.nala-labs.svc.cluster.local:9092` | `/healthz` Kafka probe | TCP health address for the shared Kafka dependency. |
 | `HEALTHCHECK_TIMEOUT` | ordinary duration | `2s` | `2s` unless deployment overrides it | API `/healthz` | Per-dependency bounded probe timeout. |

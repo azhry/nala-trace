@@ -42,14 +42,14 @@ table, then stores the returned owner ID with the event.
 
 1. Create a real Nala Labs API key. API-key management requires a Nala Labs
    session JWT; it does not accept an API key as its management credential.
-   This reads only the two account variables needed from `.agents/.env`; it
-   does not print or load the rest of that secret file:
+   Source the local Nala Labs account file, then use the admin test account:
 
    ```bash
    command -v curl jq
    export NALA_LABS_AUTH_URL="${NALA_LABS_AUTH_URL:-http://127.0.0.1:8080}"
-   export NALA_LABS_USERNAME="$(sed -n 's/^CASDOOR_ADMIN_TEST_USERNAME=//p' .agents/.env)"
-   export NALA_LABS_PASSWORD="$(sed -n 's/^CASDOOR_ADMIN_TEST_PASSWORD=//p' .agents/.env)"
+   source .agents/.env
+   export NALA_LABS_USERNAME="$CASDOOR_ADMIN_TEST_USERNAME"
+   export NALA_LABS_PASSWORD="$CASDOOR_ADMIN_TEST_PASSWORD"
    NALA_LABS_JWT="$(curl --silent --show-error --fail-with-body \
      --header 'Content-Type: application/json' \
      --data "$(jq -n --arg u "$NALA_LABS_USERNAME" --arg p "$NALA_LABS_PASSWORD" \
@@ -60,7 +60,8 @@ table, then stores the returned owner ID with the event.
      --header "Authorization: Bearer $NALA_LABS_JWT" \
      --data '{"name":"nala-trace-local","permissions":["trace:read","trace:write"]}' \
      "$NALA_LABS_AUTH_URL/api/auth/api-key" | jq -er '.apiKey')"
-   unset NALA_LABS_USERNAME NALA_LABS_PASSWORD NALA_LABS_JWT
+   unset NALA_LABS_USERNAME NALA_LABS_PASSWORD NALA_LABS_JWT \
+     CASDOOR_ADMIN_TEST_USERNAME CASDOOR_ADMIN_TEST_PASSWORD
    export API_BASE_URL="${NALA_TRACE_URL:-http://127.0.0.1:3003}"
    SESSION_ID="curl-live-$(date +%s%N)"
    EVENT_JSON="{\"session_id\":\"$SESSION_ID\",\"hook_event_name\":\"Stop\"}"

@@ -42,48 +42,33 @@ table, then stores the returned owner ID with the event.
 
 1. Create a real Nala Labs API key. API-key management requires a Nala Labs
    session JWT; it does not accept an API key as its management credential.
-   This uses `jq` only to construct and parse JSON, and never prints the JWT or
-   raw API key:
+   This reads only the two account variables needed from `.agents/.env`; it
+   does not print or load the rest of that secret file:
 
    ```bash
    command -v curl jq
    export NALA_LABS_AUTH_URL="${NALA_LABS_AUTH_URL:-http://127.0.0.1:8080}"
-   read -r -p 'Nala Labs username: ' NALA_LABS_USERNAME
-   read -r -s -p 'Nala Labs password: ' NALA_LABS_PASSWORD
-   printf '\n'
-
-   LOGIN_PAYLOAD="$(jq -n \
-     --arg username "$NALA_LABS_USERNAME" \
-     --arg password "$NALA_LABS_PASSWORD" \
-     '{username: $username, password: $password}')"
-   LOGIN_RESPONSE="$(curl --silent --show-error --fail-with-body \
-     --request POST \
-     --header 'Accept: application/json' \
+   export NALA_LABS_USERNAME="$(sed -n 's/^CASDOOR_ADMIN_TEST_USERNAME=//p' .agents/.env)"
+   export NALA_LABS_PASSWORD="$(sed -n 's/^CASDOOR_ADMIN_TEST_PASSWORD=//p' .agents/.env)"
+   NALA_LABS_JWT="$(curl --silent --show-error --fail-with-body \
      --header 'Content-Type: application/json' \
-     --data "$LOGIN_PAYLOAD" \
-     "$NALA_LABS_AUTH_URL/api/auth/login")"
-   NALA_LABS_JWT="$(printf '%s' "$LOGIN_RESPONSE" | jq -er '.token')"
-
-   API_KEY_RESPONSE="$(curl --silent --show-error --fail-with-body \
-     --request POST \
-     --header 'Accept: application/json' \
+     --data "$(jq -n --arg u "$NALA_LABS_USERNAME" --arg p "$NALA_LABS_PASSWORD" \
+       '{username: $u, password: $p}')" \
+     "$NALA_LABS_AUTH_URL/api/auth/login" | jq -er '.token')"
+   export CODEX_TRACE_API_TOKEN="$(curl --silent --show-error --fail-with-body \
      --header 'Content-Type: application/json' \
      --header "Authorization: Bearer $NALA_LABS_JWT" \
      --data '{"name":"nala-trace-local","permissions":["trace:read","trace:write"]}' \
-     "$NALA_LABS_AUTH_URL/api/auth/api-key")"
-   export CODEX_TRACE_API_TOKEN="$(printf '%s' "$API_KEY_RESPONSE" | jq -er '.apiKey')"
-
-   unset NALA_LABS_USERNAME NALA_LABS_PASSWORD LOGIN_PAYLOAD LOGIN_RESPONSE \
-     API_KEY_RESPONSE NALA_LABS_JWT
+     "$NALA_LABS_AUTH_URL/api/auth/api-key" | jq -er '.apiKey')"
+   unset NALA_LABS_USERNAME NALA_LABS_PASSWORD NALA_LABS_JWT
    export API_BASE_URL="${NALA_TRACE_URL:-http://127.0.0.1:3003}"
    SESSION_ID="curl-live-$(date +%s%N)"
    EVENT_JSON="{\"session_id\":\"$SESSION_ID\",\"hook_event_name\":\"Stop\"}"
    ```
 
-   The API-key response is HTTP 201 and contains the raw `apiKey` exactly once.
-   Keep `CODEX_TRACE_API_TOKEN` in this shell; never paste it into the
-   repository, logs, URLs, or a pull request. If the key is lost, create a new
-   one through the same Nala Labs flow.
+   Login must return HTTP 200 and API-key creation must return HTTP 201. The
+   raw `apiKey` is returned once. Keep it only in `CODEX_TRACE_API_TOKEN`; if
+   it is lost, repeat the same two API calls to create a new key.
 
 2. Verify all real dependencies are healthy. Expect HTTP 200, `status` `ok`,
    and `ok` for Casdoor, Vault, PostgreSQL, MongoDB, Redis, and Kafka:

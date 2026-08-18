@@ -185,6 +185,20 @@ table, then stores the returned owner ID with the event.
    duplicate tool IDs, malformed timestamps, and reconstructed tool-call
    state.
 
+10. Verify the safe persistence-failure response with a second real API
+    process. In another terminal, start it with Mongo intentionally disabled
+    while retaining Vault and PostgreSQL authentication:
+
+    ```bash
+    cd backend
+    source ../.agents/.env
+    AUTH_LISTEN_ADDR=127.0.0.1:3004 MONGO_URI= go run .
+    ```
+
+    In the original terminal, send the same authenticated event to port 3004.
+    Expect HTTP 500 with `error.code` `ingest_failed` and the sanitized message
+    `event could not be stored`. Stop the second process with Ctrl-C afterward.
+
 Never commit or paste the real key into this repository or a pull request.
 
 ## Production images

@@ -71,6 +71,26 @@ table, then stores the returned owner ID with the event.
    raw `apiKey` is returned once. Keep it only in `CODEX_TRACE_API_TOKEN`; if
    it is lost, repeat the same two API calls to create a new key.
 
+   Create a second real key for a fresh test owner so the empty-session case
+   can be verified without reusing the owner that receives the events:
+
+   ```bash
+   NALA_LABS_EMPTY_JWT="$(curl --silent --show-error --fail-with-body \
+     --header 'Content-Type: application/json' \
+     --data "$(jq -n --arg u "$CASDOOR_FREE_TEST_USERNAME" --arg p "$CASDOOR_FREE_TEST_PASSWORD" \
+       '{username: $u, password: $p}')" \
+     "$NALA_LABS_AUTH_URL/api/auth/login" | jq -er '.token')"
+   export CODEX_TRACE_EMPTY_API_TOKEN="$(curl --silent --show-error --fail-with-body \
+     --header 'Content-Type: application/json' \
+     --header "Authorization: Bearer $NALA_LABS_EMPTY_JWT" \
+     --data '{"name":"nala-trace-empty-owner","permissions":["trace:read","trace:write"]}' \
+     "$NALA_LABS_AUTH_URL/api/auth/api-key" | jq -er '.apiKey')"
+   unset NALA_LABS_EMPTY_JWT CASDOOR_FREE_TEST_USERNAME CASDOOR_FREE_TEST_PASSWORD
+   ```
+
+   Keep the fresh owner's key only in `CODEX_TRACE_EMPTY_API_TOKEN`. Do not
+   ingest events with that key before running the empty-session check.
+
 2. Verify all real dependencies are healthy. Expect HTTP 200, `status` `ok`,
    and `ok` for Casdoor, Vault, PostgreSQL, MongoDB, Redis, and Kafka:
 
@@ -135,6 +155,35 @@ table, then stores the returned owner ID with the event.
      --header "X-Nala-Labs-API-Key: $CODEX_TRACE_API_TOKEN" \
      "$API_BASE_URL/sessions?limit=100"
    ```
+
+8. Validate the committed manifest and its rejection path:
+
+   ```bash
+   cd backend
+   go run ./cmd/validate-hooks --manifest ../hooks.json
+   invalid_manifest="$(mktemp)"
+   jq 'del(.hooks.Stop)' ../hooks.json > "$invalid_manifest"
+   if go run ./cmd/validate-hooks --manifest "$invalid_manifest"; then
+     echo "manifest rejection failed" >&2
+     exit 1
+   fi
+   rm -f "$invalid_manifest"
+   cd ..
+   ```
+
+9. Run the real-dependency integration verifier. It talks to the running API,
+   PostgreSQL-backed API-key lookup, MongoDB, and the real stored events; it
+   does not use mocks, fakes, or `httptest`:
+
+   ```bash
+   make test-integration
+   ```
+
+   This verifies all nine hook families, unauthorized and invalid-key
+   rejection, empty and owner-scoped session reads, malformed-input no-write,
+   append-only duplicates, invalid limits, equal timestamps, unmatched and
+   duplicate tool IDs, malformed timestamps, and reconstructed tool-call
+   state.
 
 Never commit or paste the real key into this repository or a pull request.
 

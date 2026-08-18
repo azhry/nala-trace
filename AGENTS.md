@@ -39,7 +39,6 @@ For a request containing a Linear issue ID such as `AZH-385`:
 
 - Never print, echo, commit, or transmit `.agents/config.md` or any secret value.
 - Do not use a generic file-read tool that renders `.agents/config.md` into a transcript. Load only the allowlisted key needed for the immediate operation through a non-printing secret-loading mechanism; do not recover or copy a literal credential from prior conversation, tool output, memory, or a previous command.
-- Do not dot-source config files. Load only allowlisted `KEY=value` entries into the current process environment without output.
 - Reading config does not export values into the current shell environment. Never assume a credential environment variable is available.
 - Prefer authenticated connectors for Linear and GitHub. Do not manually inject project secrets into `curl` or other direct HTTP commands.
 - Before changing code for a task that requires GitHub delivery:

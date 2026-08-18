@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,6 +27,7 @@ const (
 	defaultVaultAddr         = "http://vault.nala-labs.svc.cluster.local:8200"
 	defaultVaultMount        = "secret"
 	defaultVaultPath         = "nala-labs/nala-trace"
+	defaultSharedVaultPath   = "nala-labs/platform"
 	defaultConnectTimeout    = 5 * time.Second
 	defaultPingTimeout       = 2 * time.Second
 	defaultDisconnectTimeout = 5 * time.Second
@@ -40,6 +42,7 @@ type Config struct {
 	FrontendURL     string
 	AllowedOrigin   string
 	ShutdownTimeout time.Duration
+	DatabaseURL     string
 
 	Mongo  MongoConfig
 	Auth   AuthConfig
@@ -58,7 +61,6 @@ type MongoConfig struct {
 
 type AuthConfig struct {
 	NalaLabsAuthURL string
-	APIKey          string
 	Timeout         time.Duration
 }
 
@@ -107,13 +109,15 @@ func LoadFrom(values map[string]string) (Config, error) {
 		return value, ok
 	}
 
+	databaseURL := strings.TrimSpace(values["DATABASE_URL"])
 	cfg := Config{
 		ListenAddr:      valueOr(lookup, "AUTH_LISTEN_ADDR", defaultListenAddr),
 		FrontendURL:     valueOr(lookup, "FRONTEND_URL", defaultFrontendURL),
 		AllowedOrigin:   valueOr(lookup, "AUTH_ALLOWED_ORIGIN", defaultAllowedOrigin),
 		ShutdownTimeout: durationOr(lookup, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
+		DatabaseURL:     databaseURL,
 		Mongo: MongoConfig{
-			Enabled:           boolOr(lookup, "MONGO_ENABLED", false),
+			Enabled:           strings.TrimSpace(values["MONGO_URI"]) != "",
 			URI:               valueOr(lookup, "MONGO_URI", defaultMongoURI),
 			Database:          valueOr(lookup, "MONGO_DATABASE", defaultMongoDatabase),
 			ConnectTimeout:    durationOr(lookup, "MONGO_CONNECT_TIMEOUT", defaultConnectTimeout),
@@ -122,11 +126,10 @@ func LoadFrom(values map[string]string) (Config, error) {
 		},
 		Auth: AuthConfig{
 			NalaLabsAuthURL: valueOr(lookup, "NALA_LABS_AUTH_URL", defaultNalaLabsAuthURL),
-			APIKey:          values["NALA_LABS_API_KEY"],
 			Timeout:         durationOr(lookup, "AUTH_REQUEST_TIMEOUT", defaultAuthTimeout),
 		},
 		Health: HealthConfig{
-			PostgreSQLAddress: valueOr(lookup, "POSTGRESQL_ADDRESS", defaultPostgreSQLAddress),
+			PostgreSQLAddress: postgresqlAddress(lookup, databaseURL),
 			RedisAddress:      valueOr(lookup, "REDIS_ADDRESS", defaultRedisAddress),
 			KafkaAddress:      valueOr(lookup, "KAFKA_ADDRESS", defaultKafkaAddress),
 			Timeout:           durationOr(lookup, "HEALTHCHECK_TIMEOUT", defaultPingTimeout),
@@ -163,10 +166,11 @@ func validate(cfg Config, values map[string]string, lookup func(string) (string,
 	}
 
 	if cfg.Mongo.Enabled {
-		for _, key := range []string{"MONGO_URI", "MONGO_DATABASE"} {
-			if strings.TrimSpace(values[key]) == "" {
-				missing = append(missing, key)
-			}
+		if strings.TrimSpace(cfg.Mongo.URI) == "" {
+			missing = append(missing, "MONGO_URI")
+		}
+		if strings.TrimSpace(cfg.Mongo.Database) == "" {
+			missing = append(missing, "MONGO_DATABASE")
 		}
 		if cfg.Mongo.ConnectTimeout <= 0 {
 			invalid = append(invalid, "MONGO_CONNECT_TIMEOUT")
@@ -236,9 +240,10 @@ func Redact(value string) string {
 func knownKeys() []string {
 	return []string{
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
-		"MONGO_ENABLED", "MONGO_URI", "MONGO_DATABASE",
+		"DATABASE_URL",
+		"MONGO_URI", "MONGO_DATABASE",
 		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL",
-		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "AUTH_REQUEST_TIMEOUT", "NALA_LABS_API_KEY", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
+		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "AUTH_REQUEST_TIMEOUT", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_SHARED_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}
 }
 
@@ -282,6 +287,7 @@ func loadVaultValues(values, processValues map[string]string, client *http.Clien
 	address := valueOr(lookup, "VAULT_ADDR", defaultVaultAddr)
 	mount := valueOr(lookup, "VAULT_KV_MOUNT", defaultVaultMount)
 	path := valueOr(lookup, "VAULT_KV_PATH", defaultVaultPath)
+	sharedPath := valueOr(lookup, "VAULT_SHARED_KV_PATH", defaultSharedVaultPath)
 	token := strings.TrimSpace(values["VAULT_TOKEN"])
 	if token == "" {
 		return fmt.Errorf("missing required settings: VAULT_TOKEN")
@@ -293,6 +299,17 @@ func loadVaultValues(values, processValues map[string]string, client *http.Clien
 	for key, value := range secretValues {
 		if _, explicitlyConfigured := processValues[key]; !explicitlyConfigured {
 			values[key] = value
+		}
+	}
+	if strings.TrimSpace(values["DATABASE_URL"]) == "" && strings.Trim(sharedPath, "/") != strings.Trim(path, "/") {
+		sharedValues, err := readVaultKV(client, address, mount, sharedPath, token)
+		if err != nil {
+			return err
+		}
+		if value := strings.TrimSpace(sharedValues["DATABASE_URL"]); value != "" {
+			if _, explicitlyConfigured := processValues["DATABASE_URL"]; !explicitlyConfigured {
+				values["DATABASE_URL"] = value
+			}
 		}
 	}
 	return nil
@@ -386,6 +403,21 @@ func boolOr(lookup func(string) (string, bool), key string, fallback bool) bool 
 		return false
 	}
 	return parsed
+}
+
+func postgresqlAddress(lookup func(string) (string, bool), databaseURL string) string {
+	if value, ok := lookup("POSTGRESQL_ADDRESS"); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	parsed, err := url.Parse(strings.TrimSpace(databaseURL))
+	if err != nil || parsed.Hostname() == "" {
+		return defaultPostgreSQLAddress
+	}
+	port := parsed.Port()
+	if port == "" {
+		port = "5432"
+	}
+	return net.JoinHostPort(parsed.Hostname(), port)
 }
 
 func durationOr(lookup func(string) (string, bool), key string, fallback time.Duration) time.Duration {

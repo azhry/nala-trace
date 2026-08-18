@@ -18,6 +18,10 @@ type SessionSummary struct {
 }
 
 func sessionSummaryPipeline() []bson.D {
+	return sessionSummaryPipelineForUser("", 0)
+}
+
+func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 	toolEvent := bson.D{{Key: "$in", Value: bson.A{"$hook_event_name", bson.A{"PreToolUse"}}}}
 	skillEvent := bson.D{{Key: "$regexMatch", Value: bson.D{
 		{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$tool_name", ""}}}},
@@ -28,7 +32,11 @@ func sessionSummaryPipeline() []bson.D {
 		bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$payload.file_path", nil}}}, nil}}},
 		bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$payload.path", nil}}}, nil}}},
 	}}}
-	return []bson.D{
+	pipeline := make([]bson.D, 0, 5)
+	if userID != "" {
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.D{{Key: "user_id", Value: userID}}}})
+	}
+	pipeline = append(pipeline, []bson.D{
 		{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: "$session_id"},
 			{Key: "user_id", Value: bson.D{{Key: "$first", Value: "$user_id"}}},
@@ -41,5 +49,9 @@ func sessionSummaryPipeline() []bson.D {
 		}}},
 		{{Key: "$project", Value: bson.D{{Key: "_id", Value: 0}, {Key: "session_id", Value: "$_id"}, {Key: "user_id", Value: 1}, {Key: "first_event_at", Value: 1}, {Key: "last_event_at", Value: 1}, {Key: "event_count", Value: 1}, {Key: "tool_call_count", Value: 1}, {Key: "skill_invocation_count", Value: 1}, {Key: "file_operation_count", Value: 1}}}},
 		{{Key: "$sort", Value: bson.D{{Key: "last_event_at", Value: -1}, {Key: "session_id", Value: 1}}}},
+	}...)
+	if limit > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$limit", Value: limit}})
 	}
+	return pipeline
 }

@@ -45,8 +45,8 @@ redirect flow.
   Casdoor callback settings, or a copy of the Nala Labs signing secret.
 - Nala Trace does not own a login form, callback, logout route, or signed
   application session. It verifies Nala Labs-issued JWTs through the shared
-  validation endpoint and accepts the configured Nala Labs API key for machine
-  access.
+  validation endpoint for JWT access. Machine API keys are validated locally
+  against the shared Nala Labs PostgreSQL API-key table.
 - The React app may hold a short-lived Nala Labs bearer token only for the
   approved upstream flow. It must not receive provider credentials or signing
   keys.

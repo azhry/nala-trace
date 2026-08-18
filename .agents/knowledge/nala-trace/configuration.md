@@ -21,33 +21,34 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `AUTH_LISTEN_ADDR` | ordinary | `:3003`; alternate `:18080` | `:3003` | API deployment configuration | Required; fail before serving if empty or invalid. |
 | `FRONTEND_URL` | ordinary | `http://localhost:5005/`; alternate `http://localhost:18081/` | deployment-supplied public origin | API CORS configuration | Required; must be an explicit origin and must not contain credentials. |
 | `AUTH_ALLOWED_ORIGIN` | ordinary | `http://localhost:5005`; alternate `http://localhost:18081` | same value as approved frontend origin | API CORS middleware | Required for browser-facing API responses. |
-| `MONGO_ENABLED` | ordinary | `false` for no-dependency local startup | `true` for the API workload | API configuration | When `true`, the Mongo settings below are required and startup/ping is bounded. |
-| `MONGO_URI` | secret connection string | `mongodb://127.0.0.1:27017` for local unauthenticated Mongo; Vault-supplied value when auth is enabled | Vault key `MONGO_URI` at `secret/data/nala-labs/nala-trace`, containing the complete connection string | API Mongo client | Required when `MONGO_ENABLED=true`; pass the full URI directly to the Mongo driver and redact it from errors/logs. |
-| `MONGO_DATABASE` | ordinary | `nala_trace` | `nala_trace` unless deployment overrides it | API configuration | Required when Mongo is enabled. |
+| `DATABASE_URL` | secret connection string | local secret-store value | Nala Labs Vault `DATABASE_URL` | Nala Trace API-key validator | Required when machine API-key authentication is enabled; connects to the shared Nala Labs PostgreSQL `api_key` table. Never log or expose it. |
+| `MONGO_URI` | secret connection string | `mongodb://127.0.0.1:27017` when local Mongo is intentionally configured; Vault-supplied value when auth is enabled | Vault key `MONGO_URI` at `secret/data/nala-labs/nala-trace`, containing the complete connection string | API Mongo client | The presence of a resolved URI enables Mongo; pass the full URI directly to the Mongo driver and redact it from errors/logs. |
+| `MONGO_DATABASE` | ordinary | `nala_trace` | `nala_trace` unless deployment overrides it | API configuration | Used when a resolved Mongo URI enables Mongo. |
 | `MONGO_CONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `MONGO_PING_TIMEOUT` | ordinary duration | `2s` | `2s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `MONGO_DISCONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
-| `NALA_LABS_API_KEY` | secret | local secret-store value when machine/API-key auth is enabled | Vault-injected value | Nala Trace auth middleware | Optional; compare in constant time and never expose or log the value. |
-| `NALA_LABS_AUTH_URL` | ordinary URL | `http://127.0.0.1:8080` | deployment-supplied Nala Labs auth service URL | API authentication configuration | Required for shared JWT validation; use only an approved network endpoint and never embed credentials. |
+| `NALA_LABS_AUTH_URL` | ordinary URL | `http://127.0.0.1:8080` | deployment-supplied Nala Labs auth service URL | API authentication configuration | Required for shared JWT validation; API-key validation is local through `DATABASE_URL`. |
 | `AUTH_REQUEST_TIMEOUT` | ordinary duration | `5s` | `5s` unless deployment overrides it | API authentication client | Bounded timeout for Nala Labs JWT validation calls. |
-| `POSTGRESQL_ADDRESS` | ordinary address | `127.0.0.1:5432` | `postgresql.nala-labs.svc.cluster.local:5432` | `/healthz` PostgreSQL probe | TCP health address for the shared PostgreSQL dependency. |
+| `POSTGRESQL_ADDRESS` | ordinary address | derived from `DATABASE_URL` | deployment override when needed | `/healthz` PostgreSQL probe | Optional TCP override; when absent, the probe uses the host and port from the Vault-backed `DATABASE_URL`. |
 | `REDIS_ADDRESS` | ordinary address | `127.0.0.1:6379` | `redis-master.nala-labs.svc.cluster.local:6379` | `/healthz` Redis probe | TCP health address for the shared Redis dependency. |
 | `KAFKA_ADDRESS` | ordinary address | `127.0.0.1:9092` | `kafka.nala-labs.svc.cluster.local:9092` | `/healthz` Kafka probe | TCP health address for the shared Kafka dependency. |
 | `HEALTHCHECK_TIMEOUT` | ordinary duration | `2s` | `2s` unless deployment overrides it | API `/healthz` | Per-dependency bounded probe timeout. |
 | `VAULT_ADDR` | ordinary URL | `http://127.0.0.1:8200` through the configured local Vault transport | `http://vault.nala-labs.svc.cluster.local:8200` | API/deployment configuration | Presence activates Vault loading and health probing; use the shared `.vault-config` transport contract. |
 | `VAULT_KV_MOUNT` | ordinary | `secret` | `secret` | API/deployment configuration | KV v2 mount; defaults to `secret` when omitted. |
 | `VAULT_KV_PATH` | ordinary path | `nala-labs/nala-trace` | `nala-labs/nala-trace` | API/deployment configuration | KV v2 path; defaults to `nala-labs/nala-trace` when omitted and must not be used as a secret value. |
+| `VAULT_SHARED_KV_PATH` | ordinary path | `nala-labs/platform` | `nala-labs/platform` | API/deployment configuration | Shared Nala Labs KV path used to resolve `DATABASE_URL`; no raw API key is copied from this path. |
 | `VAULT_TOKEN` | secret or workload identity | local secret-store value only | prefer Kubernetes auth role `nala-trace-api` | `auth/kubernetes/role/nala-trace-api`; local secret-store injection if needed | Never check in a static token. Prefer workload identity in Kubernetes. |
 | `VAULT_ROLE_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_SECRET_ID`; never check in. |
 | `VAULT_SECRET_ID` | secret | local secret-store value only | AppRole value if AppRole is selected | Vault AppRole authentication | Use only with `VAULT_ROLE_ID`; never check in. |
 
-The React package may read only non-secret `VITE_*` settings. Nala Trace authenticates each protected request with the Nala Labs bearer JWT or configured Nala Labs API key; it does not own a separate ingest token. A `VITE_API_TOKEN`, provider secret, local session secret, Mongo password, Vault token, or signing key is forbidden.
+The React package may read only non-secret `VITE_*` settings. Nala Trace authenticates protected requests with a Nala Labs bearer JWT or by hashing the presented Nala Labs API key and looking it up in the shared PostgreSQL `api_key` table. It stores the resolved owner ID with each trace event and never stores the raw API key. A `VITE_API_TOKEN`, provider secret, local session secret, Mongo password, Vault token, or signing key is forbidden.
 
 ## Vault ownership and Kubernetes mapping
 
 The application workload is the owner of the following logical secret paths:
 
-- `secret/data/nala-labs/nala-trace`: Nala Trace runtime values, including the complete `MONGO_URI` and Nala Labs API key under their documented keys.
+- `secret/data/nala-labs/nala-trace`: Nala Trace runtime values, including the complete `MONGO_URI`.
+- The shared Nala Labs Vault record supplies `DATABASE_URL`; Nala Trace uses it read-only to validate API-key digests and resolve owner metadata from PostgreSQL. Nala Trace never copies the raw API key into Vault.
 - `auth/kubernetes/role/nala-trace-api`: preferred workload identity binding for reading the paths above. A static `VAULT_TOKEN` is a local-only fallback and has no checked-in value.
 
 For local development, copy the tracked root `.vault-config.example` to the ignored root `.vault-config` and fill the Vault transport credentials from a protected secret source. The presence of `VAULT_ADDR` activates the configured KV v2 read and health probe; no manual `VAULT_ENABLED` switch is required. Explicit process environment values take precedence.

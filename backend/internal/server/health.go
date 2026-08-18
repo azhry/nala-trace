@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -53,13 +54,20 @@ type HealthChecker struct {
 }
 
 // NewHealthChecker wires probes to the shared Nala Labs auth service, Vault,
-// the Mongo connection string, and the configured platform TCP addresses.
-// When Mongo is enabled and the application has an initialized store, its
-// authenticated Ping is preferred over the TCP fallback.
+// the initialized Mongo store, and the configured platform TCP addresses.
+// Mongo is reported as not configured when no URI was resolved; it is never
+// represented as healthy by a TCP-only fallback.
 func NewHealthChecker(cfg config.Config, mongoProbe func(context.Context) error) *HealthChecker {
-	mongoHealth := tcpHealthProbe(mongoAddress(cfg.Mongo.URI))
+	var mongoHealth healthProbe
+	optional := map[string]bool{}
 	if mongoProbe != nil {
 		mongoHealth = mongoProbe
+	} else if cfg.Mongo.Enabled {
+		mongoHealth = func(context.Context) error {
+			return errors.New("mongo store not initialized")
+		}
+	} else {
+		optional["mongodb"] = true
 	}
 
 	timeout := cfg.Health.Timeout
@@ -67,7 +75,6 @@ func NewHealthChecker(cfg config.Config, mongoProbe func(context.Context) error)
 		timeout = defaultHealthProbeTimeout
 	}
 	var vaultHealth healthProbe
-	optional := map[string]bool{}
 	if cfg.Vault.Enabled {
 		vaultHealth = httpHealthProbe(cfg.Vault.Addr, "/v1/sys/health")
 	} else {
@@ -168,18 +175,6 @@ func tcpHealthProbe(address string) healthProbe {
 		}
 		return connection.Close()
 	}
-}
-
-func mongoAddress(uri string) string {
-	parsed, err := url.Parse(strings.TrimSpace(uri))
-	if err != nil || parsed.Hostname() == "" {
-		return ""
-	}
-	port := parsed.Port()
-	if port == "" {
-		port = "27017"
-	}
-	return net.JoinHostPort(parsed.Hostname(), port)
 }
 
 func appendHealthPath(baseAddress, suffix string) (string, error) {

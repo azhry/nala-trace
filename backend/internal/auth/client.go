@@ -36,10 +36,12 @@ func (c *IAMClient) ValidateBearer(ctx context.Context, token string) (User, err
 	if strings.TrimSpace(token) == "" {
 		return User{}, ErrUnauthenticated
 	}
-	return c.requestUser(ctx, token)
+	return c.requestSession(ctx, func(request *http.Request) {
+		request.Header.Set("Authorization", "Bearer "+token)
+	})
 }
 
-func (c *IAMClient) requestUser(ctx context.Context, token string) (User, error) {
+func (c *IAMClient) requestSession(ctx context.Context, authorize func(*http.Request)) (User, error) {
 	if c == nil || c.client == nil || c.baseURL == "" {
 		return User{}, ErrProviderUnavailable
 	}
@@ -48,7 +50,9 @@ func (c *IAMClient) requestUser(ctx context.Context, token string) (User, error)
 		return User{}, ErrProviderUnavailable
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Authorization", "Bearer "+token)
+	if authorize != nil {
+		authorize(request)
+	}
 	response, err := c.client.Do(request)
 	if err != nil {
 		return User{}, ErrProviderUnavailable

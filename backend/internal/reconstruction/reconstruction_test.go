@@ -1,0 +1,148 @@
+package reconstruction
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/azhry/nala-trace/backend/internal/storage"
+	"go.mongodb.org/mongo-driver/bson"
+)
+
+func TestReconstructConversationPreservesTurnsAndCompaction(t *testing.T) {
+	base := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
+	events := []storage.HookEvent{
+		hookEvent("stop-2", "Stop", "turn-2", base.Add(5*time.Second), map[string]any{"response": "second answer"}),
+		hookEvent("compact", "PreCompact", "turn-1", base.Add(3*time.Second), map[string]any{"reason": "context_window"}),
+		hookEvent("prompt-1", "UserPromptSubmit", "turn-1", base, map[string]any{"prompt": "first question"}),
+		hookEvent("prompt-2", "UserPromptSubmit", "turn-2", base.Add(4*time.Second), map[string]any{"prompt": "second question"}),
+		hookEvent("stop-1", "Stop", "turn-1", base.Add(2*time.Second), map[string]any{"response": "first answer"}),
+	}
+
+	result := Reconstruct("session-1", "user-1", events)
+	if len(result.Conversation) != 4 {
+		t.Fatalf("conversation length = %d, want 4", len(result.Conversation))
+	}
+	wantRoles := []string{"user", "assistant", "user", "assistant"}
+	wantTurns := []string{"turn-1", "turn-1", "turn-2", "turn-2"}
+	for index, item := range result.Conversation {
+		if item.Role != wantRoles[index] {
+			t.Errorf("conversation[%d].Role = %q, want %q", index, item.Role, wantRoles[index])
+		}
+		if item.TurnID == nil || *item.TurnID != wantTurns[index] {
+			t.Errorf("conversation[%d].TurnID = %v, want %q", index, item.TurnID, wantTurns[index])
+		}
+	}
+	if result.Summary.MessageCount != 4 {
+		t.Errorf("message count = %d, want 4", result.Summary.MessageCount)
+	}
+	if len(result.Timeline) != len(events) || result.Timeline[1].HookEventName != "Stop" {
+		t.Errorf("timeline did not retain ordered compaction boundary: %#v", result.Timeline)
+	}
+}
+
+func TestReconstructConversationSkipsMissingContent(t *testing.T) {
+	events := []storage.HookEvent{
+		hookEvent("missing", "UserPromptSubmit", "turn-1", time.Unix(10, 0).UTC(), map[string]any{}),
+		hookEvent("structured", "Stop", "turn-1", time.Unix(11, 0).UTC(), map[string]any{"content": map[string]any{"text": "structured answer"}}),
+	}
+
+	result := Reconstruct("session-1", "user-1", events)
+	if len(result.Conversation) != 1 {
+		t.Fatalf("conversation length = %d, want 1", len(result.Conversation))
+	}
+	var content map[string]string
+	if err := json.Unmarshal(result.Conversation[0].Content, &content); err != nil {
+		t.Fatalf("structured content is not JSON: %v", err)
+	}
+	if content["text"] != "structured answer" {
+		t.Errorf("content = %#v, want structured answer", content)
+	}
+	if result.Summary.EventCount != 2 {
+		t.Errorf("event count = %d, want 2", result.Summary.EventCount)
+	}
+}
+
+func TestReconstructDetectsApplyPatchShellFileSkillAndAmbiguousPayloads(t *testing.T) {
+	base := time.Unix(20, 0).UTC()
+	events := []storage.HookEvent{
+		hookEventWithTool("patch", "PreToolUse", "turn-1", "patch", base, map[string]any{
+			"tool_input": "*** Begin Patch\n*** Update File: backend/main.go\n*** Add File: backend/internal/reconstruction/reconstruction_test.go\n*** End Patch",
+		}),
+		hookEventWithTool("read", "PreToolUse", "turn-1", "read_file", base.Add(time.Second), map[string]any{
+			"tool_input": map[string]any{"file_path": "README.md"},
+		}),
+		hookEventWithTool("write", "PreToolUse", "turn-1", "shell_command", base.Add(2*time.Second), map[string]any{
+			"tool_input": map[string]any{"command": "Set-Content -Path notes.md -Value done"},
+		}),
+		hookEventWithTool("skill", "PreToolUse", "turn-1", "skill", base.Add(3*time.Second), map[string]any{
+			"tool_input": map[string]any{"name": "frontend-design"},
+		}),
+		hookEventWithTool("ambiguous", "PreToolUse", "turn-1", "custom_tool", base.Add(4*time.Second), map[string]any{
+			"tool_input": map[string]any{"path": "notes.md"},
+		}),
+	}
+
+	result := Reconstruct("session-1", "user-1", events)
+	if len(result.Files) != 5 {
+		t.Fatalf("file operation count = %d, want 5", len(result.Files))
+	}
+	if result.Files[0].Path != "backend/main.go" || result.Files[0].Operation != "write" || result.Files[0].Confidence != confidenceExplicit {
+		t.Errorf("first patch operation = %#v", result.Files[0])
+	}
+	if result.Files[2].Operation != "read" || result.Files[2].Confidence != confidenceExplicit {
+		t.Errorf("read operation = %#v", result.Files[2])
+	}
+	if result.Files[3].Operation != "write" || result.Files[3].Confidence != confidenceInferred {
+		t.Errorf("shell operation = %#v", result.Files[3])
+	}
+	if result.Files[4].Operation != "ambiguous" || result.Files[4].Confidence != confidenceAmbiguous {
+		t.Errorf("ambiguous operation = %#v", result.Files[4])
+	}
+	if len(result.SkillInvocations) != 1 || result.SkillInvocations[0].Name != "frontend-design" || result.SkillInvocations[0].Confidence != confidenceInferred {
+		t.Errorf("skill invocation = %#v", result.SkillInvocations)
+	}
+	if result.Summary.FileOperationCount != 5 || result.Summary.SkillInvocationCount != 1 {
+		t.Errorf("summary = %#v", result.Summary)
+	}
+	if result.Files[0].EventID != "patch" || result.Files[0].ToolName != "patch" {
+		t.Errorf("file metadata = %#v", result.Files[0])
+	}
+}
+
+func hookEvent(id, eventName, turnID string, receivedAt time.Time, payload map[string]any) storage.HookEvent {
+	return hookEventWithTool(id, eventName, turnID, "", receivedAt, map[string]any{"payload": payload})
+}
+
+func hookEventWithTool(id, eventName, turnID, toolName string, receivedAt time.Time, values map[string]any) storage.HookEvent {
+	payload := values
+	if nested, ok := values["payload"].(map[string]any); ok {
+		payload = nested
+	}
+	encoded, err := bson.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return storage.HookEvent{
+		ID:            id,
+		UserID:        "user-1",
+		SessionID:     "session-1",
+		TurnID:        stringPointer(turnID),
+		HookEventName: eventName,
+		ToolName:      stringPointerOrNil(toolName),
+		ToolUseID:     stringPointer(id + "-tool"),
+		Payload:       bson.Raw(encoded),
+		ReceivedAt:    receivedAt,
+	}
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
+
+func stringPointerOrNil(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}

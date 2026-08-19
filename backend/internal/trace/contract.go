@@ -45,6 +45,7 @@ type ConversationItem struct {
 	Role       string          `json:"role"`
 	Content    json.RawMessage `json:"content"`
 	OccurredAt time.Time       `json:"occurred_at"`
+	TurnID     *string         `json:"turn_id"`
 	Raw        json.RawMessage `json:"raw"`
 }
 
@@ -61,6 +62,10 @@ type ToolCall struct {
 
 type SkillInvocation struct {
 	Name       string          `json:"name"`
+	EventID    string          `json:"event_id"`
+	ToolUseID  *string         `json:"tool_use_id"`
+	ToolName   string          `json:"tool_name"`
+	Confidence string          `json:"confidence"`
 	OccurredAt time.Time       `json:"occurred_at"`
 	Raw        json.RawMessage `json:"raw"`
 }
@@ -68,6 +73,10 @@ type SkillInvocation struct {
 type FileOperation struct {
 	Path       string          `json:"path"`
 	Operation  string          `json:"operation"`
+	EventID    string          `json:"event_id"`
+	ToolUseID  *string         `json:"tool_use_id"`
+	ToolName   string          `json:"tool_name"`
+	Confidence string          `json:"confidence"`
 	OccurredAt time.Time       `json:"occurred_at"`
 	Raw        json.RawMessage `json:"raw"`
 }

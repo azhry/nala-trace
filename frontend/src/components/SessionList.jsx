@@ -1,3 +1,5 @@
+import { filterSessionSummaries, sortSessionSummaries } from '../sessionSummaries'
+
 const filters = [
   { id: 'all', label: 'All sessions' },
   { id: 'attention', label: 'Needs review' },
@@ -5,7 +7,7 @@ const filters = [
 ]
 
 function CountBadge({ value, label }) {
-  return <span className="count-badge"><strong>{value}</strong><span>{label}</span></span>
+  return <span className="count-badge" aria-label={`${value} ${label}`}><strong>{value}</strong><span>{label}</span></span>
 }
 
 function StatusBadge({ status }) {
@@ -21,12 +23,12 @@ export default function SessionList({
   onQueryChange,
   filter,
   onFilterChange,
+  sortBy,
+  onSortChange,
 }) {
-  const visibleSessions = sessions.filter((session) => {
-    const matchesFilter = filter === 'all' || session.status === filter
-    const text = `${session.title} ${session.id} ${session.latestTool}`.toLowerCase()
-    return matchesFilter && text.includes(query.toLowerCase())
-  })
+  const filteredSessions = filterSessionSummaries(sessions, query, filter)
+  const visibleSessions = sortSessionSummaries(filteredSessions, sortBy)
+  const hasFilters = Boolean(query.trim()) || filter !== 'all'
 
   return (
     <section className="panel session-list-panel" aria-labelledby="session-list-title">
@@ -46,22 +48,32 @@ export default function SessionList({
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search by title, id, or tool"
+            placeholder="Search ID, dates, counts, or status"
           />
           {query && <button type="button" className="clear-search" onClick={() => onQueryChange('')} aria-label="Clear search">×</button>}
         </label>
-        <div className="filter-tabs" role="group" aria-label="Filter sessions">
-          {filters.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={filter === option.id ? 'is-active' : ''}
-              aria-pressed={filter === option.id}
-              onClick={() => onFilterChange(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="session-control-actions">
+          <div className="filter-tabs" role="group" aria-label="Filter sessions">
+            {filters.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={filter === option.id ? 'is-active' : ''}
+                aria-pressed={filter === option.id}
+                onClick={() => onFilterChange(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <label className="sort-control">
+            <span>Sort</span>
+            <select value={sortBy} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort sessions">
+              <option value="recent">Most recent</option>
+              <option value="tools">Most tool calls</option>
+              <option value="events">Most events</option>
+            </select>
+          </label>
         </div>
       </div>
 
@@ -73,30 +85,40 @@ export default function SessionList({
           <button
             key={session.id}
             type="button"
-            aria-label={session.title}
+            aria-label={`Open session ${session.id}`}
             className={`session-record ${selectedId === session.id ? 'is-selected' : ''}`}
             aria-pressed={selectedId === session.id}
             onClick={() => onSelect(session.id)}
           >
             <span className="session-record-main">
-              <span className="session-record-title"><strong>{session.title}</strong><StatusBadge status={session.status} /></span>
-              <span className="session-record-id">{session.id} · {session.duration}</span>
+              <span className="session-record-title"><strong>{session.id}</strong><StatusBadge status={session.status} /></span>
+              <span className="session-record-id">{formatRange(session.firstEventAt, session.lastEventAt)}</span>
             </span>
-            <span className="session-counts" aria-label={`${session.toolCalls} tool calls, ${session.skillDocumentsRead || session.skills} skill documents read, ${session.files} files`}>
-              <CountBadge value={session.toolCalls} label="tools" />
-              <CountBadge value={session.skillDocumentsRead || session.skills} label="skill docs" />
-              <CountBadge value={session.files} label="files" />
+            <span className="session-counts" aria-label={`${session.toolCallCount} tool calls, ${session.skillInvocationCount} skills, ${session.fileOperationCount} files`}>
+              <CountBadge value={session.toolCallCount} label="tools" />
+              <CountBadge value={session.skillInvocationCount} label="skills" />
+              <CountBadge value={session.fileOperationCount} label="files" />
             </span>
-            <span className="session-last-event"><strong>{session.latestTool}</strong><span>{session.latestTime}</span></span>
-            <span className="session-captured">{session.capturedAt}<span className="row-arrow" aria-hidden="true">↗</span></span>
+            <span className="session-last-event"><strong>{session.eventCount.toLocaleString()} events</strong><span>{formatDate(session.lastEventAt)}</span></span>
+            <span className="session-captured">{formatDate(session.firstEventAt)}<span className="row-arrow" aria-hidden="true">↗</span></span>
           </button>
         )) : (
-          <div className="empty-records">
-            <strong>No sessions match that filter.</strong>
-            <span>Try a different search or show all sessions.</span>
+          <div className="empty-records" role="status">
+            <strong>{hasFilters ? 'No sessions match your filters.' : 'No sessions captured yet.'}</strong>
+            <span>{hasFilters ? 'Try a different search or show all sessions.' : 'New authenticated traces will appear here.'}</span>
           </div>
         )}
       </div>
     </section>
   )
+}
+
+function formatDate(value) {
+  if (!value) return 'Unknown time'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function formatRange(start, end) {
+  return `${formatDate(start)} → ${formatDate(end)}`
 }

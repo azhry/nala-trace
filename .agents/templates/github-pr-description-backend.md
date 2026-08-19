@@ -102,6 +102,8 @@ Response:
 [copy-paste response]
 ```
 
+- Before handoff, replace every bracketed placeholder in this template and execute the complete manual sequence from Bash against the real configured fixture. Do not substitute a wrapper script, PowerShell translation, or fake endpoint without documenting the change and its exact exit status.
+
 ## Known limitations and pre-existing failures
 
 - [Exact command, exit status, affected path, and why it is unrelated; or "None known".]

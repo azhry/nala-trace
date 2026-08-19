@@ -32,7 +32,8 @@ make verify
 ```
 
 Hook installation, runtime environment, best-effort failure behavior, and
-known Codex coverage gaps are documented in [backend/HOOKS.md](backend/HOOKS.md).
+known Codex coverage gaps are documented in
+[.agents/knowledge/nala-trace/hooks.md](.agents/knowledge/nala-trace/hooks.md).
 
 Nala Trace's live behavior is verified manually, step by step, with `curl`
 against the running API backed by real Vault, MongoDB, PostgreSQL, Redis, and
@@ -40,45 +41,66 @@ Kafka. The API listens on port `3003` by default. Nala Trace validates the key
 locally by hashing it and querying the shared Nala Labs PostgreSQL `api_key`
 table, then stores the returned owner ID with the event.
 
-1. Create a real Nala Labs API key. API-key management requires a Nala Labs
-   session JWT; it does not accept an API key as its management credential.
-   Source the local Nala Labs account file, then use the admin test account:
+1. Check that Bash has the required command-line tools:
 
    ```bash
-   command -v curl jq
-   export NALA_LABS_AUTH_URL="${NALA_LABS_AUTH_URL:-http://127.0.0.1:8080}"
+   command -v curl
+   command -v jq
+   ```
+
+2. Load the test account and Nala Labs URL:
+
+   ```bash
    source .agents/.env
+   export NALA_LABS_AUTH_URL="${NALA_LABS_AUTH_URL:-http://127.0.0.1:8080}"
    export NALA_LABS_USERNAME="$CASDOOR_ADMIN_TEST_USERNAME"
    export NALA_LABS_PASSWORD="$CASDOOR_ADMIN_TEST_PASSWORD"
-   NALA_LABS_JWT="$(curl --silent --show-error --fail-with-body \
+   ```
+
+3. Log in to Nala Labs and capture the temporary session JWT. Expect HTTP 200:
+
+   ```bash
+   export NALA_LABS_JWT="$(curl --silent --show-error --fail-with-body \
      --header 'Content-Type: application/json' \
      --data "$(jq -n --arg u "$NALA_LABS_USERNAME" --arg p "$NALA_LABS_PASSWORD" \
        '{username: $u, password: $p}')" \
      "$NALA_LABS_AUTH_URL/api/auth/login" | jq -er '.token')"
+   ```
+
+4. Create the Codex Trace API token in Nala Labs. Expect HTTP 201. The raw
+   key is returned once and is stored only in `CODEX_TRACE_API_TOKEN`:
+
+   ```bash
    export CODEX_TRACE_API_TOKEN="$(curl --silent --show-error --fail-with-body \
      --header 'Content-Type: application/json' \
      --header "Authorization: Bearer $NALA_LABS_JWT" \
      --data '{"name":"nala-trace-local","permissions":["trace:read","trace:write"]}' \
      "$NALA_LABS_AUTH_URL/api/auth/api-key" | jq -er '.apiKey')"
-   unset NALA_LABS_USERNAME NALA_LABS_PASSWORD NALA_LABS_JWT \
-     CASDOOR_ADMIN_TEST_USERNAME CASDOOR_ADMIN_TEST_PASSWORD
-   export API_BASE_URL="${NALA_TRACE_URL:-http://127.0.0.1:3003}"
-   SESSION_ID="curl-live-$(date +%s%N)"
-   EVENT_JSON="{\"session_id\":\"$SESSION_ID\",\"hook_event_name\":\"Stop\"}"
    ```
 
-   Login must return HTTP 200 and API-key creation must return HTTP 201. The
-   raw `apiKey` is returned once. Keep it only in `CODEX_TRACE_API_TOKEN`; if
-   it is lost, repeat the same two API calls to create a new key.
+5. Remove the temporary login values. Keep the Codex Trace API token:
 
-2. Verify all real dependencies are healthy. Expect HTTP 200, `status` `ok`,
+   ```bash
+   unset NALA_LABS_USERNAME NALA_LABS_PASSWORD NALA_LABS_JWT \
+     CASDOOR_ADMIN_TEST_USERNAME CASDOOR_ADMIN_TEST_PASSWORD
+   ```
+
+6. Set the API URL and one event payload for the manual checks:
+
+   ```bash
+   export API_BASE_URL="${NALA_TRACE_URL:-http://127.0.0.1:3003}"
+   export SESSION_ID="curl-live-$(date +%s%N)"
+   export EVENT_JSON="{\"session_id\":\"$SESSION_ID\",\"hook_event_name\":\"Stop\"}"
+   ```
+
+7. Verify all real dependencies are healthy. Expect HTTP 200, `status` `ok`,
    and `ok` for Casdoor, Vault, PostgreSQL, MongoDB, Redis, and Kafka:
 
    ```bash
    curl --silent --show-error --include "$API_BASE_URL/healthz"
    ```
 
-3. Verify protected routes reject missing credentials. Expect HTTP 401 for
+8. Verify protected routes reject missing credentials. Expect HTTP 401 for
    both requests:
 
    ```bash
@@ -90,7 +112,7 @@ table, then stores the returned owner ID with the event.
      "$API_BASE_URL/ingest"
    ```
 
-4. Ingest a valid event with the real Nala Labs API key. Expect HTTP 202 and
+9. Ingest a valid event with the Codex Trace API token. Expect HTTP 202 and
    `{"accepted":true}`:
 
    ```bash
@@ -102,7 +124,7 @@ table, then stores the returned owner ID with the event.
      "$API_BASE_URL/ingest"
    ```
 
-5. Verify malformed input is rejected before persistence. Expect HTTP 400 with
+10. Verify malformed input is rejected before persistence. Expect HTTP 400 with
    the `invalid_event` error code:
 
    ```bash
@@ -114,7 +136,7 @@ table, then stores the returned owner ID with the event.
      "$API_BASE_URL/ingest"
    ```
 
-6. Deliver the same valid event again. Expect HTTP 202 again because ingestion
+11. Deliver the same valid event again. Expect HTTP 202 again because ingestion
    is append-only and does not silently deduplicate events:
 
    ```bash
@@ -126,7 +148,7 @@ table, then stores the returned owner ID with the event.
      "$API_BASE_URL/ingest"
    ```
 
-7. Read sessions with the same real key. Find `$SESSION_ID` in the response
+12. Read sessions with the same Codex Trace API token. Find `$SESSION_ID` in the response
    and confirm it contains the resolved `user_id` and `event_count` `2`, proving
    API-key owner resolution, MongoDB persistence, and owner-scoped reads:
 

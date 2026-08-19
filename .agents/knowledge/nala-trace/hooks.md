@@ -32,12 +32,8 @@ The token is intentionally absent from this repository.
 
 `/hooks.json` is the repository manifest. It registers the nine canonical
 events and sends each event as JSON on stdin to the same `hook-client`
-executable. Validate it by starting the real API and following the manual,
-step-by-step `curl` sequence in the repository README. That sequence checks
-all dependency health, missing-credential rejection, valid ingestion, malformed
-input rejection, duplicate append-only delivery, and owner-scoped session
-readback with a real Nala Labs API key. Do not replace this endpoint check with
-an in-process harness or a fabricated dependency.
+executable. Follow the manual, step-by-step `curl` sequence in the repository
+README to verify delivery against the running API and real dependencies.
 
 Copy or adapt the manifest into the Codex configuration location accepted by
 the installed Codex version, then review and trust the `hook-client` command

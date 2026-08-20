@@ -5,7 +5,7 @@ Apply this workflow to changes under `backend/`, including Go services, GraphQL 
 ## Contract and analysis
 
 - Complete the issue-description readiness gate before implementation. Treat the verified description as the contract for inputs, outputs, authorization, persistence, error behavior, and compatibility.
-- Inspect the relevant handler, service, middleware, migration, and tests before choosing an implementation seam. Confirm current behavior from code or a reproduction; clearly separate confirmed facts from hypotheses.
+- Inspect the relevant handler, service, middleware, migration, tests, and sibling-service integration contract before choosing an implementation seam. Confirm current behavior from code or a reproduction; clearly separate confirmed facts from hypotheses. For authentication and runtime configuration, document which system owns issuance and validation and which configuration values activate each subsystem before adding local sessions, duplicate secrets, or parallel enable flags.
 - Trace every affected operation end to end: request parsing, authentication, authorization or resource ownership, validation, business logic, persistence, response serialization, and errors.
 - Define changed GraphQL or HTTP fields and operations explicitly. Include required versus optional inputs, nullability, defaults, response shape, error cases, and backward-compatibility expectations.
 - Keep work within the stated scope. Do not silently add adjacent schema changes, data migrations, refactors, or behavior changes that are not required by the issue contract.
@@ -26,7 +26,7 @@ Apply this workflow to changes under `backend/`, including Go services, GraphQL 
 - Add regression tests at the narrowest reliable seam, then add operation-level coverage when behavior crosses authentication, authorization, serialization, or persistence boundaries.
 - Cover the successful path and relevant failures: missing or malformed input, unauthenticated access, cross-user access, absent resources, persistence errors, and boundary values.
 - For migrations, verify discovery and application behavior. When database access is available, exercise the migration and affected queries against PostgreSQL; otherwise state that integration coverage was not run and why.
-- Before declaring a backend task verified, inspect the documented configuration and run the exact real integration or live command when the configured service is available. If the service is unavailable, record the failed availability check and leave the task incomplete.
+- Before declaring a backend task verified, inspect the documented configuration and run the exact real integration or live command when the configured service is available. A fake, mock, synthetic TCP listener, httptest server, or in-memory repository is not live integration evidence and must not be reported as such. If the service is unavailable, record the failed availability check and leave the task incomplete.
 - Run focused tests while implementing. Before handoff, run these commands unfiltered from `backend/` and require zero exit status:
 
   ```powershell

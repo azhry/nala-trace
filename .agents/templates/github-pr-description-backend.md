@@ -64,7 +64,7 @@ staging trace: https://<verified-staging-trace-host>
 The commands must exit 0. Replace the example paths and hosts with the actual
 observed values before handoff.
 
-#### Step 1 — Load the real staging test account
+#### Step 1 — Load the real staging test account for Nala Labs auth
 
 ```bash
 : "${CASDOOR_ADMIN_TEST_USERNAME:?Load the staging fixture from .agents/.env}"
@@ -82,7 +82,10 @@ staging account fixture loaded
 
 The command must exit 0 without printing the username or password.
 
-#### Step 2 — Get the Nala Labs session JWT
+#### Step 2 — Get the Nala Labs session JWT from Nala Labs auth
+
+The login request below goes to `NALA_LABS_AUTH_URL`; Nala Trace does not
+perform a separate Casdoor login.
 
 ```bash
 login_response="$(curl --silent --show-error --fail-with-body \
@@ -102,7 +105,10 @@ Expected response:
 
 The request must return HTTP 200 and keep the JWT only in the current shell.
 
-#### Step 3 — Create the real Codex Trace API token
+#### Step 3 — Create the real Codex Trace API token through Nala Labs auth
+
+The API-key request below also goes to Nala Labs auth. Nala Trace is called only
+after this Nala Labs credential flow has completed.
 
 ```bash
 api_key_response="$(curl --silent --show-error --fail-with-body \

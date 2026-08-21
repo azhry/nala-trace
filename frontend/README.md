@@ -21,6 +21,15 @@ The current UI uses hash navigation. Open a detail view with
 `http://localhost:5005/#/sessions/<id>`. A path such as `/sessions/<id>` is not
 an implemented client-side route.
 
+Authentication stays cookie-backed by default. The frontend also exposes a
+runtime-only in-memory auth seam in `frontend/src/api.js`: configure exactly one
+of `jwt` or `apiToken` at runtime if a trusted host application needs explicit
+credential forwarding. JWT mode sends `Authorization: Bearer ...` to
+`/api/auth/session`, `/sessions`, and `/sessions/<id>`. API-token mode sends
+`X-Nala-Labs-API-Key` to `/sessions` and `/sessions/<id>` and intentionally
+skips `/api/auth/session`, which expects a JWT. Do not place either credential
+in Vite env files, build-time config, or other bundle artifacts.
+
 The shell is source-owned and intentionally uses a compact observability workspace language: persistent navigation, low-contrast surfaces, rounded panels, status/tool chips, filterable rows, and keyboard-visible focus. Sessions, Evals, and Golden Set each have an observable destination; the local demo interactions are stateful until real API data is connected.
 
 ## Checks

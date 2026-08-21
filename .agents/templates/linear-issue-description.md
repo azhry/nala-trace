@@ -1,129 +1,222 @@
-# Linear issue description template
+## TL;DR
 
-Use this template when creating a task or when an existing task is too incomplete for another agent to implement safely. Replace every bracketed placeholder. Remove a conditional section only when it genuinely does not apply.
+[In 1–3 sentences, explain what this issue changes, who is affected, and the observable outcome.]
 
-The issue description is the implementation contract. Put all information required to execute and verify the task in the description itself, not only in comments, private reasoning, a parent issue, or a PR. Comments may record progress, but an agent must be able to implement the issue correctly from its description plus the repository instructions.
+## Process Flow
 
-## Authoring and readiness gate
+Show the actors and services involved, then mark the implementation change with the highlighted region and the IMPLEMENTATION CHANGE annotation. Keep the diagram focused on the normal path.
 
-- Read the complete source request, parent issue, linked references, comments, relevant code, and tests before finalizing this description.
-- Translate every source requirement into an explicit, independently checkable item below. Do not replace literal requirements with a shorter summary.
-- Preserve user-supplied reference material verbatim.
-- If several symptoms share one root cause, one issue may cover them only when every affected surface, reproduction path, and acceptance check is enumerated.
-- If a source task requires one issue or dependency pair per operation/work item, create them literally. Do not silently aggregate operations.
-- Put API contracts, affected flows, dependencies, and mandatory checks in the description. A comment is not a substitute.
-- Re-read the saved issue and perform the Completion self-audit before moving it out of backlog/todo or beginning implementation.
+~~~mermaid
+sequenceDiagram
+    actor Human as Human
+    participant Client as Client/UI
+    participant API as Backend API
+    participant Store as Database/External Service
 
-## Category
+    Human->>Client: Start the normal flow
+    Client->>API: Send the request
+    rect rgb(255, 244, 204)
+        Note over API,Store: IMPLEMENTATION CHANGE HERE
+        API->>Store: Apply the changed operation
+        Store-->>API: Return the result
+    end
+    API-->>Client: Return the response
+    Client-->>Human: Show the observable outcome
+~~~
 
-**[Bug | Feature | Refactor | Chore | Research] — [short category qualifier].**
+<details>
+<summary>Diagram source</summary>
 
-> Readiness rule: a design reference, comment, private plan, or parent issue by itself is incomplete. Before implementation begins, this description must contain every applicable heading in this template with evidence-based content.
+~~~mermaid
+sequenceDiagram
+    actor Human as Human
+    participant Client as Client/UI
+    participant API as Backend API
+    participant Store as Database/External Service
 
-## Problem analysis
+    Human->>Client: Start the normal flow
+    Client->>API: Send the request
+    rect rgb(255, 244, 204)
+        Note over API,Store: IMPLEMENTATION CHANGE HERE
+        API->>Store: Apply the changed operation
+        Store-->>API: Return the result
+    end
+    API-->>Client: Return the response
+    Client-->>Human: Show the observable outcome
+~~~
 
-### Reference material
+</details>
 
-- Preserve any user-supplied HTML, mockups, screenshots, and example data below this section verbatim. Treat it as the visual/behavioral source of truth unless the issue explicitly says otherwise.
-- Parent/source issue: [exact issue ID and the inherited requirements this issue must satisfy].
+Legend: the pale-yellow region and annotation identify where the implementation changes. Replace the example actors, services, messages, and change annotation with the real flow before publishing the issue.
 
-### Confirmed findings
+## Before-After
 
-1. **[Symptom or missing behavior]** — [evidence, affected route/module, and user impact].
-2. **[Cause or implementation gap]** — [evidence and affected path].
+### Before
 
-### Discovery evidence
+~~~mermaid
+sequenceDiagram
+    actor Human as Human
+    participant Client as Client/UI
+    participant API as Backend API
+    participant Store as Database/External Service
 
-- Source-code review: [finding and exact paths, or "Not performed / not applicable"].
-- Runtime/browser/API validation: [finding, viewport/scenario, and observable result, or "Not performed" with reason].
-- Discovery classification: [source review | runtime validation | both].
+    Human->>Client: Start the normal flow
+    Client->>API: Existing request
+    API->>Store: Existing operation
+    Store-->>API: Existing result
+    API-->>Client: Existing response
+    Client-->>Human: Existing outcome
+~~~
 
-### Affected surfaces and flows
+<details>
+<summary>Before diagram source</summary>
 
-- [Entry point] → [normal in-product navigation] → [affected page/control/outcome].
-- [Additional page, viewport, role, state, or shared occurrence].
+~~~mermaid
+sequenceDiagram
+    actor Human as Human
+    participant Client as Client/UI
+    participant API as Backend API
+    participant Store as Database/External Service
 
-### Reproduction steps
+    Human->>Client: Start the normal flow
+    Client->>API: Existing request
+    API->>Store: Existing operation
+    Store-->>API: Existing result
+    API-->>Client: Existing response
+    Client-->>Human: Existing outcome
+~~~
 
-1. [Start from the normal user entry point; do not rely on a direct URL unless the route is only reachable that way].
-2. [Perform the user action].
-3. [State the actual result and the expected result].
+</details>
 
-### Scope boundary
+### After
 
-- In scope: [specific behavior, files, routes, or components].
-- Out of scope: [nearby work deliberately excluded].
-- Open questions / assumptions: [only unresolved decisions; label assumptions explicitly].
+~~~mermaid
+sequenceDiagram
+    actor Human as Human
+    participant Client as Client/UI
+    participant API as Backend API
+    participant NewService as Changed Service
+    participant Store as Database/External Service
 
-## Data / API contract (required for data-backed work)
+    Human->>Client: Start the normal flow
+    Client->>API: Same entry request
+    rect rgb(255, 244, 204)
+        Note over API,NewService: IMPLEMENTATION CHANGE HERE
+        API->>NewService: New or changed operation
+        NewService->>Store: Updated persistence/integration call
+        Store-->>NewService: Updated result
+        NewService-->>API: Changed service response
+    end
+    API-->>Client: Updated response
+    Client-->>Human: Updated observable outcome
+~~~
 
-Repeat this subsection for every operation used or required by the UI. Do not group distinct operations unless the source issue explicitly permits one work item.
+<details>
+<summary>After diagram source</summary>
 
-### [UI surface or flow] — [operation name or endpoint]
+~~~mermaid
+sequenceDiagram
+    actor Human as Human
+    participant Client as Client/UI
+    participant API as Backend API
+    participant NewService as Changed Service
+    participant Store as Database/External Service
 
-- API type: [GraphQL query | GraphQL mutation | REST method and path].
-- Operation/path: [exact operation name or HTTP method/path].
-- Request variables/payload:
-  - `[field]`: [type, required/optional, meaning].
-- Response structure:
-  - `[field]`: [type, meaning, nullable/default behavior].
-- UI transformation: [how API fields map to view/store/domain fields].
-- Missing fields or mismatches: [exact omissions, naming differences, lossy transformations, or "None"].
-- Error/loading/empty behavior: [required observable behavior].
+    Human->>Client: Start the normal flow
+    Client->>API: Same entry request
+    rect rgb(255, 244, 204)
+        Note over API,NewService: IMPLEMENTATION CHANGE HERE
+        API->>NewService: New or changed operation
+        NewService->>Store: Updated persistence/integration call
+        Store-->>NewService: Updated result
+        NewService-->>API: Changed service response
+    end
+    API-->>Client: Updated response
+    Client-->>Human: Updated observable outcome
+~~~
 
-## Dependencies and sequencing
+</details>
 
-- Delivery mode: [Independent green PR | Intentional-red test PR | Paired implementation consuming merged red test].
-- Blocked by: [exact issue IDs and what each must deliver, or "None"].
-- Blocks: [exact issue IDs, or "None"].
-- Required order: [for example, "Create/complete test coverage first; implementation must remain blocked until then"].
-- Start gate: [state/evidence that must exist before this issue may begin].
-- Handoff artifact: [exact commit/branch/PR and expected red or green state, or "Not applicable"].
-- Merge vehicle: [this issue's PR | other explicitly named issue].
+Replace both diagrams with the real before and after paths. Keep the same actors and services where they are unchanged, and make the changed sequence visibly distinct.
 
-For an intentional-red test issue, keep its PR and the paired production PR separate. The test PR may merge into `main` when the issue explicitly authorizes that delivery mode, its designated GitHub check fails only at the recorded contract assertion, and compilation, infrastructure/setup, cleanup, and unrelated checks remain green. Do not treat that designated expected-red check as a blocker. The paired implementation issue then starts from updated `main`, makes the same test green without weakening it, and merges through its own PR.
+## Implementation Manual Test and Verification
 
-## Implementation plan
+Write the verification directly in this description and in the PR description as separate Bash steps. Do not create a script file or paste one large bulk script. Replace every bracketed value with the real staging target, fixture, path, payload, and observed response before handoff. Never use fake records, mocks, or copied secrets.
 
-1. [Concrete change and expected behavior].
-2. [Concrete change and expected behavior].
-3. Add or update regression coverage at [unit / integration / E2E seam].
+### Step 0 — Load the verified staging environment
 
-## Definition of Done
+~~~bash
+set -a
+. .agents/.env
+set +a
+: "${STAGING_API_BASE_URL:?Set this to the verified staging API URL}"
+export API_BASE_URL="$STAGING_API_BASE_URL"
+printf 'staging target: %s\n' "$API_BASE_URL"
+~~~
 
-- [Observable user or system outcome].
-- [Accessibility, data, error, or responsive behavior when relevant].
-- [No interactive-looking control is left as a no-op, if this is UI work].
-- [Relevant automated tests pass, or pre-existing failures are identified separately].
-- [Required delivery artifact: commit, PR, tracker update].
-- [For intentional-red delivery: the designated GitHub check fails at the exact assertion after successful setup, unrelated checks remain green, the test-only PR merges, and the paired implementation issue is updated to start from that merged test].
+Expected response:
 
-## Correctness checks
+~~~text
+staging target: https://[verified-staging-host]
+~~~
 
-- Automated: [exact command/test suite, expected assertions, and test seam].
-- Interactive: [desktop/mobile/browser flows, keyboard checks, or API scenarios].
-- Visual (when a design reference exists): [desktop and mobile comparison against the supplied reference; content/images/colors/typography/layout checklist].
-- Build/lint: [exact commands or CI checks].
-- Known limitations / pre-existing failures: [exact failing command, affected path, and why it is unrelated; or "None known"].
+The command exits 0 and prints only the verified target, never credentials.
 
-## Required execution protocol
+### Step 1 — Authenticate when the flow requires it
 
-1. Read this entire description and the repository instructions before changing code.
-2. Treat every enumerated surface, operation, field, state, viewport, and acceptance criterion as required scope. Do not silently omit, combine, or substitute items.
-3. Respect the dependency start gate above. A blocked implementation issue must not begin before its prerequisite delivers the specified evidence.
-4. Keep required contract information in this description. If new evidence changes the contract, update and re-read the description before continuing.
-5. Do not move the issue to review until the Completion self-audit is recorded with evidence.
-6. For paired red-test delivery, keep the issues and PRs separate: merge the explicitly authorized test-only PR first, then start the implementation issue from updated `main` and make that test green.
+Use the real fixture account supplied by .agents/.env, keep the token in the current shell, and print only a redacted response.
 
-## Completion self-audit
+~~~bash
+login_response="$(curl --fail-with-body --silent --show-error \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data "{\"username\":\"$CASDOOR_TEST_USERNAME\",\"password\":\"$CASDOOR_TEST_PASSWORD\"}" \
+  "$API_BASE_URL/api/auth/login")"
+printf '%s\n' "$login_response" | jq 'del(.token)'
+export TOKEN="$(printf '%s' "$login_response" | jq -er '.token')"
+~~~
 
-Before handoff, record the completed checklist in the issue or PR and link the evidence:
+Expected response:
 
-- [ ] Every in-scope requirement and every source/parent requirement is mapped to an implemented outcome or an explicit blocker.
-- [ ] Every affected surface and normal navigation path was exercised where applicable.
-- [ ] Every listed API operation, request field, response field, and transformation was implemented and tested where applicable.
-- [ ] Every required viewport, accessibility behavior, error state, empty state, and loading state was verified where applicable.
-- [ ] Dependency ordering was respected and blocker relationships remain correct.
-- [ ] Delivery mode, handoff artifact, merge vehicle, and paired issue are explicit and consistent.
-- [ ] Exact verification commands and exit statuses are recorded; failures are not described as passes.
-- [ ] The final diff, commit, PR, and tracker state contain only this issue's intended work.
+~~~json
+{"authenticated":true,"user":{"id":"[verified-fixture-user-id]","tier":"[verified-fixture-tier]"}}
+~~~
+
+The login command exits 0 and exports TOKEN; do not place the token in the issue, PR, shell history, or a committed file.
+
+### Step 2 — Exercise the changed behavior
+
+~~~bash
+curl --fail-with-body --silent --show-error \
+  --header "Authorization: Bearer $TOKEN" \
+  --header 'Content-Type: application/json' \
+  --request [GET|POST|PATCH|DELETE] \
+  --data '[real staging payload]' \
+  "$API_BASE_URL/[documented-staging-path]"
+~~~
+
+Expected response:
+
+~~~json
+[redacted response captured from the real staging request]
+~~~
+
+The command exits 0 and demonstrates the issue’s observable success contract.
+
+### Step 3 — Exercise the required regression, error, or ownership case
+
+~~~bash
+[one Bash command for the real staging regression/error/ownership scenario]
+~~~
+
+Expected response:
+
+~~~text
+[exact status, response field, or assertion observed in staging]
+~~~
+
+The command exits with the status defined by the contract, and the response proves the boundary case rather than only proving that the endpoint is reachable.
+
+### Step 4 — Record evidence
+
+For every step, record the exact command, exit status, sanitized response, and environment/fixture identity. Keep credentials, JWTs, API keys, and unrelated diagnostics out of the issue and PR.

@@ -24,12 +24,16 @@ func UserFromContext(ctx context.Context) (User, bool) {
 
 type Middleware struct {
 	iam         *IAMClient
-	apiKeyStore *APIKeyStore
+	apiKeyStore apiKeyValidator
 	origin      string
 	authTimeout time.Duration
 }
 
-func NewMiddleware(cfg config.Config, iam *IAMClient, apiKeyStore *APIKeyStore) *Middleware {
+type apiKeyValidator interface {
+	Validate(context.Context, string) (User, error)
+}
+
+func NewMiddleware(cfg config.Config, iam *IAMClient, apiKeyStore apiKeyValidator) *Middleware {
 	return &Middleware{
 		iam:         iam,
 		apiKeyStore: apiKeyStore,
@@ -66,7 +70,12 @@ func (m *Middleware) authenticate(request *http.Request) (User, int, string) {
 	if m == nil {
 		return User{}, http.StatusUnauthorized, "unauthenticated"
 	}
-	if apiKey := firstHeader(request, "X-Nala-Labs-API-Key", "X-API-Key"); apiKey != "" {
+	apiKey := firstHeader(request, "X-Nala-Labs-API-Key", "X-API-Key")
+	authorization := strings.TrimSpace(request.Header.Get("Authorization"))
+	if apiKey != "" && authorization != "" {
+		return User{}, http.StatusUnauthorized, "ambiguous_credentials"
+	}
+	if apiKey != "" {
 		if m.apiKeyStore == nil {
 			return User{}, http.StatusServiceUnavailable, "auth_provider_unavailable"
 		}
@@ -85,7 +94,6 @@ func (m *Middleware) authenticate(request *http.Request) (User, int, string) {
 		}
 		return User{}, http.StatusUnauthorized, "unauthenticated"
 	}
-	authorization := strings.TrimSpace(request.Header.Get("Authorization"))
 	if authorization == "" {
 		return User{}, http.StatusUnauthorized, "unauthenticated"
 	}

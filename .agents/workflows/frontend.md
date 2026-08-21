@@ -8,10 +8,11 @@ Apply this workflow to new or changed UI, including fixes to an existing screen.
 
 ## Delegation
 
-Spawn a dedicated frontend implementation subagent. It owns implementation, interaction testing, responsive verification, commit, push, and PR handoff. An exploration/research subagent may provide context, but never substitutes for this required implementation subagent; the primary agent must not perform the implementation itself. If Agent Manager cannot expose live transcript output, report that limitation and keep the implementation subagent running. Do not substitute primary-agent implementation unless the user explicitly changes the workflow.
+Spawn a dedicated frontend implementation subagent. It owns implementation, interaction testing, responsive verification, commit, push, and PR handoff. The subagent must use an isolated worktree or an explicitly coordinated branch and must not switch the primary agent’s shared checkout while the primary has uncommitted files. An exploration/research subagent may provide context, but never substitutes for this required implementation subagent; the primary agent must not perform the implementation itself. If Agent Manager cannot expose live transcript output, report that limitation and keep the implementation subagent running. Do not substitute primary-agent implementation unless the user explicitly changes the workflow.
 
 ## Implementation
 
+- Before selecting a production frontend runtime, inspect sibling service implementations and the issue’s deployment topology. When frontend and backend are separate processes, keep the image/runtime separate and document the ingress/proxy contract; do not add Nginx or embed a backend without an explicit requirement.
 - Reproduce supplied designs closely and use meaningful demo data when real data is unavailable.
 - Treat supplied HTML, screenshots, and mockups as immutable visual reference material. Preserve HTML in the task description verbatim, and translate its observable requirements into a checklist before coding: content, images, colors, typography, spacing, responsive layout, and interaction states.
 - When the reference contains example content, the no-real-data/demo state must render that content faithfully. Do not silently replace required images, cards, rows, or labels with empty states, placeholders, or a different data shape.

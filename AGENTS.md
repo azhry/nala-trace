@@ -13,6 +13,15 @@
 - For a fix to an existing PR, branch from that PR's branch and update the existing PR; do not open a duplicate unless asked.
 - Commit, push, and open a PR without requesting permission when the repository/remote is in scope. Use a draft PR unless asked for ready review.
 
+## Human reviewability and PR sequencing
+
+- Treat human attention as a finite review budget. Each PR must represent one coherent behavior or one independently verifiable delivery unit that a human can understand, test, and manually verify in one focused review.
+- Apply a hard split when a change contains multiple independent outcomes, crosses unrelated product areas, combines separate migration/behavior or infrastructure/application concerns, or cannot be explained and verified as one focused unit. Do not use an arbitrary line-count threshold as a substitute for review judgment.
+- Before implementation, write the PR shape: each PR's focused scope, base branch, review position, dependency chain, merge condition, and manual verification boundary.
+- Use stacked PRs when a later review unit depends on an earlier one. State the review and merge order explicitly, keep each branch based on its predecessor, and merge from the bottom of the stack upward.
+- Use parallel PRs only when the units have no required dependency or conflicting shared change. Give the group a shared label/order and state that its members may be reviewed or merged independently.
+- Every PR description must include a `Review and merge order` section identifying this PR's position, base/dependencies, parallel group, merge conditions, and the human-verification focus. Keep unrelated cleanup out of the review unit.
+
 ## Routing
 
 - For UI/frontend work, read [frontend workflow](.agents/workflows/frontend.md) in full, then spawn the required frontend implementation subagent.
@@ -34,6 +43,8 @@ For a request containing a Linear issue ID such as `AZH-385`:
 8. After the human description is saved, inspect the relevant code and tests, complete the [Linear agent-comment template](.agents/templates/linear-issue-comment.md), and post it as an agent-facing comment. A mockup, full HTML file, screenshot, or one-line request is reference material, not an implementation-ready contract; the comment must add Category, confirmed code-backed analysis, scope boundaries, implementation plan, Definition of Done, correctness checks, and execution controls.
 9. The two Linear updates are a hard readiness gate: private reasoning, a todo list, a chat summary, or a code comment does not satisfy it. Verify both tracker mutations succeeded, then re-read the saved human description and agent comment before creating a branch, editing implementation files, moving the issue active, or delegating implementation.
 10. Treat the completed human description and agent comment together as the implementation contract. Only then begin implementation. For frontend work, also follow the frontend workflow and its delegation requirement.
+
+- For visual-reference work, the readiness re-read must confirm the saved tracker rendering itself and the exact pairing between each inline asset and its source. API or text-presence counts alone do not satisfy the gate.
 
 ## Credentials and delivery preflight
 

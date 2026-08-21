@@ -19,6 +19,15 @@ Apply this workflow to Linear, GitHub, issue, pull-request, and release work.
 - Use exact IDs for mutations and report changed fields plus blockers.
 - When an API fallback is permitted, obtain the needed credential from a non-printing secret store at runtime. Never use a generic file reader that serializes config contents, and never place a literal token in a command, source file, temporary file, transcript, URL, or issue comment. If a safe secret-loading path is unavailable, record the blocker and stop.
 
+### Human reviewability and PR sequencing
+
+- Treat human attention as a finite review budget. A PR is complete only when it carries one coherent behavior or one independently verifiable delivery unit that a human can understand, test, and manually verify in one focused review.
+- Split the work before implementation when the issue contains multiple independent outcomes, crosses unrelated product areas, combines separate migration/behavior or infrastructure/application concerns, or cannot be explained and verified as one focused unit. Do not enforce an arbitrary line-count threshold; reviewability, dependency order, and manual verification effort are the hard boundary.
+- Record the PR shape before editing: focused scope, base branch, review position, dependency chain, merge condition, parallel group, and manual verification boundary for every planned PR.
+- Use a stack when a later unit depends on an earlier unit. Later branches must name their predecessor as the base, and PRs must be reviewed and merged from the bottom of the stack upward.
+- Use parallel PRs only when units have no required dependency or conflicting shared change. State the parallel group and that its members are independently reviewable and mergeable.
+- Every PR body must contain the `Review and merge order` section from the applicable PR template. It is the handoff contract for reviewer focus, stack order, dependencies, parallelism, merge conditions, and manual verification.
+
 ### Paired red-test delivery
 
 Use this workflow only when the tracker explicitly defines separate test and implementation issues and requires the test issue to capture currently missing behavior before production code changes.
@@ -46,6 +55,7 @@ main ── red-test PR merge (documented test command remains intentionally red
 - Complete the GitHub authentication/repository-access preflight and create the required branch before the first implementation write. A later branch creation does not repair edits made on `main`. If the worktree is dirty, preserve it; use an isolated worktree when the task can proceed safely, otherwise report the blocker.
 - Stage only intended files. Run proportionate verification and distinguish pre-existing failures from regressions.
 - Before staging and before handoff, inspect `git status --short` and the intended diff. Keep generated diagnostics (screenshots, browser traces, lint logs, downloaded samples) outside the repository or in ignored temporary storage. Clean up only artifacts created by the current task.
+- For visual-reference work, the readiness re-read must confirm the saved tracker rendering itself and the exact pairing between each inline asset and its source. API or text-presence counts alone do not satisfy the gate.
 - A verification claim requires a successful recorded exit status for the exact command or browser flow. A command that reaches partial compilation but exits non-zero is a failure. Report baseline failures separately with their command and affected path; never describe them as a passing build, lint, test, or check.
 - Run build, typecheck, lint, and test commands unfiltered before using filters for diagnostics. A pipe to `findstr`, `Select-String`, or a similar filter cannot establish that the original command passed.
 - Build the PR body from the applicable repository template: [backend](../templates/github-pr-description-backend.md), [frontend](../templates/github-pr-description-frontend.md), or [tests](../templates/github-pr-description-tests.md). Use the tests template for test-only work, including intentional red-test handoffs. For a cross-cutting PR, start with the template matching the primary implementation and include every applicable section from the others.

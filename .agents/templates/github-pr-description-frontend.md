@@ -27,6 +27,17 @@ The PR must record observable browser evidence, not only component names or scre
 
 - [Nearby behavior intentionally not changed.]
 
+## Review and merge order
+
+- Delivery shape: [Single focused PR | Stacked PR | Parallel PR group]
+- This PR's review position: [Standalone | PR 1 of N | PR N of N | Parallel member A/B]
+- Base branch: [main or predecessor branch]
+- Depends on: [PR/commit and the exact delivered behavior, or "None"]
+- Review order: [Exact order, or "Any order within <parallel group>"]
+- Merge order and conditions: [Exact merge sequence and prerequisite checks, or "Any order; all required checks green"]
+- Parallel group: [Group name and independent members, or "None"]
+- Human-verification focus: [The one journey, viewport, or interaction a reviewer should prioritize]
+
 ## Affected journeys
 
 Describe normal in-product navigation. Do not use direct route entry as the only evidence when a normal path should exist.

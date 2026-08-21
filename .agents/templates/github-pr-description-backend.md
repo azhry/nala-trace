@@ -28,6 +28,17 @@ The PR description is the review and handoff record. Do not claim a check passed
 
 - [Nearby work intentionally not changed.]
 
+## Review and merge order
+
+- Delivery shape: [Single focused PR | Stacked PR | Parallel PR group]
+- This PR's review position: [Standalone | PR 1 of N | PR N of N | Parallel member A/B]
+- Base branch: [main or predecessor branch]
+- Depends on: [PR/commit and the exact delivered behavior, or "None"]
+- Review order: [Exact order, or "Any order within <parallel group>"]
+- Merge order and conditions: [Exact merge sequence and prerequisite checks, or "Any order; all required checks green"]
+- Parallel group: [Group name and independent members, or "None"]
+- Human-verification focus: [The one behavior and manual check a reviewer should prioritize]
+
 ## Verification
 
 ### Manual request/response sequence

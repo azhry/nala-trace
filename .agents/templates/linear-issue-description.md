@@ -6,46 +6,19 @@
 
 Show the actors and services involved, then mark the implementation change with the highlighted region and the IMPLEMENTATION CHANGE annotation. Keep the diagram focused on the normal path.
 
-~~~mermaid
-sequenceDiagram
-    actor Human as Human
-    participant Client as Client/UI
-    participant API as Backend API
-    participant Store as Database/External Service
+![Rendered Process Flow](<uploaded Linear SVG asset URL>)
 
-    Human->>Client: Start the normal flow
-    Client->>API: Send the request
-    rect rgb(255, 244, 204)
-        Note over API,Store: IMPLEMENTATION CHANGE HERE
-        API->>Store: Apply the changed operation
-        Store-->>API: Return the result
-    end
-    API-->>Client: Return the response
-    Client-->>Human: Show the observable outcome
+The published issue must show the rendered SVG inline, not only diagram syntax. Keep the exact SVG source used for this image in the native Linear collapsible block below. Do not use a `mermaid` fence for SVG source: Linear renders that fence as a diagram.
+
++++ Diagram source
+
+~~~xml
+<svg>
+[paste the exact SVG source used for the inline image]
+</svg>
 ~~~
 
-<details>
-<summary>Diagram source</summary>
-
-~~~mermaid
-sequenceDiagram
-    actor Human as Human
-    participant Client as Client/UI
-    participant API as Backend API
-    participant Store as Database/External Service
-
-    Human->>Client: Start the normal flow
-    Client->>API: Send the request
-    rect rgb(255, 244, 204)
-        Note over API,Store: IMPLEMENTATION CHANGE HERE
-        API->>Store: Apply the changed operation
-        Store-->>API: Return the result
-    end
-    API-->>Client: Return the response
-    Client-->>Human: Show the observable outcome
-~~~
-
-</details>
++++
 
 Legend: the pale-yellow region and annotation identify where the implementation changes. Replace the example actors, services, messages, and change annotation with the real flow before publishing the issue.
 
@@ -53,91 +26,35 @@ Legend: the pale-yellow region and annotation identify where the implementation 
 
 ### Before
 
-~~~mermaid
-sequenceDiagram
-    actor Human as Human
-    participant Client as Client/UI
-    participant API as Backend API
-    participant Store as Database/External Service
+![Rendered Before diagram](<uploaded Linear SVG asset URL>)
 
-    Human->>Client: Start the normal flow
-    Client->>API: Existing request
-    API->>Store: Existing operation
-    Store-->>API: Existing result
-    API-->>Client: Existing response
-    Client-->>Human: Existing outcome
++++ Before diagram source
+
+~~~xml
+<svg>
+[paste the exact SVG source used for the inline image]
+</svg>
 ~~~
 
-<details>
-<summary>Before diagram source</summary>
-
-~~~mermaid
-sequenceDiagram
-    actor Human as Human
-    participant Client as Client/UI
-    participant API as Backend API
-    participant Store as Database/External Service
-
-    Human->>Client: Start the normal flow
-    Client->>API: Existing request
-    API->>Store: Existing operation
-    Store-->>API: Existing result
-    API-->>Client: Existing response
-    Client-->>Human: Existing outcome
-~~~
-
-</details>
++++
 
 ### After
 
-~~~mermaid
-sequenceDiagram
-    actor Human as Human
-    participant Client as Client/UI
-    participant API as Backend API
-    participant NewService as Changed Service
-    participant Store as Database/External Service
+![Rendered After diagram](<uploaded Linear SVG asset URL>)
 
-    Human->>Client: Start the normal flow
-    Client->>API: Same entry request
-    rect rgb(255, 244, 204)
-        Note over API,NewService: IMPLEMENTATION CHANGE HERE
-        API->>NewService: New or changed operation
-        NewService->>Store: Updated persistence/integration call
-        Store-->>NewService: Updated result
-        NewService-->>API: Changed service response
-    end
-    API-->>Client: Updated response
-    Client-->>Human: Updated observable outcome
++++ After diagram source
+
+~~~xml
+<svg>
+[paste the exact SVG source used for the inline image]
+</svg>
 ~~~
 
-<details>
-<summary>After diagram source</summary>
-
-~~~mermaid
-sequenceDiagram
-    actor Human as Human
-    participant Client as Client/UI
-    participant API as Backend API
-    participant NewService as Changed Service
-    participant Store as Database/External Service
-
-    Human->>Client: Start the normal flow
-    Client->>API: Same entry request
-    rect rgb(255, 244, 204)
-        Note over API,NewService: IMPLEMENTATION CHANGE HERE
-        API->>NewService: New or changed operation
-        NewService->>Store: Updated persistence/integration call
-        Store-->>NewService: Updated result
-        NewService-->>API: Changed service response
-    end
-    API-->>Client: Updated response
-    Client-->>Human: Updated observable outcome
-~~~
-
-</details>
++++
 
 Replace both diagrams with the real before and after paths. Keep the same actors and services where they are unchanged, and make the changed sequence visibly distinct.
+
+After saving, reopen the issue in Linear and visually verify that all three images render inline, each source block is collapsed by default, and expanding a source shows literal SVG/XML text rather than a rendered diagram. API text counts alone do not establish this acceptance criterion.
 
 ## Implementation Manual Test and Verification
 

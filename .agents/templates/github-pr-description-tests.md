@@ -17,6 +17,17 @@ Choose exactly one outcome mode:
 - Merge authorization: [Issue text authorizing intentional-red merge, or "Not applicable"]
 - Paired issue start point: [Updated `main` after this PR merges, or "Not applicable"]
 
+## Review and merge order
+
+- Delivery shape: [Single focused PR | Stacked PR | Parallel PR group]
+- This PR's review position: [Standalone | PR 1 of N | PR N of N | Parallel member A/B]
+- Base branch: [main or predecessor branch]
+- Depends on: [PR/commit and the exact delivered behavior, or "None"]
+- Review order: [Exact order, or "Any order within <parallel group>"]
+- Merge order and conditions: [Exact merge sequence and prerequisite checks, or "Any order; all required checks green"]
+- Parallel group: [Group name and independent members, or "None"]
+- Human-verification focus: [The contract assertion, fixture boundary, or test seam a reviewer should prioritize]
+
 ## Test contract
 
 - Behavior under test: [Observable contract.]

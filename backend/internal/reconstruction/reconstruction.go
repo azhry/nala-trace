@@ -18,6 +18,8 @@ type OrderedEvent struct {
 	OriginalIndex int
 }
 
+const maxReconstructionPayloadBytes = 1 << 20
+
 func Order(events []storage.HookEvent) []OrderedEvent {
 	ordered := make([]OrderedEvent, len(events))
 	for index, event := range events {
@@ -45,17 +47,20 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 		raw := payloadJSON(event.Payload)
 		timelineID := eventID(event, item.OriginalIndex)
 		reason := partialReason(event)
+		payloadSafe := payloadIssue(event.Payload) == ""
 		kind := "lifecycle"
 		var toolCallIndex *int
-		if role := conversationRole(event.HookEventName); role != "" {
-			if content := messageContent(event.Payload, event.HookEventName); content != nil {
-				result.Conversation = append(result.Conversation, trace.ConversationItem{
-					Role:       role,
-					Content:    content,
-					OccurredAt: event.ReceivedAt.UTC(),
-					TurnID:     event.TurnID,
-					Raw:        raw,
-				})
+		if payloadSafe {
+			if role := conversationRole(event.HookEventName); role != "" {
+				if content := messageContent(event.Payload, event.HookEventName); content != nil {
+					result.Conversation = append(result.Conversation, trace.ConversationItem{
+						Role:       role,
+						Content:    content,
+						OccurredAt: event.ReceivedAt.UTC(),
+						TurnID:     event.TurnID,
+						Raw:        raw,
+					})
+				}
 			}
 		}
 		if event.HookEventName == "PreToolUse" || event.HookEventName == "PostToolUse" {
@@ -68,9 +73,12 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 			call := trace.ToolCall{
 				ToolUseID: event.ToolUseID,
 				ToolName:  value(event.ToolName),
-				Input:     payloadField(event.Payload, "tool_input"),
+				Input:     nil,
 				Status:    trace.ToolCallPending,
 				Raw:       raw,
+			}
+			if payloadSafe {
+				call.Input = payloadField(event.Payload, "tool_input")
 			}
 			startedAt := event.ReceivedAt.UTC()
 			if !startedAt.IsZero() {
@@ -91,9 +99,11 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 				reason = joinReasons(reason, "missing_tool_use_id")
 			} else if index, exists := pending[toolID]; exists {
 				completedAt := event.ReceivedAt.UTC()
-				result.ToolCalls[index].Output = payloadField(event.Payload, "tool_response")
-				if result.ToolCalls[index].Output == nil {
-					result.ToolCalls[index].Output = payloadField(event.Payload, "response")
+				if payloadSafe {
+					result.ToolCalls[index].Output = payloadField(event.Payload, "tool_response")
+					if result.ToolCalls[index].Output == nil {
+						result.ToolCalls[index].Output = payloadField(event.Payload, "response")
+					}
 				}
 				if !completedAt.IsZero() {
 					result.ToolCalls[index].CompletedAt = &completedAt
@@ -107,14 +117,17 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 				result.ToolCalls = append(result.ToolCalls, trace.ToolCall{
 					ToolUseID: event.ToolUseID,
 					ToolName:  value(event.ToolName),
-					Output:    payloadField(event.Payload, "tool_response"),
+					Output:    nil,
 					Status:    trace.ToolCallUnmatched,
 					Raw:       raw,
 				})
+				if payloadSafe {
+					result.ToolCalls[index].Output = payloadField(event.Payload, "tool_response")
+				}
 				reason = joinReasons(reason, "unmatched_post_tool_use")
 			}
 		}
-		if event.HookEventName == "PreToolUse" {
+		if event.HookEventName == "PreToolUse" && payloadSafe {
 			if invocation, ok := detectSkillInvocation(event, timelineID, raw); ok {
 				result.SkillInvocations = append(result.SkillInvocations, invocation)
 			}
@@ -415,6 +428,9 @@ func partialReason(event storage.HookEvent) string {
 	if event.ReceivedAt.IsZero() {
 		return "missing_received_at"
 	}
+	if issue := payloadIssue(event.Payload); issue != "" {
+		return issue
+	}
 	for _, field := range []string{"timestamp", "occurred_at", "created_at"} {
 		value := payloadField(event.Payload, field)
 		if value == nil {
@@ -432,6 +448,9 @@ func partialReason(event storage.HookEvent) string {
 }
 
 func payloadJSON(payload bson.Raw) json.RawMessage {
+	if issue := payloadIssue(payload); issue != "" {
+		return json.RawMessage(fmt.Sprintf(`{"error":%q}`, issue))
+	}
 	if len(payload) == 0 {
 		return json.RawMessage(`{}`)
 	}
@@ -440,6 +459,20 @@ func payloadJSON(payload bson.Raw) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return json.RawMessage(encoded)
+}
+
+func payloadIssue(payload bson.Raw) string {
+	if len(payload) > maxReconstructionPayloadBytes {
+		return "payload_too_large"
+	}
+	if len(payload) == 0 {
+		return ""
+	}
+	var document bson.M
+	if err := bson.Unmarshal(payload, &document); err != nil {
+		return "malformed_payload"
+	}
+	return ""
 }
 
 func payloadField(payload bson.Raw, field string) json.RawMessage {

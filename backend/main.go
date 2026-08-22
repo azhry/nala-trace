@@ -64,6 +64,7 @@ func run() error {
 		server.HealthRoute(health),
 		server.ProtectedRoute("/ingest", server.NewIngestHandler(repository), middleware),
 		server.ProtectedRoute("/sessions", server.NewSessionsHandler(repository), middleware),
+		server.ProtectedRoute("/sessions/:id", server.NewSessionTraceHandler(repository), middleware),
 	}
 	api := server.New(cfg, routes...)
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

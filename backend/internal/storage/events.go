@@ -10,6 +10,7 @@ import (
 	"github.com/azhry/nala-trace/backend/internal/events"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const hookEventsCollectionName = "hook_events"
@@ -91,6 +92,7 @@ type HookEventRepository struct {
 	createIndex      func(context.Context) error
 	aggregate        func(context.Context) ([]SessionSummary, error)
 	aggregateForUser func(context.Context, string, int) ([]SessionSummary, error)
+	findForUser      func(context.Context, string, string) ([]HookEvent, error)
 }
 
 func NewHookEventRepository(database *mongo.Database) (*HookEventRepository, error) {
@@ -130,6 +132,31 @@ func NewHookEventRepository(database *mongo.Database) (*HookEventRepository, err
 			defer cursor.Close(ctx)
 			var rows []SessionSummary
 			if err := cursor.All(ctx, &rows); err != nil {
+				return nil, err
+			}
+			return rows, nil
+		},
+		findForUser: func(ctx context.Context, userID, sessionID string) ([]HookEvent, error) {
+			cursor, err := collection.Find(ctx, bson.D{
+				{Key: "user_id", Value: userID},
+				{Key: "session_id", Value: sessionID},
+			}, options.Find().SetSort(bson.D{
+				{Key: "received_at", Value: 1},
+				{Key: "_id", Value: 1},
+			}))
+			if err != nil {
+				return nil, err
+			}
+			defer cursor.Close(ctx)
+			rows := make([]HookEvent, 0)
+			for cursor.Next(ctx) {
+				var document hookEventDocument
+				if err := cursor.Decode(&document); err != nil {
+					return nil, err
+				}
+				rows = append(rows, hookEventFromDocument(document))
+			}
+			if err := cursor.Err(); err != nil {
 				return nil, err
 			}
 			return rows, nil
@@ -204,6 +231,51 @@ func (r *HookEventRepository) ListSessionSummariesForUser(ctx context.Context, u
 		rows = make([]SessionSummary, 0)
 	}
 	return rows, nil
+}
+
+func (r *HookEventRepository) ListSessionEventsForUser(ctx context.Context, userID, sessionID string) ([]HookEvent, error) {
+	if r == nil || r.findForUser == nil {
+		return nil, &RepositoryError{Operation: "missing_session_event_repository"}
+	}
+	if strings.TrimSpace(userID) == "" {
+		return nil, &RepositoryError{Operation: "missing_user_id"}
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return nil, &RepositoryError{Operation: "missing_session_id"}
+	}
+	rows, err := r.findForUser(ctx, userID, sessionID)
+	if err != nil {
+		return nil, &RepositoryError{Operation: "find_session_events"}
+	}
+	if rows == nil {
+		rows = make([]HookEvent, 0)
+	}
+	return rows, nil
+}
+
+func hookEventFromDocument(document hookEventDocument) HookEvent {
+	return HookEvent{
+		ID:            documentID(document.ID),
+		UserID:        document.UserID,
+		SessionID:     document.SessionID,
+		TurnID:        document.TurnID,
+		HookEventName: document.HookEventName,
+		ToolName:      document.ToolName,
+		ToolUseID:     document.ToolUseID,
+		Payload:       document.Payload,
+		ReceivedAt:    document.ReceivedAt,
+	}
+}
+
+func documentID(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	default:
+		return fmt.Sprint(typed)
+	}
 }
 
 func jsonToBSON(raw json.RawMessage) (bson.Raw, error) {

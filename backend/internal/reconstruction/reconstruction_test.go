@@ -2,6 +2,7 @@ package reconstruction
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,45 @@ func TestReconstructDetectsApplyPatchShellFileSkillAndAmbiguousPayloads(t *testi
 	}
 	if result.Files[0].EventID != "patch" || result.Files[0].ToolName != "patch" {
 		t.Errorf("file metadata = %#v", result.Files[0])
+	}
+}
+
+func TestReconstructBoundsMalformedAndOversizedPayloads(t *testing.T) {
+	oversized, err := bson.Marshal(map[string]any{"content": strings.Repeat("x", maxReconstructionPayloadBytes)})
+	if err != nil {
+		t.Fatalf("marshal oversized payload: %v", err)
+	}
+	base := time.Unix(30, 0).UTC()
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		{
+			ID:            "malformed",
+			UserID:        "user-1",
+			SessionID:     "session-1",
+			HookEventName: "UserPromptSubmit",
+			Payload:       bson.Raw{0x01},
+			ReceivedAt:    base,
+		},
+		{
+			ID:            "oversized",
+			UserID:        "user-1",
+			SessionID:     "session-1",
+			HookEventName: "Stop",
+			Payload:       bson.Raw(oversized),
+			ReceivedAt:    base.Add(time.Second),
+		},
+	})
+
+	if len(result.Timeline) != 2 {
+		t.Fatalf("timeline length = %d, want 2", len(result.Timeline))
+	}
+	if result.Timeline[0].PartialReason != "malformed_payload" || string(result.Timeline[0].Raw) != `{"error":"malformed_payload"}` {
+		t.Fatalf("malformed event = %#v", result.Timeline[0])
+	}
+	if result.Timeline[1].PartialReason != "payload_too_large" || string(result.Timeline[1].Raw) != `{"error":"payload_too_large"}` {
+		t.Fatalf("oversized event = %#v", result.Timeline[1])
+	}
+	if len(result.Conversation) != 0 || result.Summary.EventCount != 2 {
+		t.Fatalf("bounded trace = %#v", result)
 	}
 }
 

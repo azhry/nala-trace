@@ -29,7 +29,7 @@ Apply this workflow to changes under `backend/`, including Go services, GraphQL 
 - Before declaring a backend task verified, inspect the documented configuration and run the exact real integration or live command when the configured service is available. A fake, mock, synthetic TCP listener, httptest server, or in-memory repository is not live integration evidence and must not be reported as such. If the service is unavailable, record the failed availability check and leave the task incomplete.
 - Run focused tests while implementing. Before handoff, run these commands unfiltered from `backend/` and require zero exit status:
 
-  ```powershell
+  ```bash
   go build ./...
   go test ./... -count=1 -short -v
   go test ./... -count=1 -coverprofile=coverage.out -v
@@ -37,6 +37,10 @@ Apply this workflow to changes under `backend/`, including Go services, GraphQL 
   ```
 
 - Run `make test-integration` when the change depends on real database behavior and the required database is available. Do not claim integration verification when only unit tests ran.
+- Write temporary verification scripts for these checks in Bash and run them with `bash`. Do not generate a PowerShell verification script unless Bash is unavailable or the user explicitly requests PowerShell.
+- Automated unit, fake, mock, and SQL-mock tests are regression evidence at a seam. They do not substitute for API acceptance or prove real PostgreSQL, Vault, Casdoor, or other external-service behavior.
+- For every HTTP/API, authentication, persistence, or migration change, run a documented manual API flow against the actual built or started service at the exact URL and port recorded for handoff. If that flow cannot run, record it as not run or blocked; do not promote an isolated-port, stale-process, mock, or partial harness result to live acceptance.
+- Put copy-paste request steps in the issue or PR: working directory and launch command, readiness check, every documented fixture source checked before declaring authentication blocked, real request payloads, expected status/body, observed status/body, persistence boundary, fixture cleanup, and the command's exit status. Keep credentials, tokens, cookies, and connection strings out of the record.
 - Treat race-sensitive shared-state changes as requiring `go test -race` for the affected packages when the current platform supports it.
 - Report exact commands and exit results. Distinguish environment blockers and pre-existing failures from regressions introduced by the task.
 - Before staging and handoff, inspect `git status --short`; do not commit `coverage.out`, local environment files, database dumps, logs, credentials, or unrelated user files.

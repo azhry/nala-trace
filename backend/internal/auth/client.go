@@ -76,35 +76,61 @@ func (c *IAMClient) requestSession(ctx context.Context, authorize func(*http.Req
 }
 
 type upstreamUser struct {
-	ID           string   `json:"id"`
-	UserID       string   `json:"user_id"`
-	Subject      string   `json:"sub"`
-	Name         string   `json:"name"`
-	DisplayName  string   `json:"display_name"`
-	Email        string   `json:"email"`
-	Roles        []string `json:"roles"`
-	Groups       []string `json:"groups"`
-	Tags         []string `json:"tags"`
-	Admin        bool     `json:"admin"`
-	Tier         string   `json:"tier"`
-	Entitlements []string `json:"entitlements"`
+	ID           string            `json:"id"`
+	UserID       string            `json:"user_id"`
+	Subject      string            `json:"sub"`
+	Name         string            `json:"name"`
+	DisplayName  string            `json:"display_name"`
+	Email        string            `json:"email"`
+	Roles        []string          `json:"roles"`
+	Groups       []string          `json:"groups"`
+	Tags         []string          `json:"tags"`
+	Admin        bool              `json:"admin"`
+	Tier         string            `json:"tier"`
+	Entitlements entitlementValues `json:"entitlements"`
 }
 
 type upstreamResponse struct {
-	Authenticated *bool        `json:"authenticated"`
-	ID            string       `json:"id"`
-	UserID        string       `json:"user_id"`
-	Subject       string       `json:"sub"`
-	Name          string       `json:"name"`
-	DisplayName   string       `json:"display_name"`
-	Email         string       `json:"email"`
-	Roles         []string     `json:"roles"`
-	Groups        []string     `json:"groups"`
-	Tags          []string     `json:"tags"`
-	Admin         bool         `json:"admin"`
-	Tier          string       `json:"tier"`
-	Entitlements  []string     `json:"entitlements"`
-	User          upstreamUser `json:"user"`
+	Authenticated *bool             `json:"authenticated"`
+	ID            string            `json:"id"`
+	UserID        string            `json:"user_id"`
+	Subject       string            `json:"sub"`
+	Name          string            `json:"name"`
+	DisplayName   string            `json:"display_name"`
+	Email         string            `json:"email"`
+	Roles         []string          `json:"roles"`
+	Groups        []string          `json:"groups"`
+	Tags          []string          `json:"tags"`
+	Admin         bool              `json:"admin"`
+	Tier          string            `json:"tier"`
+	Entitlements  entitlementValues `json:"entitlements"`
+	User          upstreamUser      `json:"user"`
+}
+
+// entitlementValues accepts both the legacy list form and the current Nala
+// Labs entitlement object. The object contains policy metadata rather than a
+// stable list of names, so it is intentionally accepted without inventing
+// list values for the internal user contract.
+type entitlementValues []string
+
+func (values *entitlementValues) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*values = nil
+		return nil
+	}
+
+	var list []string
+	if err := json.Unmarshal(data, &list); err == nil {
+		*values = entitlementValues(list)
+		return nil
+	}
+
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(data, &object); err != nil {
+		return err
+	}
+	*values = nil
+	return nil
 }
 
 func decodeUser(data []byte, requireAuthenticated bool) (User, error) {

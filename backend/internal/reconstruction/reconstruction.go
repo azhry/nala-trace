@@ -3,6 +3,7 @@ package reconstruction
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -42,9 +43,21 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 	for _, item := range ordered {
 		event := item.Event
 		raw := payloadJSON(event.Payload)
+		timelineID := eventID(event, item.OriginalIndex)
 		reason := partialReason(event)
 		kind := "lifecycle"
 		var toolCallIndex *int
+		if role := conversationRole(event.HookEventName); role != "" {
+			if content := messageContent(event.Payload, event.HookEventName); content != nil {
+				result.Conversation = append(result.Conversation, trace.ConversationItem{
+					Role:       role,
+					Content:    content,
+					OccurredAt: event.ReceivedAt.UTC(),
+					TurnID:     event.TurnID,
+					Raw:        raw,
+				})
+			}
+		}
 		if event.HookEventName == "PreToolUse" || event.HookEventName == "PostToolUse" {
 			kind = "tool"
 		}
@@ -101,6 +114,12 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 				reason = joinReasons(reason, "unmatched_post_tool_use")
 			}
 		}
+		if event.HookEventName == "PreToolUse" {
+			if invocation, ok := detectSkillInvocation(event, timelineID, raw); ok {
+				result.SkillInvocations = append(result.SkillInvocations, invocation)
+			}
+			result.Files = append(result.Files, detectFileOperations(event, timelineID, raw)...)
+		}
 		if reason != "" {
 			kind = "partial"
 		}
@@ -121,8 +140,268 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 		}
 	}
 	result.Summary.EventCount = len(result.Timeline)
+	result.Summary.MessageCount = len(result.Conversation)
 	result.Summary.ToolCallCount = len(result.ToolCalls)
+	result.Summary.SkillInvocationCount = len(result.SkillInvocations)
+	result.Summary.FileOperationCount = len(result.Files)
 	return result
+}
+
+func conversationRole(eventName string) string {
+	switch eventName {
+	case "UserPromptSubmit":
+		return "user"
+	case "Stop":
+		return "assistant"
+	default:
+		return ""
+	}
+}
+
+func messageContent(payload bson.Raw, eventName string) json.RawMessage {
+	keys := []string{"prompt", "user_prompt", "content", "text"}
+	if eventName == "Stop" {
+		keys = []string{"response", "stop_message", "message", "content", "text"}
+	}
+	for _, key := range keys {
+		content := payloadField(payload, key)
+		if hasMessageContent(content) {
+			return content
+		}
+	}
+	return nil
+}
+
+func hasMessageContent(content json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(content))
+	if trimmed == "" || trimmed == "null" {
+		return false
+	}
+	var text string
+	if err := json.Unmarshal(content, &text); err == nil {
+		return strings.TrimSpace(text) != ""
+	}
+	return true
+}
+
+const (
+	confidenceExplicit  = "explicit"
+	confidenceInferred  = "inferred"
+	confidenceAmbiguous = "ambiguous"
+)
+
+var (
+	applyPatchFilePattern = regexp.MustCompile(`(?mi)^\*\*\* (Add|Update|Delete|Move to) File:\s*(.+?)\s*$`)
+	shellReadPattern      = regexp.MustCompile(`(?i)(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`)
+	shellWritePattern     = regexp.MustCompile(`(?i)(set-content|out-file|tee\b|>>?\s*)`)
+	shellDeletePattern    = regexp.MustCompile(`(?i)(remove-item|\brm\b|\bdel\b|\bdelete\b)`)
+	commandPathPattern    = regexp.MustCompile(`(?i)(?:-literalpath|-filepath|-path|>\s*|>>\s*)\s*["']?([^"'\s]+)|^\s*(?:cat|head|tail|type|get-content|read)\s+["']?([^"'\s]+)`)
+)
+
+func detectSkillInvocation(event storage.HookEvent, eventID string, raw json.RawMessage) (trace.SkillInvocation, bool) {
+	input := toolInputDocument(event.Payload)
+	payload := payloadDocument(event.Payload)
+	toolName := value(event.ToolName)
+	if name, ok := stringField(input, "skill_name", "skill"); ok {
+		return newSkillInvocation(name, event, eventID, raw, confidenceExplicit), true
+	}
+	if name, ok := stringField(payload, "skill_name", "skill"); ok {
+		return newSkillInvocation(name, event, eventID, raw, confidenceExplicit), true
+	}
+	if !strings.Contains(strings.ToLower(toolName), "skill") {
+		return trace.SkillInvocation{}, false
+	}
+	if name, ok := stringField(input, "name"); ok {
+		return newSkillInvocation(name, event, eventID, raw, confidenceInferred), true
+	}
+	name := skillNameFromToolName(toolName)
+	return newSkillInvocation(name, event, eventID, raw, confidenceAmbiguous), true
+}
+
+func newSkillInvocation(name string, event storage.HookEvent, eventID string, raw json.RawMessage, confidence string) trace.SkillInvocation {
+	return trace.SkillInvocation{
+		Name:       name,
+		EventID:    eventID,
+		ToolUseID:  event.ToolUseID,
+		ToolName:   value(event.ToolName),
+		Confidence: confidence,
+		OccurredAt: event.ReceivedAt.UTC(),
+		Raw:        raw,
+	}
+}
+
+func skillNameFromToolName(toolName string) string {
+	parts := strings.FieldsFunc(toolName, func(r rune) bool { return r == ':' || r == '/' })
+	if len(parts) == 0 {
+		return toolName
+	}
+	name := strings.TrimSpace(parts[len(parts)-1])
+	if name == "" || strings.EqualFold(name, "skill") || strings.EqualFold(name, "invoke") {
+		return toolName
+	}
+	return name
+}
+
+func detectFileOperations(event storage.HookEvent, eventID string, raw json.RawMessage) []trace.FileOperation {
+	input := toolInputDocument(event.Payload)
+	toolName := value(event.ToolName)
+	toolNameLower := strings.ToLower(toolName)
+	toolInputText := toolInputText(event.Payload)
+	patchText := toolInputText
+	if value, ok := stringField(input, "patch", "patch_text", "diff"); ok {
+		patchText = value
+	}
+	if strings.Contains(toolNameLower, "apply_patch") || strings.Contains(patchText, "*** Begin Patch") {
+		operations := make([]trace.FileOperation, 0)
+		for _, match := range applyPatchFilePattern.FindAllStringSubmatch(patchText, -1) {
+			operation := "write"
+			switch strings.ToLower(strings.TrimSpace(match[1])) {
+			case "delete":
+				operation = "delete"
+			case "move to":
+				operation = "modify"
+			}
+			operations = append(operations, newFileOperation(strings.TrimSpace(match[2]), operation, confidenceExplicit, event, eventID, raw))
+		}
+		if len(operations) > 0 {
+			return operations
+		}
+	}
+
+	paths := filePaths(input)
+	command, hasCommand := stringField(input, "command", "cmd", "script")
+	if len(paths) == 0 && hasCommand {
+		if match := commandPathPattern.FindStringSubmatch(command); match != nil {
+			path := match[1]
+			if path == "" {
+				path = match[2]
+			}
+			paths = append(paths, path)
+		}
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	operation, confidence := classifyFileOperation(toolNameLower, input, command, hasCommand)
+	operations := make([]trace.FileOperation, 0, len(paths))
+	for _, path := range paths {
+		operations = append(operations, newFileOperation(path, operation, confidence, event, eventID, raw))
+	}
+	return operations
+}
+
+func newFileOperation(path, operation, confidence string, event storage.HookEvent, eventID string, raw json.RawMessage) trace.FileOperation {
+	return trace.FileOperation{
+		Path:       path,
+		Operation:  operation,
+		EventID:    eventID,
+		ToolUseID:  event.ToolUseID,
+		ToolName:   value(event.ToolName),
+		Confidence: confidence,
+		OccurredAt: event.ReceivedAt.UTC(),
+		Raw:        raw,
+	}
+}
+
+func filePaths(input map[string]any) []string {
+	paths := make([]string, 0, 2)
+	seen := make(map[string]struct{})
+	for _, key := range []string{"file_path", "path", "target_file", "filename", "file", "old_path", "new_path"} {
+		if path, ok := stringField(input, key); ok {
+			if _, exists := seen[path]; exists {
+				continue
+			}
+			seen[path] = struct{}{}
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+func classifyFileOperation(toolName string, input map[string]any, command string, hasCommand bool) (string, string) {
+	if operation, ok := stringField(input, "operation", "action"); ok {
+		switch strings.ToLower(operation) {
+		case "read", "write", "modify", "delete":
+			return strings.ToLower(operation), confidenceExplicit
+		}
+	}
+	switch {
+	case strings.Contains(toolName, "read"), strings.Contains(toolName, "cat"), strings.Contains(toolName, "get-content"), strings.Contains(toolName, "open"):
+		return "read", confidenceExplicit
+	case strings.Contains(toolName, "write"), strings.Contains(toolName, "create"), strings.Contains(toolName, "edit"), strings.Contains(toolName, "patch"):
+		return "write", confidenceExplicit
+	case strings.Contains(toolName, "delete"), strings.Contains(toolName, "remove"):
+		return "delete", confidenceExplicit
+	case hasCommand && shellDeletePattern.MatchString(command):
+		return "delete", confidenceInferred
+	case hasCommand && shellWritePattern.MatchString(command):
+		return "write", confidenceInferred
+	case hasCommand && shellReadPattern.MatchString(command):
+		return "read", confidenceInferred
+	default:
+		return "ambiguous", confidenceAmbiguous
+	}
+}
+
+func toolInputDocument(payload bson.Raw) map[string]any {
+	return documentValue(payloadField(payload, "tool_input"))
+}
+
+func toolInputText(payload bson.Raw) string {
+	value := payloadField(payload, "tool_input")
+	if len(value) == 0 {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(value, &text); err == nil {
+		return text
+	}
+	return string(value)
+}
+
+func payloadDocument(payload bson.Raw) map[string]any {
+	if len(payload) == 0 {
+		return nil
+	}
+	var document map[string]any
+	if err := bson.Unmarshal(payload, &document); err != nil {
+		return nil
+	}
+	return document
+}
+
+func documentValue(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err == nil && document != nil {
+		return document
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return nil
+	}
+	if err := json.Unmarshal([]byte(text), &document); err != nil {
+		return nil
+	}
+	return document
+}
+
+func stringField(document map[string]any, keys ...string) (string, bool) {
+	for actual, raw := range document {
+		for _, key := range keys {
+			if !strings.EqualFold(actual, key) {
+				continue
+			}
+			value, ok := raw.(string)
+			value = strings.TrimSpace(value)
+			if ok && value != "" {
+				return value, true
+			}
+		}
+	}
+	return "", false
 }
 
 func eventID(event storage.HookEvent, originalIndex int) string {

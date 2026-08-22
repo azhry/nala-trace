@@ -41,6 +41,18 @@ Kafka. The API listens on port `3003` by default. Nala Trace validates the key
 locally by hashing it and querying the shared Nala Labs PostgreSQL `api_key`
 table, then stores the returned owner ID with the event.
 
+Protected routes accept exactly one of these Nala Labs credentials:
+
+- `Authorization: Bearer <Nala Labs application-session JWT>`: Nala Trace
+  forwards the JWT to Nala Labs `GET /api/auth/session` and uses the returned
+  identity.
+- `X-Nala-Labs-API-Key: <Nala Labs API token>` (or the compatibility
+  `X-API-Key` header): Nala Trace hashes the token and resolves its owner from
+  the shared PostgreSQL `api_key` table.
+
+Requests containing both credential types are rejected with HTTP 401 and the
+stable `ambiguous_credentials` error instead of relying on header precedence.
+
 1. Check that Bash has the required command-line tools:
 
    ```bash
@@ -81,9 +93,12 @@ table, then stores the returned owner ID with the event.
 5. Remove the temporary login values. Keep the Codex Trace API token:
 
    ```bash
-   unset NALA_LABS_USERNAME NALA_LABS_PASSWORD NALA_LABS_JWT \
+   unset NALA_LABS_USERNAME NALA_LABS_PASSWORD \
      CASDOOR_ADMIN_TEST_USERNAME CASDOOR_ADMIN_TEST_PASSWORD
    ```
+
+   Keep `NALA_LABS_JWT` in the current shell until the JWT protected-read
+   check in step 9 completes.
 
 6. Set the API URL and one event payload for the manual checks:
 
@@ -112,10 +127,20 @@ table, then stores the returned owner ID with the event.
      "$API_BASE_URL/ingest"
    ```
 
-9. Ingest a valid event with the Codex Trace API token. Expect HTTP 202 and
+9. Verify the Nala Labs JWT can authenticate a protected read. Expect HTTP 200
+   and the owner-scoped session list:
+
+   ```bash
+   curl --silent --show-error --include \
+     --header "Authorization: Bearer $NALA_LABS_JWT" \
+     "$API_BASE_URL/sessions?limit=100"
+   ```
+
+10. Ingest a valid event with the Codex Trace API token. Expect HTTP 202 and
    `{"accepted":true}`:
 
    ```bash
+   unset NALA_LABS_JWT
    curl --silent --show-error --include \
      --request POST \
      --header 'Content-Type: application/json' \
@@ -124,7 +149,7 @@ table, then stores the returned owner ID with the event.
      "$API_BASE_URL/ingest"
    ```
 
-10. Verify malformed input is rejected before persistence. Expect HTTP 400 with
+11. Verify malformed input is rejected before persistence. Expect HTTP 400 with
    the `invalid_event` error code:
 
    ```bash
@@ -136,7 +161,7 @@ table, then stores the returned owner ID with the event.
      "$API_BASE_URL/ingest"
    ```
 
-11. Deliver the same valid event again. Expect HTTP 202 again because ingestion
+12. Deliver the same valid event again. Expect HTTP 202 again because ingestion
    is append-only and does not silently deduplicate events:
 
    ```bash
@@ -148,7 +173,7 @@ table, then stores the returned owner ID with the event.
      "$API_BASE_URL/ingest"
    ```
 
-12. Read sessions with the same Codex Trace API token. Find `$SESSION_ID` in the response
+13. Read sessions with the same Codex Trace API token. Find `$SESSION_ID` in the response
    and confirm it contains the resolved `user_id` and `event_count` `2`, proving
    API-key owner resolution, MongoDB persistence, and owner-scoped reads:
 

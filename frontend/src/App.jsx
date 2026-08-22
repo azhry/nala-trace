@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getHealth, getSessions, getTrace } from './api'
-import { currentSessions } from './data/currentSession'
+import { ApiError, getSessions, getTrace, resolveSession } from './api'
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
 import TraceView from './components/TraceView'
+import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries'
 
 function parseRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '') || 'sessions'
@@ -17,10 +17,10 @@ function navigateTo(path) {
 }
 
 function dataSourceCopy(apiState) {
-  if (apiState === 'connected') return { label: 'Go API data', status: 'Go API connected', detail: 'Using live session records from the Go API' }
-  if (apiState === 'loading') return { label: 'Checking source', status: 'Checking data source', detail: 'Verifying the Go API before describing these records as live' }
-  if (apiState === 'unavailable') return { label: 'No data source', status: 'No data source', detail: 'The Go API is unavailable and no audited capture is loaded' }
-  return { label: 'Audited capture', status: 'Audited capture loaded', detail: 'Using the real sanitized Codex audit snapshot; the Go API is unavailable' }
+  if (apiState === 'connected') return { label: 'Go API data', status: 'Go API connected', detail: 'Using live session records from the protected Go API' }
+  if (apiState === 'unauthorized') return { label: 'Sign-in required', status: 'Authentication required', detail: 'Resolve an authenticated application session to view records' }
+  if (apiState === 'error') return { label: 'API unavailable', status: 'API unavailable', detail: 'The session service did not return a usable response' }
+  return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
 }
 
 function Topbar({ route, session, apiState }) {
@@ -29,9 +29,13 @@ function Topbar({ route, session, apiState }) {
 }
 
 function SessionStats({ sessions }) {
-  const tools = sessions.reduce((total, session) => total + (session.toolCalls || 0), 0)
+  const tools = sessions.reduce((total, session) => total + session.toolCallCount, 0)
   const attention = sessions.filter((session) => session.status === 'attention').length
-  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>captured in this source</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from the complete rollout</small></div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>current review signal</small></div><div><span>Last captured</span><strong>{sessions[0]?.capturedAt || '—'}</strong><small>source session timestamp</small></div></div>
+  const latest = sessions.reduce((current, session) => {
+    if (!current || (session.lastEventTime || 0) > (current.lastEventTime || 0)) return session
+    return current
+  }, null)
+  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>available to this account</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>evaluation signal when available</small></div><div><span>Last captured</span><strong>{latest ? formatSessionDate(latest.lastEventAt) : '—'}</strong><small>most recent event</small></div></div>
 }
 
 function DataSourceNotice({ apiState }) {
@@ -40,21 +44,29 @@ function DataSourceNotice({ apiState }) {
   return <div className="data-source-notice" role="status"><span className="section-label">Data provenance</span><strong>{source.label}</strong><p>{source.detail}. Only the captured records from this source are being presented.</p></div>
 }
 
-function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, apiState }) {
+function SessionStatePanel({ state, onRetry }) {
+  if (state === 'loading') return <div className="panel session-state-panel" role="status" aria-live="polite"><strong>Loading authenticated sessions…</strong><span>Resolving your application session, then reading bounded summaries.</span></div>
+  if (state === 'unauthorized') return <div className="panel session-state-panel" role="alert"><strong>Sign in to view sessions.</strong><span>Your application session could not be resolved. Sign in, then try again.</span><button type="button" className="state-action" onClick={onRetry}>Try again</button></div>
+  return <div className="panel session-state-panel" role="alert"><strong>Sessions could not be loaded.</strong><span>The API returned an error while reading session summaries.</span><button type="button" className="state-action" onClick={onRetry}>Retry request</button></div>
+}
+
+function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, sortBy, onSortChange, apiState, onRetry }) {
   const source = dataSourceCopy(apiState)
-  return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} /><SessionStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} /></section>
+  return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} />{apiState === 'connected' ? <><SessionStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} sortBy={sortBy} onSortChange={onSortChange} /></> : <SessionStatePanel state={apiState} onRetry={onRetry} />}</section>
 }
 
 function DetailPage({ session, onBack, apiState }) {
   const source = dataSourceCopy(apiState)
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title}</h1><p>{session.id} · captured {session.startedAt}–{session.capturedAt} · {session.duration}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome}</span></div></div><DataSourceNotice apiState={apiState} /><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} /><InsightCards insights={session.insights} /></div></section>
+  const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} /><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} /><InsightCards insights={session.insights || { metrics: [] }} /></div></section>
 }
 
 export default function App() {
   const [route, setRoute] = useState(() => parseRoute())
-  const [sessions, setSessions] = useState(currentSessions)
+  const [sessions, setSessions] = useState([])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('recent')
   const [apiState, setApiState] = useState('loading')
   const [remoteTrace, setRemoteTrace] = useState(null)
 
@@ -64,21 +76,29 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  useEffect(() => {
-    let mounted = true
-    Promise.all([getHealth(), getSessions()]).then(([health, payload]) => {
-      if (health?.status !== 'ok' || !Array.isArray(payload?.sessions)) throw new Error('The Go API did not return a valid session payload')
-      if (mounted) {
-        setSessions(payload.sessions)
-        setApiState('connected')
-      }
-    }).catch(() => {
-      if (mounted) setApiState(currentSessions.length ? 'capture' : 'unavailable')
+  function loadSessions(isActive = () => true) {
+    setApiState('loading')
+    resolveSession().then(() => {
+      if (!isActive()) return null
+      return getSessions()
+    }).then((payload) => {
+      if (!isActive() || !payload) return
+      const normalized = normalizeSessionSummaries(payload)
+      setSessions(normalized)
+      setApiState('connected')
+    }).catch((error) => {
+      if (!isActive()) return
+      setApiState(error instanceof ApiError && error.status === 401 ? 'unauthorized' : 'error')
     })
-    return () => { mounted = false }
+  }
+
+  useEffect(() => {
+    let active = true
+    loadSessions(() => active)
+    return () => { active = false }
   }, [])
 
-  const selectedSession = useMemo(() => sessions.find((session) => session.id === route.sessionId) || sessions[0], [route.sessionId, sessions])
+  const selectedSession = useMemo(() => sessions.find((session) => session.id === route.sessionId), [route.sessionId, sessions])
 
   useEffect(() => {
     let mounted = true
@@ -92,11 +112,12 @@ export default function App() {
     return () => { mounted = false }
   }, [route.sessionId, route.view])
 
-  const detailSession = remoteTrace ? { ...selectedSession, ...remoteTrace } : selectedSession
+  const detailSession = selectedSession && remoteTrace ? { ...selectedSession, ...remoteTrace } : selectedSession
 
   function selectSession(id) {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
   }
 
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} />{route.view === 'detail' && detailSession ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} apiState={apiState} />}</main></div>
+  const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

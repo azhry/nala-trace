@@ -3,6 +3,8 @@
 ## Required first steps
 
 - Before any task action, load only the immediately required allowlisted key from `.agents/config.md` through a non-printing loader. Never call a generic read tool on this file or render, print, commit, or transmit its contents.
+- Read the relevant files under `.agents/knowledge/` before making assumptions about runtime accounts, providers, roles, tiers, endpoints, or test fixtures. Keep secret values out of transcripts and handoff records.
+- Write verification scripts and verification command blocks in Bash (`bash`/`sh`) by default, including on Windows. Use PowerShell only when the user explicitly requests it or when the verification cannot run in Bash; document that exception.
 - Make sure all the necessary tools and credentials work before taking task actions.
 - Do one task at a time. A task is complete only after implementation, verification, commit, push, PR handoff, and relevant tracker update are complete.
 - Preserve unrelated dirty files. Never stage, modify, discard, or overwrite another person's work.
@@ -60,4 +62,5 @@ For a request containing a Linear issue ID such as `AZH-385`:
 - Never invoke interactive `gh auth login` in an unattended agent workflow.
 - Do not write, edit, generate, or stage implementation files until the GitHub delivery preflight succeeds and a `task/<topic>` branch has been created from `main`. If unrelated work makes that unsafe, use an isolated worktree or stop and report the blocker.
 - Never report a check as passed, a build as successful, or a task as complete unless the recorded command exited successfully. State pre-existing failures separately with the exact command and affected path; do not describe a partial compile or filtered output as a successful build.
+- Before declaring Vault, Casdoor, PostgreSQL, or another configured runtime dependency unavailable, inspect the relevant project knowledge and configuration sources and use any available read-only infrastructure capability. Distinguish a rejected credential from an unavailable service and from an undeployed application endpoint.
 - Before staging and again before handoff, inspect `git status --short` and preserve unrelated files. Put generated screenshots, browser traces, lint captures, and other diagnostics outside the repository or in an ignored temporary directory; remove only artifacts created by the current task.

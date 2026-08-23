@@ -47,7 +47,6 @@ For a request containing a Linear issue ID such as `AZH-385`:
 10. Treat the completed human description and agent comment together as the implementation contract. Only then begin implementation. For frontend work, also follow the frontend workflow and its delegation requirement.
 
 - For visual-reference work, the readiness re-read must confirm the saved tracker rendering itself and the exact pairing between each inline asset and its source. API or text-presence counts alone do not satisfy the gate.
-- For visual-reference work, every Process Flow, Before, and After artifact must be a UML sequence diagram with participants/lifelines, directional messages, and activation or return semantics. Do not substitute a generic architecture, box, or flowchart diagram unless the issue explicitly requests that type.
 
 ## Credentials and delivery preflight
 

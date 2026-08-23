@@ -12,7 +12,7 @@ Codex session.
 
 ## How it works
 
-The capture-to-viewer path is shown in the [How Nala Trace works diagram](docs/diagrams/nala-trace-how-it-works.html).
+![How Nala Trace observes a Codex session](docs/diagrams/nala-trace-how-it-works.svg)
 
 In short: Codex sends lifecycle JSON to `hook-client`, the client makes one
 bounded authenticated request to the Go API, the API stores hook payloads in

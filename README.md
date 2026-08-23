@@ -12,15 +12,11 @@ Codex session.
 
 ## How it works
 
-```text
-Codex lifecycle event
-        |
-        v
-hook-client -- one bounded authenticated POST --> Go API --> MongoDB
-                                                        |
-                                                        v
-                                             React session viewer
-```
+The capture-to-viewer path is shown in the [How Nala Trace works diagram](docs/diagrams/nala-trace-how-it-works.html).
+
+In short: Codex sends lifecycle JSON to `hook-client`, the client makes one
+bounded authenticated request to the Go API, the API stores hook payloads in
+MongoDB, and the React viewer reads reconstructed sessions through the API.
 
 The repository manifest, [hooks.json](hooks.json), registers these lifecycle
 events with JSON on stdin:

@@ -40,7 +40,8 @@ read undocumented Codex rollout or transcript files.
 - Go 1.23 or newer
 - Node.js and npm
 - Docker, or another MongoDB 7-compatible deployment
-- A running Nala Labs authentication service for protected requests
+- A Nala Labs API key for machine-to-machine hook delivery
+- Access to the shared Nala Labs PostgreSQL `api_key` table for API-key validation
 - Codex Desktop with hooks enabled
 
 The default local addresses are:
@@ -92,9 +93,17 @@ curl --fail-with-body --silent --show-error http://127.0.0.1:3003/healthz
 - `GET /sessions` — list owner-scoped session summaries.
 - `GET /sessions/:id` — read one reconstructed owner-scoped trace.
 
-Protected requests use a Nala Labs application-session bearer JWT or the
-configured Nala Labs API-key header. The hook client always sends its runtime
-credential as `Authorization: Bearer ...`.
+Protected requests accept either of these Nala Labs credentials:
+
+- `Authorization: Bearer <application-session JWT>` — Nala Trace forwards the
+  JWT to Nala Labs `GET /api/auth/session` for validation and identity claims.
+- `X-Nala-Labs-API-Key: <API key>` — Nala Trace hashes the key and resolves its
+  owner from the shared PostgreSQL `api_key` table.
+
+The hook client uses the API-key path and sends `CODEX_TRACE_API_TOKEN` as
+`X-Nala-Labs-API-Key`. The Nala Labs authentication service is needed to issue
+or revoke keys and to validate session JWTs; it is not contacted for each
+API-key request.
 
 ### 3. Start the React dashboard
 
@@ -141,18 +150,17 @@ Set these values in the process environment used by Codex. Do not put them in
 
 ```bash
 export CODEX_TRACE_API_URL="http://127.0.0.1:3003/ingest"
-printf 'Paste the bearer credential accepted by the configured Nala Labs authority: '
+printf 'Paste the Nala Labs API key accepted by the shared api_key table: '
 read -r -s CODEX_TRACE_API_TOKEN
 printf '\n'
 export CODEX_TRACE_API_TOKEN
 export CODEX_TRACE_API_TIMEOUT="2s"
 ```
 
-Obtain the bearer credential through the approved Nala Labs login or machine
-credential flow for your environment and keep it in a secret store or the
-current process only. Nala Trace forwards it to
-`GET /api/auth/session` for validation; raw Casdoor provider credentials are
-not part of this application contract.
+Obtain the API key through the approved Nala Labs API-key flow for your
+environment and keep it in a secret store or the current process only. The
+hook client sends it in `X-Nala-Labs-API-Key`; raw Casdoor provider
+credentials are not part of this application contract.
 
 ### 3. Install and trust the manifest
 
@@ -177,12 +185,12 @@ receive each supported lifecycle event automatically. It sends one bounded
 `POST /ingest`, ignores the response body, and returns zero whether delivery
 succeeds or fails.
 
-After the session completes, inspect the API using the same bearer credential:
+After the session completes, inspect the API using the same API key:
 
 ```bash
 export API_BASE_URL="http://127.0.0.1:3003"
 curl --fail-with-body --silent --show-error \
-  --header "Authorization: Bearer $CODEX_TRACE_API_TOKEN" \
+  --header "X-Nala-Labs-API-Key: $CODEX_TRACE_API_TOKEN" \
   "$API_BASE_URL/sessions?limit=10"
 ```
 

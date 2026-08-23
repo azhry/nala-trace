@@ -50,7 +50,7 @@ func Send(ctx context.Context, input io.Reader, cfg Config) error {
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Authorization", "Bearer "+cfg.Token)
+	request.Header.Set("X-Nala-Labs-API-Key", cfg.Token)
 	response, err := (&http.Client{}).Do(request)
 	if err != nil {
 		return errors.New("hook client request failed")

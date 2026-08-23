@@ -4,6 +4,8 @@
 
 ## Process Flow
 
+All three diagrams in this template must be UML sequence diagrams: use participants/lifelines, directional messages, and activation or return semantics. Do not substitute a generic architecture, box, or flowchart diagram unless the issue explicitly requests that type.
+
 Show the actors and services involved, then mark the implementation change with the highlighted region and the IMPLEMENTATION CHANGE annotation. Keep the diagram focused on the normal path.
 
 ![Rendered Process Flow](<uploaded Linear SVG asset URL>)

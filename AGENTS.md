@@ -23,6 +23,7 @@
 - Use stacked PRs when a later review unit depends on an earlier one. State the review and merge order explicitly, keep each branch based on its predecessor, and merge from the bottom of the stack upward.
 - Use parallel PRs only when the units have no required dependency or conflicting shared change. Give the group a shared label/order and state that its members may be reviewed or merged independently.
 - Every PR description must include a `Review and merge order` section identifying this PR's position, base/dependencies, parallel group, merge conditions, and the human-verification focus. Keep unrelated cleanup out of the review unit.
+- Every PR description must include exactly one manual-verification section. It must contain the copy-pasteable Bash command(s), prerequisites, expected result or status, and explicit limitations for any unrun live flow. If a manual-check section already exists, update it in place; never append a second manual-check section or replace the command with a summary of the local result. Before handoff, re-read the rendered PR body and verify the section count and command are present.
 
 ## Routing
 

@@ -19,7 +19,7 @@ bounded authenticated request to the Go API, the API stores hook payloads in
 MongoDB, and the React viewer reads reconstructed sessions through the API.
 
 The repository manifest, [hooks.json](hooks.json), registers these lifecycle
-events with JSON on stdin:
+events. Each command hook receives the lifecycle payload as JSON on stdin:
 
 - `SessionStart`
 - `UserPromptSubmit`
@@ -122,10 +122,11 @@ tool calls, skills, and file evidence.
 
 ## Install the Codex hook
 
-The checked-in `hooks.json` is the portable repository manifest. It contains
+The checked-in `hooks.json` is the portable Codex hook manifest. It contains
 the event registrations and the `hook-client` command, but no URL, token, or
 other secret. Keep the executable path and runtime credentials outside the
-manifest.
+manifest. Codex expects each event to contain matcher groups with nested
+command handlers; do not add a `version`, `known_gaps`, or `stdin` field.
 
 ### 1. Build the hook client
 
@@ -165,8 +166,9 @@ credentials are not part of this application contract.
 ### 3. Install and trust the manifest
 
 The Codex configuration location and trust prompt can vary by installed Codex
-version. Use the Codex hook configuration flow for that version, then copy or
-adapt the repository's `hooks.json` into the accepted local configuration:
+version. Copy the repository's `hooks.json` to the accepted local configuration
+location (for this workspace, `.codex/hooks.json`), then use the Codex hook
+configuration flow:
 
 ```text
 codex
@@ -176,7 +178,8 @@ codex
 When Codex asks to approve `hook-client`, review that it invokes the binary
 from the PATH above, receives JSON on stdin, and does not contain embedded
 credentials. Trust the command only after that review. Keep all nine event
-registrations and preserve `"stdin": "json"` for each one.
+registrations. JSON stdin is part of Codex command-hook behavior and is not a
+field in `hooks.json`.
 
 ### 4. Generate and inspect a real trace
 

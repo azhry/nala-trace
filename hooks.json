@@ -1,15 +1,32 @@
 {
-  "version": 1,
+  "description": "Nala Trace lifecycle hooks.",
   "hooks": {
-    "SessionStart": {"command": ["hook-client"], "stdin": "json"},
-    "UserPromptSubmit": {"command": ["hook-client"], "stdin": "json"},
-    "PreToolUse": {"command": ["hook-client"], "stdin": "json"},
-    "PostToolUse": {"command": ["hook-client"], "stdin": "json"},
-    "SubagentStart": {"command": ["hook-client"], "stdin": "json"},
-    "SubagentStop": {"command": ["hook-client"], "stdin": "json"},
-    "PreCompact": {"command": ["hook-client"], "stdin": "json"},
-    "PostCompact": {"command": ["hook-client"], "stdin": "json"},
-    "Stop": {"command": ["hook-client"], "stdin": "json"}
-  },
-  "known_gaps": ["unified_exec", "WebSearch"]
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ],
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ],
+    "PreToolUse": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ],
+    "PostToolUse": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ],
+    "SubagentStart": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ],
+    "SubagentStop": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ],
+    "PreCompact": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ],
+    "PostCompact": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "hook-client"}]}
+    ]
+  }
 }

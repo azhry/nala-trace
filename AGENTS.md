@@ -46,7 +46,7 @@ For a request containing a Linear issue ID such as `AZH-385`:
 9. The two Linear updates are a hard readiness gate: private reasoning, a todo list, a chat summary, or a code comment does not satisfy it. Verify both tracker mutations succeeded, then re-read the saved human description and agent comment before creating a branch, editing implementation files, moving the issue active, or delegating implementation.
 10. Treat the completed human description and agent comment together as the implementation contract. Only then begin implementation. For frontend work, also follow the frontend workflow and its delegation requirement.
 
-- For visual-reference work, the readiness re-read must confirm the saved tracker rendering itself, exact inline-asset/source pairing, and that each artifact's diagram type and notation match the source request and repository template. If the request says UML sequence, verify actors/participants are lifelines with directional messages and return/activation markers; do not substitute a generic architecture, box, or flowchart diagram. API or text-presence counts alone do not satisfy the gate.
+- For visual-reference work, UML sequence diagrams are the default for Process Flow, Before, and After. The readiness re-read must confirm the saved tracker rendering itself, exact inline-asset/source pairing, and that each artifact uses UML sequence notation with actors/participants as lifelines, directional messages, and return/activation markers. Only an explicit source request for another diagram type overrides this default; do not substitute a generic architecture, box, or flowchart diagram. API or text-presence counts alone do not satisfy the gate.
 
 ## Credentials and delivery preflight
 

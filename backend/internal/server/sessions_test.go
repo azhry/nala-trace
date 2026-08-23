@@ -12,6 +12,7 @@ import (
 
 	"github.com/azhry/nala-trace/backend/internal/auth"
 	"github.com/azhry/nala-trace/backend/internal/storage"
+	"github.com/azhry/nala-trace/backend/internal/testfixtures"
 	"github.com/azhry/nala-trace/backend/internal/trace"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -67,6 +68,58 @@ func TestSessionTraceHandlerReconstructsOwnerScopedTrace(t *testing.T) {
 	}
 	if result.ToolCalls[0].Status != trace.ToolCallCompleted || result.Summary.MessageCount != 2 || result.Summary.ToolCallCount != 2 || result.Summary.SkillInvocationCount != 1 || result.Summary.FileOperationCount != 1 {
 		t.Fatalf("trace summary = %#v, tools = %#v", result.Summary, result.ToolCalls)
+	}
+}
+
+func TestSessionTraceHandlerReturnsCompleteFixtureResponse(t *testing.T) {
+	events, err := testfixtures.Load(testfixtures.CompleteSession)
+	if err != nil {
+		t.Fatalf("load complete fixture: %v", err)
+	}
+	repository := &traceEventRepository{events: events}
+	request := authenticatedTraceRequest(http.MethodGet, "/sessions/fixture-session-1")
+	response := httptest.NewRecorder()
+
+	NewSessionTraceHandler(repository).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil {
+		t.Fatalf("decode response fields: %v", err)
+	}
+	wantFields := map[string]bool{
+		"schema_version": true, "session_id": true, "user_id": true, "timeline": true,
+		"conversation": true, "tool_calls": true, "skill_invocations": true, "files": true, "summary": true,
+	}
+	if len(fields) != len(wantFields) {
+		t.Fatalf("response field count = %d, want %d: %#v", len(fields), len(wantFields), fields)
+	}
+	for field := range wantFields {
+		if _, ok := fields[field]; !ok {
+			t.Errorf("response missing field %q", field)
+		}
+	}
+	var result trace.Trace
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode trace: %v", err)
+	}
+	if result.SchemaVersion != trace.SchemaVersion || result.SessionID != "fixture-session-1" || result.UserID != "user-1" {
+		t.Fatalf("trace identity = %#v", result)
+	}
+	if len(result.Timeline) != 14 || result.Timeline[0].ID != "session-start-01" || result.Timeline[13].ID != "stop-01" {
+		t.Fatalf("timeline boundary = %#v", result.Timeline)
+	}
+	if len(result.Conversation) != 2 || len(result.ToolCalls) != 4 || len(result.SkillInvocations) != 1 || len(result.Files) != 2 {
+		t.Fatalf("trace collections = conversation:%d tools:%d skills:%d files:%d", len(result.Conversation), len(result.ToolCalls), len(result.SkillInvocations), len(result.Files))
+	}
+	if result.Conversation[0].Role != "user" || result.Conversation[1].Role != "assistant" || result.ToolCalls[0].Status != trace.ToolCallCompleted || result.ToolCalls[2].Status != trace.ToolCallUnmatched {
+		t.Fatalf("trace content = conversation:%#v tools:%#v", result.Conversation, result.ToolCalls)
+	}
+	wantSummary := trace.Summary{EventCount: 14, MessageCount: 2, ToolCallCount: 4, SkillInvocationCount: 1, FileOperationCount: 2}
+	if result.Summary != wantSummary {
+		t.Fatalf("summary = %#v, want %#v", result.Summary, wantSummary)
 	}
 }
 

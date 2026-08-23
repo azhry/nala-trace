@@ -52,6 +52,10 @@ Write this as small, copy-pasteable Bash steps in the PR description. Do not
 attach a script file or combine the verification into one bulk script. Run the
 steps against the verified staging services with real accounts and persisted
 data; do not use placeholder values, fake endpoints, mocks, or copied secrets.
+Do not use `set -e`, `set -u`, `set -o pipefail`, `set -euo pipefail`, `exit`,
+`exit 1`, or cleanup traps that call `exit`. Keep setup separate, use at most
+one network request per numbered step, avoid helper functions and bulk scripts,
+wrap long commands, and request only the fields needed for that step.
 
 #### Step 0 — Load tools and the verified staging environment
 

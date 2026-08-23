@@ -1,0 +1,168 @@
+[
+  {
+    "id": "stop-01",
+    "received_at": "2026-08-20T10:00:13Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "Stop",
+      "response": "Summary complete."
+    }
+  },
+  {
+    "id": "compact-post-01",
+    "received_at": "2026-08-20T10:00:12Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PostCompact",
+      "summary": "Context compacted"
+    }
+  },
+  {
+    "id": "compact-pre-01",
+    "received_at": "2026-08-20T10:00:11Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PreCompact",
+      "reason": "context_window"
+    }
+  },
+  {
+    "id": "subagent-stop-01",
+    "received_at": "2026-08-20T10:00:10Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "SubagentStop",
+      "agent_id": "agent-1",
+      "status": "completed"
+    }
+  },
+  {
+    "id": "subagent-start-01",
+    "received_at": "2026-08-20T10:00:09Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "SubagentStart",
+      "agent_id": "agent-1"
+    }
+  },
+  {
+    "id": "patch-post-01",
+    "received_at": "2026-08-20T10:00:08Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PostToolUse",
+      "tool_name": "apply_patch",
+      "tool_use_id": "patch-1",
+      "tool_response": "patch applied"
+    }
+  },
+  {
+    "id": "patch-pre-01",
+    "received_at": "2026-08-20T10:00:07Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "apply_patch",
+      "tool_use_id": "patch-1",
+      "tool_input": "*** Begin Patch\n*** Update File: README.md\n*** End Patch"
+    }
+  },
+  {
+    "id": "skill-pre-01",
+    "received_at": "2026-08-20T10:00:06Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "skill",
+      "tool_use_id": "skill-1",
+      "tool_input": {
+        "skill_name": "frontend-design",
+        "name": "frontend-design"
+      }
+    }
+  },
+  {
+    "id": "web-post-01",
+    "received_at": "2026-08-20T10:00:05Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PostToolUse",
+      "tool_name": "WebSearch",
+      "tool_use_id": "search-1",
+      "tool_response": {
+        "results": []
+      }
+    }
+  },
+  {
+    "id": "web-pre-01",
+    "received_at": "2026-08-20T10:00:04Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "WebSearch",
+      "tool_use_id": "search-1",
+      "tool_input": {
+        "query": "Codex hooks lifecycle"
+      }
+    }
+  },
+  {
+    "id": "exec-post-01",
+    "received_at": "2026-08-20T10:00:03Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PostToolUse",
+      "tool_name": "unified_exec",
+      "tool_use_id": "exec-1",
+      "tool_response": {
+        "stdout": "README contents",
+        "exit_code": 0
+      }
+    }
+  },
+  {
+    "id": "exec-pre-01",
+    "received_at": "2026-08-20T10:00:02Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "unified_exec",
+      "tool_use_id": "exec-1",
+      "tool_input": {
+        "command": "cat README.md"
+      }
+    }
+  },
+  {
+    "id": "prompt-01",
+    "received_at": "2026-08-20T10:00:01Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "turn_id": "turn-1",
+      "hook_event_name": "UserPromptSubmit",
+      "prompt": "Inspect README and summarize the tracked changes."
+    }
+  },
+  {
+    "id": "session-start-01",
+    "received_at": "2026-08-20T10:00:00Z",
+    "payload": {
+      "session_id": "fixture-session-1",
+      "hook_event_name": "SessionStart",
+      "source": "startup"
+    }
+  }
+]

@@ -1,0 +1,87 @@
+[
+  {
+    "id": "partial-stop-01",
+    "received_at": "2026-08-20T11:00:06Z",
+    "payload": {
+      "session_id": "fixture-session-2",
+      "turn_id": "turn-2",
+      "hook_event_name": "Stop",
+      "response": "Partial sequence complete."
+    }
+  },
+  {
+    "id": "duplicate-pre-02",
+    "received_at": "2026-08-20T11:00:05Z",
+    "payload": {
+      "session_id": "fixture-session-2",
+      "turn_id": "turn-2",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "skill",
+      "tool_use_id": "duplicate-1",
+      "tool_input": {
+        "skill_name": "diagnose"
+      }
+    }
+  },
+  {
+    "id": "duplicate-pre-01",
+    "received_at": "2026-08-20T11:00:04Z",
+    "payload": {
+      "session_id": "fixture-session-2",
+      "turn_id": "turn-2",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "skill",
+      "tool_use_id": "duplicate-1",
+      "tool_input": {
+        "skill_name": "frontend-design"
+      }
+    }
+  },
+  {
+    "id": "orphan-post-01",
+    "received_at": "2026-08-20T11:00:03Z",
+    "payload": {
+      "session_id": "fixture-session-2",
+      "turn_id": "turn-2",
+      "hook_event_name": "PostToolUse",
+      "tool_name": "WebSearch",
+      "tool_use_id": "orphan-1",
+      "tool_response": {
+        "results": []
+      }
+    }
+  },
+  {
+    "id": "missing-tool-id-01",
+    "received_at": "2026-08-20T11:00:02Z",
+    "payload": {
+      "session_id": "fixture-session-2",
+      "turn_id": "turn-2",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "unified_exec",
+      "tool_use_id": null,
+      "tool_input": {
+        "command": "cat TODO.md"
+      }
+    }
+  },
+  {
+    "id": "prompt-02",
+    "received_at": "2026-08-20T11:00:01Z",
+    "payload": {
+      "session_id": "fixture-session-2",
+      "turn_id": "turn-2",
+      "hook_event_name": "UserPromptSubmit",
+      "prompt": "Inspect the partial sequence."
+    }
+  },
+  {
+    "id": "session-start-02",
+    "received_at": "2026-08-20T11:00:00Z",
+    "payload": {
+      "session_id": "fixture-session-2",
+      "hook_event_name": "SessionStart",
+      "source": "startup"
+    }
+  }
+]

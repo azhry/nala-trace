@@ -101,12 +101,6 @@ Keep generated screenshots and browser traces outside the repository unless the 
 
 ## Verification
 
-Manual browser/setup commands must be short and safe to paste into an
-interactive shell. Do not use `set -e`, `set -u`, `set -o pipefail`,
-`set -euo pipefail`, `exit`, `exit 1`, or cleanup traps that call `exit`. Keep
-setup separate, use at most one network request per numbered step, wrap long
-commands, and keep manual evidence separate from automated checks.
-
 | Command or browser flow | Exit/result | Evidence or assertions |
 | --- | ---: | --- |
 | [Unit/component command] | [0/nonzero/not run] | [Assertions] |

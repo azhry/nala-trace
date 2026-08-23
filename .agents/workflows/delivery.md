@@ -27,10 +27,6 @@ Apply this workflow to Linear, GitHub, issue, pull-request, and release work.
 - Use a stack when a later unit depends on an earlier unit. Later branches must name their predecessor as the base, and PRs must be reviewed and merged from the bottom of the stack upward.
 - Use parallel PRs only when units have no required dependency or conflicting shared change. State the parallel group and that its members are independently reviewable and mergeable.
 - Every PR body must contain the `Review and merge order` section from the applicable PR template. It is the handoff contract for reviewer focus, stack order, dependencies, parallelism, merge conditions, and manual verification.
-- Manual request/response is an executable artifact, not a prose report: every numbered manual step must contain a fenced `bash` block with the actual request command and an expected response. Never replace those command blocks with narrative saying that a request was sent. If live execution is unavailable, keep the runnable command using documented configuration or dynamic fixture creation and put only the exact blocker in Known limitations; never present an unrun response as observed.
-- Do not require a reviewer to supply bare `TOKEN`, `SESSION_ID`, `API_BASE_URL`, or similar values. Every variable used by a manual block must be initialized in that sequence from documented project configuration, a real authentication exchange, or a dynamically created persisted fixture; secrets remain process-local and never enter the PR or tracker.
-- Manual verification must be safe to paste into an interactive shell: do not use `set -e`, `set -u`, `set -o pipefail`, `set -euo pipefail`, `exit`, `exit 1`, or cleanup traps that call `exit`. Use explicit checks that print failures and leave the terminal open.
-- Keep every manual step short and independently pasteable: separate setup, use at most one network request per numbered step, avoid helper functions and bulk scripts, wrap long commands, and request only the fields needed for that step.
 
 ### Paired red-test delivery
 

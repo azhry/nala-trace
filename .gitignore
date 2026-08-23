@@ -22,3 +22,4 @@ frontend/dist/
 .env.production
 .vault-config
 .codex
+backend/bin

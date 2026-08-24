@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, getSessions, getTrace, resolveSession } from './api'
+import { createNalaLabsAuthHandoff } from './authHandoff'
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
@@ -23,44 +24,66 @@ function dataSourceCopy(apiState) {
   return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
 }
 
-const DEFAULT_NALA_LABS_ORIGIN = 'http://localhost:5173'
-
-function resolveNalaLabsOrigin(env = import.meta.env) {
-  const configuredOrigin = typeof env?.VITE_NALA_LABS_URL === 'string' ? env.VITE_NALA_LABS_URL.trim() : ''
-  const candidate = configuredOrigin || DEFAULT_NALA_LABS_ORIGIN
-
-  try {
-    const url = new URL(candidate)
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return DEFAULT_NALA_LABS_ORIGIN
-    return url.origin
-  } catch {
-    return DEFAULT_NALA_LABS_ORIGIN
-  }
-}
-
-function resolveNalaLabsLoginUrl(env = import.meta.env) {
-  return `${resolveNalaLabsOrigin(env)}/login`
-}
-
 function AuthBoundary({ apiState, onRetry }) {
   const isLoading = apiState === 'loading'
   const isUnauthorized = apiState === 'unauthorized'
-  const loginUrl = isUnauthorized ? resolveNalaLabsLoginUrl() : null
+  const [handoffState, setHandoffState] = useState('idle')
+  const handoffRef = useRef(null)
   const title = isLoading || isUnauthorized ? 'Sign in through Nala Labs' : 'Sessions could not be loaded.'
-  const detail = isLoading
+  const defaultDetail = isLoading
     ? 'Your Nala Labs application session is being checked before Trace data can be shown.'
       : isUnauthorized
         ? 'Your Nala Labs application session could not be verified. Sign in through Nala Labs, then try again.'
         : 'The protected Trace session request did not return data. Sign in through Nala Labs, then retry.'
+  const detail = handoffState === 'waiting'
+    ? 'Complete sign-in in the Nala Labs window. Trace will retry automatically after it returns a valid session.'
+    : handoffState === 'blocked'
+      ? 'Your browser blocked the Nala Labs sign-in window. Allow popups for this site, then try again.'
+      : handoffState === 'invalid'
+        ? 'Nala Labs did not return a usable session. Start sign-in again, then retry.'
+        : defaultDetail
   const actionLabel = isLoading ? 'Retry authentication' : 'Try again'
+
+  useEffect(() => {
+    if (!isUnauthorized) return undefined
+
+    const handoff = createNalaLabsAuthHandoff({
+      onAuthenticated: () => {
+        if (!handoff.isAuthenticated()) {
+          setHandoffState('invalid')
+          return
+        }
+        onRetry()
+      },
+      onPopupBlocked: () => setHandoffState('blocked'),
+      onStorageError: () => setHandoffState('invalid'),
+    })
+    handoffRef.current = handoff
+
+    return () => {
+      handoff.dispose()
+      handoffRef.current = null
+    }
+  }, [isUnauthorized, onRetry])
+
+  function openLogin() {
+    setHandoffState('waiting')
+    if (!handoffRef.current?.open()) setHandoffState('blocked')
+  }
+
+  function retry() {
+    setHandoffState('idle')
+    onRetry()
+  }
+
   return (
     <main className="auth-boundary" aria-labelledby="auth-boundary-title">
       <section className="auth-boundary-panel" role={isLoading ? 'status' : 'alert'} aria-live="polite">
         <p className="eyebrow">Nala Trace access</p>
         <h1 id="auth-boundary-title">{title}</h1>
         <p>{detail}</p>
-        {loginUrl && <a className="state-action" href={loginUrl}>Sign in through Nala Labs</a>}
-        <button type="button" className="state-action" onClick={onRetry}>{actionLabel}</button>
+        {isUnauthorized && <button type="button" className="state-action" onClick={openLogin}>Sign in through Nala Labs</button>}
+        <button type="button" className="state-action" onClick={retry}>{actionLabel}</button>
       </section>
     </main>
   )
@@ -119,7 +142,7 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  function loadSessions(isActive = () => true) {
+  const loadSessions = useCallback((isActive = () => true) => {
     setApiState('loading')
     resolveSession().then(() => {
       if (!isActive()) return null
@@ -133,13 +156,13 @@ export default function App() {
       if (!isActive()) return
       setApiState(error instanceof ApiError && error.status === 401 ? 'unauthorized' : 'error')
     })
-  }
+  }, [])
 
   useEffect(() => {
     let active = true
     loadSessions(() => active)
     return () => { active = false }
-  }, [])
+  }, [loadSessions])
 
   const selectedSession = useMemo(() => sessions.find((session) => session.id === route.sessionId), [route.sessionId, sessions])
 

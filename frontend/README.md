@@ -32,16 +32,30 @@ fails closed with a local 401 and does not call the nonexistent relative
 `/api/auth/session` route. JWT mode sends `Authorization: Bearer ...` to
 `/sessions` and `/sessions/<id>`; the protected session request performs the
 actual validation. API-token mode sends `X-Nala-Labs-API-Key` to `/sessions`
-and `/sessions/<id>`. The unauthorized boundary links to the real Nala Labs
-`/login` UI using the non-secret `VITE_NALA_LABS_URL` origin, which defaults to
-`http://localhost:5173/login`. The redirect carries no credentials or query
-parameters. Because `sessionStorage` is origin-scoped, the browser handoff
-works only when the Nala Trace entry point and Nala Labs application share the
-approved same origin (or an approved host integration provides that boundary);
-a separate-origin redirect alone does not transfer the stored JWT to Trace.
-Separate origins must not use a URL/query-string token workaround. Do not place
-either credential in Vite env files, build-time config, URLs, or other bundle
-artifacts.
+and `/sessions/<id>` and remains unchanged by the browser handoff.
+
+The unauthorized boundary opens the real Nala Labs `/login` UI in a popup using
+the non-secret `VITE_NALA_LABS_URL` origin, which defaults to
+`http://localhost:5173`. The URL contains only `trace_origin`, so Nala Labs can
+return to the exact Trace origin without receiving a token or password. After
+the user signs in, Nala Labs must send this message to that opener:
+
+```js
+window.opener.postMessage(
+  { type: 'nala-labs-authenticated', token: '<short-lived-jwt>' },
+  traceOrigin,
+)
+```
+
+Trace accepts the message only from the configured Nala Labs origin and the
+exact popup it opened. It rejects missing or non-string tokens, stores a
+non-empty token only in Trace's `sessionStorage` under
+`nala_labs_access_token`, bootstraps JWT mode, and retries the protected
+`/sessions?limit=100` request with `Authorization: Bearer ...`. Popup blocking
+and storage failures remain visible as retryable states. The API remains the
+authority that validates the JWT; Trace does not attempt to verify signing
+secrets in browser code. Never place credentials in Vite env files, build-time
+config, URLs, or other bundle artifacts.
 
 The shell is source-owned and intentionally uses a compact observability workspace language: persistent navigation, low-contrast surfaces, rounded panels, status/tool chips, filterable rows, and keyboard-visible focus. Sessions, Evals, and Golden Set each have an observable destination; the local demo interactions are stateful until real API data is connected.
 

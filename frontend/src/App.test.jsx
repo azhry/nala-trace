@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, getSessions, getTrace, resolveSession } from './api'
+import { ApiError, clearAuthConfiguration, getSessions, getTrace, resolveSession } from './api'
 import App from './App'
 
 vi.mock('./api', async (importOriginal) => {
@@ -31,26 +31,40 @@ describe('authenticated sessions flow', () => {
     window.location.hash = '#/sessions'
     vi.clearAllMocks()
     vi.unstubAllEnvs()
+    clearAuthConfiguration()
+    window.sessionStorage.clear()
     resolveSession.mockResolvedValue({ authenticated: true, user: { id: 'user-1' } })
     getSessions.mockResolvedValue(sessionPayload)
     getTrace.mockResolvedValue({})
   })
 
-  it('links the unauthorized boundary to the default Nala Labs login route', async () => {
-    resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
-
-    render(<App />)
-
-    expect(await screen.findByRole('link', { name: 'Sign in through Nala Labs' })).toHaveAttribute('href', 'http://localhost:5173/login')
-  })
-
-  it('uses VITE_NALA_LABS_URL for the unauthorized login link', async () => {
+  it('opens the configured Nala Labs login popup and retries after a valid handoff', async () => {
     vi.stubEnv('VITE_NALA_LABS_URL', 'https://nala.example.test/')
     resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
+    const popup = { closed: false }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup)
 
     render(<App />)
 
-    expect(await screen.findByRole('link', { name: 'Sign in through Nala Labs' })).toHaveAttribute('href', 'https://nala.example.test/login')
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in through Nala Labs' }))
+
+    expect(open).toHaveBeenCalledExactlyOnceWith(
+      `https://nala.example.test/login?trace_origin=${encodeURIComponent(window.location.origin)}`,
+      'nala-labs-login',
+      'popup,width=480,height=720',
+    )
+
+    const message = new Event('message')
+    Object.defineProperties(message, {
+      origin: { value: 'https://nala.example.test' },
+      source: { value: popup },
+      data: { value: { type: 'nala-labs-authenticated', token: 'jwt-from-nala' } },
+    })
+    act(() => window.dispatchEvent(message))
+
+    expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
+    expect(getSessions).toHaveBeenCalledExactlyOnceWith()
+    expect(window.sessionStorage.getItem('nala_labs_access_token')).toBe('jwt-from-nala')
   })
 
   it('hides the dashboard shell while authentication and protected data are unresolved', async () => {

@@ -1,4 +1,6 @@
 const JSON_HEADERS = { Accept: 'application/json' }
+const AUTHENTICATION_REQUIRED_MESSAGE = 'Authentication is required'
+export const NALA_LABS_ACCESS_TOKEN_STORAGE_KEY = 'nala_labs_access_token'
 const authConfiguration = {
   jwt: null,
   apiToken: null,
@@ -27,6 +29,14 @@ function authMode() {
   if (authConfiguration.jwt) return 'jwt'
   if (authConfiguration.apiToken) return 'apiToken'
   return 'cookie'
+}
+
+function getSessionStorage() {
+  try {
+    return globalThis.sessionStorage
+  } catch {
+    return null
+  }
 }
 
 function configuredAuthHeaders() {
@@ -82,17 +92,29 @@ export function clearAuthConfiguration() {
   authConfiguration.apiToken = null
 }
 
+export function bootstrapAuthFromSessionStorage(storage = getSessionStorage()) {
+  if (authConfiguration.jwt || authConfiguration.apiToken || !storage || typeof storage.getItem !== 'function') return false
+
+  try {
+    const token = storage.getItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
+    if (!normalizeCredentialValue(token, 'jwt')) return false
+    configureAuth({ jwt: token })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function resolveSession() {
   if (authMode() === 'apiToken') {
     return Promise.resolve({ authenticated: true, authenticationMode: 'apiToken' })
   }
 
-  return fetchJSON('/api/auth/session').then((payload) => {
-    if (payload?.authenticated === false || (!payload?.authenticated && !payload?.user && !payload?.id && !payload?.user_id)) {
-      throw new ApiError('Authentication is required', 401, payload)
-    }
-    return payload
-  })
+  if (authMode() === 'jwt') {
+    return Promise.resolve({ authenticated: true, authenticationMode: 'jwt' })
+  }
+
+  return Promise.reject(new ApiError(AUTHENTICATION_REQUIRED_MESSAGE, 401))
 }
 
 export function getSessions() {

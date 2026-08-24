@@ -21,14 +21,34 @@ The current UI uses hash navigation. Open a detail view with
 `http://localhost:5005/#/sessions/<id>`. A path such as `/sessions/<id>` is not
 an implemented client-side route.
 
-Authentication stays cookie-backed by default. The frontend also exposes a
-runtime-only in-memory auth seam in `frontend/src/api.js`: configure exactly one
-of `jwt` or `apiToken` at runtime if a trusted host application needs explicit
-credential forwarding. JWT mode sends `Authorization: Bearer ...` to
-`/api/auth/session`, `/sessions`, and `/sessions/<id>`. API-token mode sends
-`X-Nala-Labs-API-Key` to `/sessions` and `/sessions/<id>` and intentionally
-skips `/api/auth/session`, which expects a JWT. Do not place either credential
-in Vite env files, build-time config, or other bundle artifacts.
+Authentication is owned by Nala Labs: Trace does not provide a login form or
+own a cookie session. The frontend exposes a runtime-only in-memory auth seam in
+`frontend/src/api.js`: configure exactly one of `jwt` or `apiToken` at runtime if
+a trusted host application needs explicit credential forwarding. At startup,
+the browser entry point makes a best-effort read of only
+`sessionStorage.getItem('nala_labs_access_token')` and configures that value in
+the existing in-memory JWT mode. If no JWT or API key is configured, Trace
+fails closed with a local 401 and does not call the nonexistent relative
+`/api/auth/session` route. JWT mode sends `Authorization: Bearer ...` to
+`/sessions` and `/sessions/<id>`; the protected session request performs the
+actual validation. API-token mode sends `X-Nala-Labs-API-Key` to `/sessions`
+and `/sessions/<id>` and remains unchanged by the browser handoff.
+
+When the session is unauthorized, Trace automatically redirects the current tab
+to the configured Nala Labs `/login` route using `VITE_NALA_LABS_URL` (default
+`http://localhost:5173`) and only the non-secret `trace_origin` parameter. The
+manual **Sign in through Nala Labs** button repeats that redirect if navigation
+is interrupted. After sign-in, Nala Labs returns to Trace with a short-lived
+`nala_labs_auth_code` query parameter. Trace removes that parameter immediately
+with `history.replaceState`, sends the code in the JSON body of
+`POST /api/auth/trace-handoff/redeem`, and stores only the returned bearer token
+in `sessionStorage` under `nala_labs_access_token`. The Go API adds the
+configured Trace origin and redeems the one-time code server-to-server through
+Nala Labs' matching `/api/auth/trace-handoff/redeem` endpoint; no token is
+accepted in a URL. The resulting token uses the existing
+`Authorization: Bearer ...` path for protected requests, while API-key mode
+remains unchanged. Never place credentials in Vite env files, build-time
+config, URLs, or other bundle artifacts.
 
 The shell is source-owned and intentionally uses a compact observability workspace language: persistent navigation, low-contrast surfaces, rounded panels, status/tool chips, filterable rows, and keyboard-visible focus. Sessions, Evals, and Golden Set each have an observable destination; the local demo interactions are stateful until real API data is connected.
 

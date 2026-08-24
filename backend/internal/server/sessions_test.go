@@ -91,7 +91,7 @@ func TestSessionTraceHandlerReturnsCompleteFixtureResponse(t *testing.T) {
 	}
 	wantFields := map[string]bool{
 		"schema_version": true, "session_id": true, "user_id": true, "timeline": true,
-		"conversation": true, "tool_calls": true, "skill_invocations": true, "files": true, "summary": true,
+		"conversation": true, "tool_calls": true, "skill_invocations": true, "files": true, "summary": true, "runtime_metadata": true,
 	}
 	if len(fields) != len(wantFields) {
 		t.Fatalf("response field count = %d, want %d: %#v", len(fields), len(wantFields), fields)
@@ -117,7 +117,7 @@ func TestSessionTraceHandlerReturnsCompleteFixtureResponse(t *testing.T) {
 	if result.Conversation[0].Role != "user" || result.Conversation[1].Role != "assistant" || result.ToolCalls[0].Status != trace.ToolCallCompleted || result.ToolCalls[2].Status != trace.ToolCallUnmatched {
 		t.Fatalf("trace content = conversation:%#v tools:%#v", result.Conversation, result.ToolCalls)
 	}
-	wantSummary := trace.Summary{EventCount: 14, MessageCount: 2, ToolCallCount: 4, SkillInvocationCount: 1, FileOperationCount: 2}
+	wantSummary := trace.Summary{EventCount: 14, MessageCount: 2, ToolCallCount: 4, SkillInvocationCount: 1, FileOperationCount: 2, FileReadCount: 1}
 	if result.Summary != wantSummary {
 		t.Fatalf("summary = %#v, want %#v", result.Summary, wantSummary)
 	}

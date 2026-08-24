@@ -2,13 +2,15 @@ package storage
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
 
 func TestSessionSummaryJSONIncludesTitle(t *testing.T) {
-	encoded, err := json.Marshal(SessionSummary{SessionID: "session-1", Title: "Inspect the trace"})
+	encoded, err := json.Marshal(SessionSummary{SessionID: "session-1", Title: "Inspect the trace", FileReadCount: 2})
 	if err != nil {
 		t.Fatalf("marshal summary: %v", err)
 	}
@@ -19,6 +21,9 @@ func TestSessionSummaryJSONIncludesTitle(t *testing.T) {
 	}
 	if got, want := fields["title"], "Inspect the trace"; got != want {
 		t.Fatalf("title = %#v, want %q", got, want)
+	}
+	if got, want := fields["file_read_count"], float64(2); got != want {
+		t.Fatalf("file_read_count = %#v, want %v", got, want)
 	}
 }
 
@@ -61,6 +66,12 @@ func TestSessionSummaryPipelineDerivesAndProjectsTitle(t *testing.T) {
 	}
 	if _, ok := title.(bson.D); !ok {
 		t.Fatalf("title expression = %T, want bson.D", title)
+	}
+	serialized := fmt.Sprintf("%#v", pipeline)
+	for _, expected := range []string{"$payload.tool_input", "file_read_count", "PreToolUse"} {
+		if !strings.Contains(serialized, expected) {
+			t.Fatalf("pipeline missing %q: %s", expected, serialized)
+		}
 	}
 }
 

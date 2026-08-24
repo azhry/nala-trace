@@ -151,6 +151,45 @@ func TestReconstructDetectsApplyPatchShellFileSkillAndAmbiguousPayloads(t *testi
 	}
 }
 
+func TestReconstructExtractsAllowlistedRuntimeMetadataAndFileReads(t *testing.T) {
+	base := time.Unix(60, 0).UTC()
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEvent("settings", "SessionStart", "", base, map[string]any{
+			"metadata": map[string]any{
+				"model":                 "gpt-5",
+				"provider":              "openai",
+				"reasoning_effort":      "high",
+				"context_window_tokens": 258400,
+				"client":                "Codex Desktop",
+				"client_version":        "0.148.0",
+				"source":                "vscode",
+				"thread_source":         "user",
+				"api_key":               "must-not-be-projected",
+			},
+		}),
+		hookEventWithTool("read", "PreToolUse", "turn-1", "read_file", base.Add(time.Second), map[string]any{
+			"tool_input": map[string]any{"file_path": "README.md"},
+		}),
+	})
+
+	if result.RuntimeMetadata.Model != "gpt-5" || result.RuntimeMetadata.Provider != "openai" || result.RuntimeMetadata.ContextWindowTokens != 258400 {
+		t.Fatalf("runtime metadata = %#v", result.RuntimeMetadata)
+	}
+	if result.RuntimeMetadata.RecordedFrom != "SessionStart" {
+		t.Fatalf("runtime metadata source = %q, want SessionStart", result.RuntimeMetadata.RecordedFrom)
+	}
+	if result.Summary.FileReadCount != 1 {
+		t.Fatalf("file read count = %d, want 1", result.Summary.FileReadCount)
+	}
+	encoded, err := json.Marshal(result.RuntimeMetadata)
+	if err != nil {
+		t.Fatalf("marshal runtime metadata: %v", err)
+	}
+	if strings.Contains(string(encoded), "must-not-be-projected") {
+		t.Fatalf("runtime metadata leaked an unallowlisted value: %s", encoded)
+	}
+}
+
 func TestReconstructBoundsMalformedAndOversizedPayloads(t *testing.T) {
 	oversized, err := bson.Marshal(map[string]any{"content": strings.Repeat("x", maxReconstructionPayloadBytes)})
 	if err != nil {

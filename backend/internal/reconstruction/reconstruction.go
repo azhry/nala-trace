@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +47,7 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 		event := item.Event
 		raw := payloadJSON(event.Payload)
 		timelineID := eventID(event, item.OriginalIndex)
+		result.RuntimeMetadata = mergeRuntimeMetadata(result.RuntimeMetadata, runtimeMetadataFromPayload(event.Payload, event.HookEventName))
 		reason := partialReason(event)
 		payloadSafe := payloadIssue(event.Payload) == ""
 		kind := "lifecycle"
@@ -158,6 +160,11 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 	result.Summary.ToolCallCount = len(result.ToolCalls)
 	result.Summary.SkillInvocationCount = len(result.SkillInvocations)
 	result.Summary.FileOperationCount = len(result.Files)
+	for _, file := range result.Files {
+		if file.Operation == "read" {
+			result.Summary.FileReadCount++
+		}
+	}
 	return result
 }
 
@@ -500,6 +507,135 @@ func value(pointer *string) string {
 		return ""
 	}
 	return *pointer
+}
+
+func runtimeMetadataFromPayload(payload bson.Raw, eventName string) trace.RuntimeMetadata {
+	document := payloadDocument(payload)
+	if document == nil {
+		return trace.RuntimeMetadata{}
+	}
+	documents := runtimeMetadataDocuments(document)
+	metadata := trace.RuntimeMetadata{
+		Model:           firstStringField(documents, "model", "model_name", "modelName"),
+		Provider:        firstStringField(documents, "provider", "model_provider", "modelProvider"),
+		ReasoningEffort: firstStringField(documents, "reasoning_effort", "reasoningEffort", "effort"),
+		Client:          firstStringField(documents, "client", "originator"),
+		ClientVersion:   firstStringField(documents, "client_version", "clientVersion", "cli_version", "cliVersion"),
+		Source:          firstStringField(documents, "source"),
+		ThreadSource:    firstStringField(documents, "thread_source", "threadSource"),
+	}
+	metadata.ContextWindowTokens = firstInt64Field(documents, "context_window_tokens", "contextWindowTokens", "model_context_window", "modelContextWindow")
+	if hasRuntimeMetadata(metadata) {
+		metadata.RecordedFrom = eventName
+	}
+	return metadata
+}
+
+func runtimeMetadataDocuments(document map[string]any) []map[string]any {
+	documents := []map[string]any{document}
+	for _, key := range []string{"metadata", "runtime", "runtime_metadata", "execution_settings", "session_meta", "turn_context", "task_started", "payload"} {
+		if nested, ok := mapField(document, key); ok {
+			documents = append(documents, nested)
+		}
+	}
+	return documents
+}
+
+func firstStringField(documents []map[string]any, keys ...string) string {
+	for _, document := range documents {
+		if value, ok := stringField(document, keys...); ok {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstInt64Field(documents []map[string]any, keys ...string) int64 {
+	for _, document := range documents {
+		for actual, raw := range document {
+			matched := false
+			for _, key := range keys {
+				if strings.EqualFold(actual, key) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+			switch value := raw.(type) {
+			case int:
+				return int64(value)
+			case int32:
+				return int64(value)
+			case int64:
+				return value
+			case float32:
+				return int64(value)
+			case float64:
+				return int64(value)
+			case string:
+				if parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err == nil {
+					return parsed
+				}
+			}
+		}
+	}
+	return 0
+}
+
+func mapField(document map[string]any, key string) (map[string]any, bool) {
+	for actual, raw := range document {
+		if !strings.EqualFold(actual, key) {
+			continue
+		}
+		switch nested := raw.(type) {
+		case map[string]any:
+			return nested, true
+		case bson.M:
+			return map[string]any(nested), true
+		}
+	}
+	return nil, false
+}
+
+func hasRuntimeMetadata(metadata trace.RuntimeMetadata) bool {
+	return metadata.Model != "" || metadata.Provider != "" || metadata.ReasoningEffort != "" || metadata.ContextWindowTokens != 0 || metadata.Client != "" || metadata.ClientVersion != "" || metadata.Source != "" || metadata.ThreadSource != ""
+}
+
+func mergeRuntimeMetadata(current, incoming trace.RuntimeMetadata) trace.RuntimeMetadata {
+	if current.Model == "" {
+		current.Model = incoming.Model
+	}
+	if current.Provider == "" {
+		current.Provider = incoming.Provider
+	}
+	if current.ReasoningEffort == "" {
+		current.ReasoningEffort = incoming.ReasoningEffort
+	}
+	if current.ContextWindowTokens == 0 {
+		current.ContextWindowTokens = incoming.ContextWindowTokens
+	}
+	if current.Client == "" {
+		current.Client = incoming.Client
+	}
+	if current.ClientVersion == "" {
+		current.ClientVersion = incoming.ClientVersion
+	}
+	if current.Source == "" {
+		current.Source = incoming.Source
+	}
+	if current.ThreadSource == "" {
+		current.ThreadSource = incoming.ThreadSource
+	}
+	if incoming.RecordedFrom != "" && !strings.Contains(current.RecordedFrom, incoming.RecordedFrom) {
+		if current.RecordedFrom == "" {
+			current.RecordedFrom = incoming.RecordedFrom
+		} else {
+			current.RecordedFrom += " + " + incoming.RecordedFrom
+		}
+	}
+	return current
 }
 
 func joinReasons(left, right string) string {

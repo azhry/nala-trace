@@ -16,6 +16,7 @@ type SessionSummary struct {
 	ToolCallCount        int64     `bson:"tool_call_count" json:"tool_call_count"`
 	SkillInvocationCount int64     `bson:"skill_invocation_count" json:"skill_invocation_count"`
 	FileOperationCount   int64     `bson:"file_operation_count" json:"file_operation_count"`
+	FileReadCount        int64     `bson:"file_read_count" json:"file_read_count"`
 }
 
 func sessionSummaryPipeline() []bson.D {
@@ -23,16 +24,10 @@ func sessionSummaryPipeline() []bson.D {
 }
 
 func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
-	toolEvent := bson.D{{Key: "$in", Value: bson.A{"$hook_event_name", bson.A{"PreToolUse"}}}}
-	skillEvent := bson.D{{Key: "$regexMatch", Value: bson.D{
-		{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$tool_name", ""}}}},
-		{Key: "regex", Value: "skill"},
-		{Key: "options", Value: "i"},
-	}}}
-	fileEvent := bson.D{{Key: "$or", Value: bson.A{
-		bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$payload.file_path", nil}}}, nil}}},
-		bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$payload.path", nil}}}, nil}}},
-	}}}
+	toolEvent := preToolUseExpression()
+	skillEvent := andExpression(toolEvent, skillSignalExpression())
+	fileEvent := andExpression(toolEvent, fileSignalExpression())
+	fileReadEvent := andExpression(toolEvent, fileSignalExpression(), fileReadSignalExpression())
 	explicitTitle := firstNonEmptyString(bson.A{
 		stringFieldCandidate("$payload.title"),
 		stringFieldCandidate("$payload.session_title"),
@@ -56,6 +51,7 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "tool_call_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{toolEvent, 1, 0}}}}}},
 			{Key: "skill_invocation_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{skillEvent, 1, 0}}}}}},
 			{Key: "file_operation_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{fileEvent, 1, 0}}}}}},
+			{Key: "file_read_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{fileReadEvent, 1, 0}}}}}},
 		}}},
 		{{Key: "$project", Value: bson.D{
 			{Key: "_id", Value: 0},
@@ -68,6 +64,7 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "tool_call_count", Value: 1},
 			{Key: "skill_invocation_count", Value: 1},
 			{Key: "file_operation_count", Value: 1},
+			{Key: "file_read_count", Value: 1},
 		}}},
 		{{Key: "$sort", Value: bson.D{{Key: "last_event_at", Value: -1}, {Key: "session_id", Value: 1}}}},
 	}...)
@@ -75,6 +72,77 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 		pipeline = append(pipeline, bson.D{{Key: "$limit", Value: limit}})
 	}
 	return pipeline
+}
+
+func preToolUseExpression() bson.D {
+	return bson.D{{Key: "$eq", Value: bson.A{"$hook_event_name", "PreToolUse"}}}
+}
+
+func andExpression(expressions ...bson.D) bson.D {
+	values := make(bson.A, 0, len(expressions))
+	for _, expression := range expressions {
+		values = append(values, expression)
+	}
+	return bson.D{{Key: "$and", Value: values}}
+}
+
+func skillSignalExpression() bson.D {
+	return bson.D{{Key: "$or", Value: bson.A{
+		regexFieldExpression("$tool_name", "skill"),
+		nonEmptyStringExpression("$payload.skill"),
+		nonEmptyStringExpression("$payload.skill_name"),
+		nonEmptyStringExpression("$payload.tool_input.skill"),
+		nonEmptyStringExpression("$payload.tool_input.skill_name"),
+	}}}
+}
+
+func fileSignalExpression() bson.D {
+	return bson.D{{Key: "$or", Value: bson.A{
+		nonEmptyStringExpression("$payload.tool_input.file_path"),
+		nonEmptyStringExpression("$payload.tool_input.path"),
+		nonEmptyStringExpression("$payload.tool_input.target_file"),
+		nonEmptyStringExpression("$payload.tool_input.filename"),
+		nonEmptyStringExpression("$payload.tool_input.file"),
+		nonEmptyStringExpression("$payload.tool_input.old_path"),
+		nonEmptyStringExpression("$payload.tool_input.new_path"),
+		regexFieldExpression("$payload.tool_input", `\*\*\* (Add|Update|Delete|Move to) File:`),
+		regexFieldExpression("$payload.tool_input.command", `(^|\s)(cat|head|tail|type|get-content|read|set-content|out-file|tee|remove-item|rm|del|delete)(\s|$)`),
+	}}}
+}
+
+func fileReadSignalExpression() bson.D {
+	return bson.D{{Key: "$or", Value: bson.A{
+		fieldEqualsExpression("$payload.tool_input.operation", "read"),
+		fieldEqualsExpression("$payload.tool_input.action", "read"),
+		regexFieldExpression("$tool_name", `(read|cat|get-content|open)`),
+		regexFieldExpression("$payload.tool_input.command", `(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`),
+	}}}
+}
+
+func nonEmptyStringExpression(path string) bson.D {
+	converted := convertToStringExpression(path)
+	return bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$trim", Value: bson.D{{Key: "input", Value: converted}}}}, ""}}}
+}
+
+func fieldEqualsExpression(path, want string) bson.D {
+	return bson.D{{Key: "$eq", Value: bson.A{convertToStringExpression(path), want}}}
+}
+
+func regexFieldExpression(path, regex string) bson.D {
+	return bson.D{{Key: "$regexMatch", Value: bson.D{
+		{Key: "input", Value: convertToStringExpression(path)},
+		{Key: "regex", Value: regex},
+		{Key: "options", Value: "i"},
+	}}}
+}
+
+func convertToStringExpression(path string) bson.D {
+	return bson.D{{Key: "$convert", Value: bson.D{
+		{Key: "input", Value: path},
+		{Key: "to", Value: "string"},
+		{Key: "onError", Value: ""},
+		{Key: "onNull", Value: ""},
+	}}}
 }
 
 func stringFieldCandidate(path string) bson.D {

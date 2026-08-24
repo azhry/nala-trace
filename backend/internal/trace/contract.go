@@ -28,6 +28,7 @@ type Trace struct {
 	ToolCalls        []ToolCall         `json:"tool_calls"`
 	SkillInvocations []SkillInvocation  `json:"skill_invocations"`
 	Files            []FileOperation    `json:"files"`
+	RuntimeMetadata  RuntimeMetadata    `json:"runtime_metadata"`
 	Summary          Summary            `json:"summary"`
 }
 
@@ -82,12 +83,27 @@ type FileOperation struct {
 	Raw        json.RawMessage `json:"raw"`
 }
 
+// RuntimeMetadata contains only allowlisted scalar execution settings found
+// in captured hook payloads. Missing producer fields remain empty.
+type RuntimeMetadata struct {
+	Model               string `json:"model,omitempty"`
+	Provider            string `json:"provider,omitempty"`
+	ReasoningEffort     string `json:"reasoning_effort,omitempty"`
+	ContextWindowTokens int64  `json:"context_window_tokens,omitempty"`
+	Client              string `json:"client,omitempty"`
+	ClientVersion       string `json:"client_version,omitempty"`
+	Source              string `json:"source,omitempty"`
+	ThreadSource        string `json:"thread_source,omitempty"`
+	RecordedFrom        string `json:"recorded_from,omitempty"`
+}
+
 type Summary struct {
 	EventCount           int `json:"event_count"`
 	MessageCount         int `json:"message_count"`
 	ToolCallCount        int `json:"tool_call_count"`
 	SkillInvocationCount int `json:"skill_invocation_count"`
 	FileOperationCount   int `json:"file_operation_count"`
+	FileReadCount        int `json:"file_read_count"`
 }
 
 func New(sessionID, userID string) Trace {

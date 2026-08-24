@@ -16,9 +16,9 @@ client is deliberately not part of the Codex success path:
 ## Runtime configuration
 
 The repository installer `bash scripts/install-hook.sh` builds the client,
-creates the project-local file `.codex/nala-trace.env`, and copies the checked-
-in manifest to `.codex/hooks.json`. The manifest invokes
-`backend/bin/hook-client.exe` relative to the current project directory, so
+creates the target project's `.codex/nala-trace.env`, and copies the checked-in
+manifest and client to the target project's `.codex` directory. The manifest
+invokes `.codex/hook-client.exe` relative to the current project directory, so
 Codex does not need to inherit a PATH entry. The client also accepts explicit
 process environment values, which take
 precedence over file values. `CODEX_TRACE_CONFIG_FILE` can select one explicit
@@ -43,8 +43,8 @@ user-level file when one configuration should apply across projects.
 ## Manifest and trust
 
 `/hooks.json` is the repository manifest. It registers the nine canonical
-events and sends each event as JSON on stdin to
-`backend/bin/hook-client.exe`. The installer copies it to `.codex/hooks.json`.
+events and sends each event as JSON on stdin to `.codex/hook-client.exe`. The
+installer copies the manifest and installs the executable beside it.
 Follow the manual, step-by-step `curl` sequence in the repository README to
 verify delivery against the running API and real dependencies.
 

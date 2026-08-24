@@ -1,5 +1,8 @@
 const EMPTY_LIST = []
 const LIFECYCLE_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse'])
+const TOOL_INPUT_PREVIEW_LIMIT = 520
+const SHELL_TOOL_PATTERN = /(?:bash|shell|powershell|pwsh|terminal|unified_exec|exec_command|(?:^|[_-])sh(?:$|[_-])|(?:^|[_-])cmd(?:$|[_-]))/i
+const COMMAND_INPUT_KEYS = ['command', 'cmd', 'script', 'shell_command']
 
 function hasOwn(value, key) {
   return Boolean(value) && Object.prototype.hasOwnProperty.call(value, key)
@@ -29,6 +32,86 @@ function rawRecord(value) {
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
   } catch {
     return {}
+  }
+}
+
+function parseRecordedInput(value) {
+  if (value == null) return null
+  if (typeof value === 'object') return value
+
+  const text = cleanString(value)
+  if (!text) return null
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+function decodeQuotedValue(value) {
+  if (!value) return ''
+  if (value.startsWith('"')) {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return value.slice(1, -1)
+    }
+  }
+
+  return value.slice(1, -1)
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\([\\'])/g, '$1')
+}
+
+function extractCommand(value) {
+  const parsed = parseRecordedInput(value)
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    for (const key of COMMAND_INPUT_KEYS) {
+      const command = cleanString(parsed[key])
+      if (command) return command
+    }
+  }
+
+  if (typeof parsed === 'string') {
+    const namedCommand = parsed.match(/(?:^|[,{\s])(?:command|cmd|script|shell_command)\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/s)
+    if (namedCommand) return cleanString(decodeQuotedValue(namedCommand[1]))
+    return parsed
+  }
+
+  return ''
+}
+
+function compactInputSummary(value) {
+  const parsed = parseRecordedInput(value)
+  if (parsed == null) return ''
+  if (typeof parsed === 'string') return parsed
+
+  try {
+    return JSON.stringify(parsed)
+  } catch {
+    return String(parsed)
+  }
+}
+
+export function clipToolInputPreview(value, limit = TOOL_INPUT_PREVIEW_LIMIT) {
+  const text = String(value || '')
+  if (text.length <= limit) return text
+  return `${text.slice(0, limit).trimEnd()}…`
+}
+
+export function getToolInputPreview(toolName, input) {
+  const hasInput = input != null && (typeof input !== 'string' || Boolean(input.trim()))
+  if (!hasInput) return { label: 'Input', text: 'Input not recorded', kind: 'missing' }
+
+  const isShellTool = SHELL_TOOL_PATTERN.test(cleanString(toolName))
+  const preview = isShellTool ? extractCommand(input) : compactInputSummary(input)
+  return {
+    label: isShellTool && preview ? 'Command' : 'Input',
+    text: clipToolInputPreview(preview || compactInputSummary(input)),
+    kind: isShellTool && preview ? 'command' : 'summary',
   }
 }
 
@@ -140,6 +223,7 @@ function normalizeToolCall(call = {}, index) {
   const status = cleanString(call.status) || 'recorded'
   const raw = rawRecord(call.raw)
   const provenance = normalizeProvenance(call, raw)
+  const inputPreview = getToolInputPreview(call.tool_name ?? call.toolName, call.input)
 
   return {
     id: `tool-${index}`,
@@ -153,6 +237,9 @@ function normalizeToolCall(call = {}, index) {
     status,
     record: null,
     input: serializeJson(call.input),
+    inputPreviewLabel: inputPreview.label,
+    inputPreview: inputPreview.text,
+    inputPreviewKind: inputPreview.kind,
     response: serializeJson(call.output),
     responseLabel: 'JSON',
     skills: EMPTY_LIST,

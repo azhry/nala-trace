@@ -51,6 +51,46 @@ describe('normalizeTraceViewModel', () => {
     expect(model.messageCount).toBe(3)
   })
 
+  it('creates a bounded command preview for shell tools and compact summaries for other tools', () => {
+    const model = normalizeTraceViewModel({
+      schema_version: '1',
+      tool_calls: [
+        {
+          tool_name: 'Bash',
+          input: { command: 'npm --prefix frontend test\nnpm --prefix frontend run build', workdir: 'C:\\workspace' },
+          output: 'done',
+        },
+        {
+          tool_name: 'read_file',
+          input: { path: 'frontend/src/App.jsx', line: 42 },
+          output: 'file contents',
+        },
+        {
+          tool_name: 'shell_command',
+          input: null,
+          output: null,
+        },
+      ],
+    })
+
+    expect(model.events[0]).toMatchObject({
+      tool: 'Bash',
+      inputPreviewLabel: 'Command',
+      inputPreview: 'npm --prefix frontend test\nnpm --prefix frontend run build',
+      input: expect.stringContaining('"command": "npm --prefix frontend test'),
+    })
+    expect(model.events[1]).toMatchObject({
+      tool: 'read_file',
+      inputPreviewLabel: 'Input',
+      inputPreview: '{"path":"frontend/src/App.jsx","line":42}',
+    })
+    expect(model.events[2]).toMatchObject({
+      inputPreviewLabel: 'Input',
+      inputPreview: 'Input not recorded',
+      inputPreviewKind: 'missing',
+    })
+  })
+
   it('marks missing content and turn metadata as partial evidence', () => {
     const model = normalizeTraceViewModel({
       schema_version: '1',

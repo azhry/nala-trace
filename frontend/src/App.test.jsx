@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, clearAuthConfiguration, getSessions, getTrace, resolveSession } from './api'
+import { ApiError, clearAuthConfiguration, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
 import { redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import App from './App'
 
@@ -39,11 +39,12 @@ const sessionPayload = {
 
 describe('authenticated sessions flow', () => {
   beforeEach(() => {
-    window.location.hash = '#/sessions'
+    window.history.replaceState({}, '', '/#/sessions')
     vi.clearAllMocks()
     vi.unstubAllEnvs()
     clearAuthConfiguration()
     window.sessionStorage.clear()
+    window.sessionStorage.setItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, 'test-jwt')
     redirectToNalaLabs.mockReturnValue(true)
     signOutFromTrace.mockReturnValue(true)
     redeemNalaLabsAuthCode.mockResolvedValue({ attempted: false, authenticated: false })
@@ -53,6 +54,15 @@ describe('authenticated sessions flow', () => {
   })
 
   it('automatically redirects an unauthorized entry to Nala Labs in the same tab', async () => {
+    window.sessionStorage.removeItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
+
+    render(<App />)
+
+    await waitFor(() => expect(redirectToNalaLabs).toHaveBeenCalledExactlyOnceWith())
+    expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the auth boundary for an invalid stored credential', async () => {
     resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
 
     render(<App />)
@@ -73,6 +83,8 @@ describe('authenticated sessions flow', () => {
   })
 
   it('redeems a returned code before resolving the protected session', async () => {
+    window.history.replaceState({}, '', '/?nala_labs_auth_code=opaque-code')
+    window.location.hash = '#/sessions'
     redeemNalaLabsAuthCode.mockResolvedValueOnce({ attempted: true, authenticated: true })
 
     render(<App />)

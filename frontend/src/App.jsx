@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, getSessions, getTrace, resolveSession } from './api'
-import { AuthHandoffError, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
+import { ApiError, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
+import { AuthHandoffError, readNalaLabsAuthCode, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
@@ -22,6 +22,18 @@ function dataSourceCopy(apiState) {
   if (apiState === 'unauthorized') return { label: 'Sign-in required', status: 'Authentication required', detail: 'Resolve an authenticated application session to view records' }
   if (apiState === 'error') return { label: 'API unavailable', status: 'API unavailable', detail: 'The session service did not return a usable response' }
   return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
+}
+
+function hasStoredNalaLabsSession() {
+  try {
+    return Boolean(window.sessionStorage?.getItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY))
+  } catch {
+    return false
+  }
+}
+
+function shouldRedirectOnEntry() {
+  return !hasStoredNalaLabsSession() && !readNalaLabsAuthCode()
 }
 
 function AuthBoundary({ apiState, handoffState, onRetry }) {
@@ -113,6 +125,8 @@ export default function App() {
   const [apiState, setApiState] = useState('loading')
   const [handoffState, setHandoffState] = useState('idle')
   const [remoteTrace, setRemoteTrace] = useState(null)
+  const [redirectOnEntry] = useState(() => shouldRedirectOnEntry())
+  const redirectedOnEntryRef = useRef(false)
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute())
@@ -143,10 +157,17 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (redirectOnEntry) {
+      if (redirectedOnEntryRef.current) return
+      redirectedOnEntryRef.current = true
+      redirectToNalaLabs()
+      return
+    }
+
     let active = true
     loadSessions(() => active)
     return () => { active = false }
-  }, [loadSessions])
+  }, [loadSessions, redirectOnEntry])
 
   const selectedSession = useMemo(() => sessions.find((session) => session.id === route.sessionId), [route.sessionId, sessions])
 
@@ -168,6 +189,7 @@ export default function App() {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
   }
 
+  if (redirectOnEntry) return null
   if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession

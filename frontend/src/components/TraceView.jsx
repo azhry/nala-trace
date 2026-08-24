@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
+import { normalizeTraceViewModel } from '../traceViewModel'
 
 const filters = [
   ['all', 'Everything'],
@@ -10,10 +11,6 @@ const filters = [
 ]
 const EMPTY_EVENTS = []
 
-function isInstructionEvent(event) {
-  return event.type === 'tool' && (event.files || []).some((file) => instructionFilePattern.test(file))
-}
-
 function SkillTags({ skills = [] }) {
   if (!skills.length) return null
   return <span className="message-tags">{skills.map((skill) => <span className="message-tag" key={skill}>inferred / {skill}</span>)}</span>
@@ -21,11 +18,16 @@ function SkillTags({ skills = [] }) {
 
 function ConversationMessage({ event }) {
   const isUser = event.role === 'user'
-  return <article className={`conversation-message ${isUser ? 'user' : 'assistant'}`}>
-    <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{isUser ? 'User' : 'Codex'}</strong><span>{event.time}</span><span className="message-record">record {event.record}</span></div>
-    <p>{event.body}</p>
-    <SkillTags skills={event.skills} />
-  </article>
+  const body = event.hasContent === false ? 'Content not recorded' : event.body
+  return <>
+    {event.turnBoundary && <div className="turn-boundary" role="separator" aria-label={event.turnLabel}><span>Turn boundary</span><strong>{event.turnLabel}</strong></div>}
+    <article className={`conversation-message ${isUser ? 'user' : 'assistant'}`}>
+      <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}</div>
+      {event.contentIsCode ? <pre className="message-content-code">{body}</pre> : <p>{body}</p>}
+      {event.partial && <span className="message-partial">partial evidence</span>}
+      <SkillTags skills={event.skills} />
+    </article>
+  </>
 }
 
 function SystemEvent({ event }) {
@@ -43,17 +45,19 @@ function FileTag({ file }) {
 
 function ContextRow({ event, inline = false }) {
   const isPrompt = event.contextType !== 'instruction-read'
-  const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
-  const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label : event.tool || 'Captured context'
+  const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'agent-reply' ? 'Agent reply' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
+  const agentLabel = [event.provenance?.agentType, event.provenance?.agentId].filter(Boolean).join(' · ')
+  const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'agent-prompt' || event.contextType === 'agent-reply' ? `Agent${agentLabel ? ` · ${agentLabel}` : ''}` : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label || event.provenance?.eventName || 'Lifecycle event' : event.tool || 'Captured context'
+  const recordLabel = event.record || event.provenance?.eventName || 'not recorded'
   return <article className={`context-row ${event.contextType} ${inline ? 'inline-context' : ''}`}>
     <div className="context-row-header">
-      <div><span className="context-row-kind">{title}</span><strong>{source}</strong><small>record {event.record} · {event.time}</small></div>
+      <div><span className="context-row-kind">{title}</span><strong>{source}</strong><small>record {recordLabel} · {event.time}</small></div>
       <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} inferred tags</span>
     </div>
     <div className="context-row-tags">{(event.files || []).map((file) => <FileTag file={file} key={`file-${file}`} />)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
     <details open={isPrompt}>
-      <summary>{event.contextType === 'instruction-read' ? 'Show command and content read' : 'Show recorded prompt'}</summary>
-      {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : 'context'}</span><pre>{event.body}</pre></div>}
+      <summary>{event.contextType === 'instruction-read' ? 'Show command and content read' : event.contextType === 'agent-reply' ? 'Show recorded reply' : 'Show recorded prompt'}</summary>
+      {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : event.contextType === 'agent-reply' ? 'reply' : 'context'}</span><pre>{event.body}</pre></div>}
       {event.input && <div className="context-code"><span>tool_input</span><pre>{event.input}</pre></div>}
       {event.response && <div className="context-code"><span>tool_response / content read</span><pre>{event.response}</pre></div>}
     </details>
@@ -117,13 +121,29 @@ function InstructionInventory({ events }) {
   </div>
 }
 
-export default function TraceView({ session }) {
+function TraceStatePanel({ state, onRetry }) {
+  if (state === 'loading') return <div className="trace-state-panel" role="status" aria-live="polite"><strong>Loading trace conversation…</strong><span>Reading the selected session from the protected Go API.</span></div>
+  if (state === 'missing') return <div className="trace-state-panel" role="alert"><strong>Session trace not found.</strong><span>No stored events were returned for this session.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
+  if (state === 'unauthorized') return <div className="trace-state-panel" role="alert"><strong>Trace access needs authentication.</strong><span>The trace request was rejected. Refresh the application session, then retry.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
+  if (state === 'error') return <div className="trace-state-panel" role="alert"><strong>Trace conversation could not be loaded.</strong><span>The protected trace request failed before conversation data was available.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
+  if (state === 'empty') return <div className="trace-state-panel" role="status"><strong>No conversation messages were recorded.</strong><span>This session has no reconstructed user or assistant content to display.</span></div>
+  return null
+}
+
+function PartialNotice({ message }) {
+  return <div className="trace-partial-notice" role="status"><strong>Partial conversation data</strong><span>{message}</span></div>
+}
+
+export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {} }) {
   const [filter, setFilter] = useState('all')
-  const events = session.eventsList || EMPTY_EVENTS
+  const viewModel = useMemo(() => normalizeTraceViewModel(session), [session])
+  const events = viewModel.events || EMPTY_EVENTS
   const contextRows = useMemo(() => {
     const rows = []
     events.forEach((event) => {
-      if (event.type === 'system') {
+      if (event.type === 'context') {
+        rows.push({ ...event, id: `context-${event.id}`, type: 'context', contextType: event.contextType || 'system-event' })
+      } else if (event.type === 'system') {
         rows.push({ ...event, id: `context-${event.id}`, type: 'context', contextType: 'system-event' })
       } else if (event.type === 'user') {
         rows.push({ ...event, id: `context-${event.id}`, type: 'context', contextType: 'user-prompt' })
@@ -132,8 +152,8 @@ export default function TraceView({ session }) {
       } else if (event.type === 'tool') {
         const instructionFiles = (event.files || []).filter((file) => instructionFilePattern.test(file))
         const isAgentPrompt = /multi_agent_v1__(spawn_agent|send_input)/.test(event.tool || '')
-        if (isAgentPrompt || instructionFiles.length) {
-          rows.push({ ...event, id: `context-${event.id}`, type: 'context', contextType: isAgentPrompt ? 'agent-prompt' : 'instruction-read', files: instructionFiles.length ? instructionFiles : event.files })
+        if (isAgentPrompt || instructionFiles.length || event.lifecycleEvent) {
+          rows.push({ ...event, id: `context-${event.id}`, type: 'context', contextType: isAgentPrompt ? 'agent-prompt' : instructionFiles.length ? 'instruction-read' : 'system-event', files: instructionFiles.length ? instructionFiles : event.files })
         }
       }
     })
@@ -143,12 +163,14 @@ export default function TraceView({ session }) {
     if (filter === 'context') return contextRows
     return events.filter((event) => {
       if (filter === 'all') return true
-      if (filter === 'conversation') return event.type === 'user' || event.type === 'assistant' || isInstructionEvent(event)
+      if (filter === 'conversation') return event.type === 'user' || event.type === 'assistant'
       if (filter === 'tools') return event.type === 'tool'
       return event.type === 'system'
     })
   }, [contextRows, events, filter])
-  const semanticRecords = (session.events || session.eventsList?.length || 0).toLocaleString()
+  const semanticRecords = String(viewModel.semanticRecords ?? 0)
+  const isApiTrace = viewModel.source === 'api'
+  const emptyConversation = isApiTrace && viewModel.conversation.length === 0
   const contextCounts = contextRows.reduce((counts, event) => ({ ...counts, [event.contextType]: (counts[event.contextType] || 0) + 1 }), {})
 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
@@ -156,19 +178,19 @@ export default function TraceView({ session }) {
       <div>
         <p className="section-label">Conversation and trace</p>
         <h2 id="trace-view-title">Session detail</h2>
-        <p className="panel-description">The complete audited rollout: User and Codex turns, every recorded tool call, paired output, file/instruction reference, skill tag, and context marker.</p>
+        <p className="panel-description">The captured event stream: User and Codex turns, recorded tool calls with paired output, lifecycle/context markers, file and instruction references, and skill tags. Private model reasoning is not part of the hook data.</p>
       </div>
       <span className="record-count">{semanticRecords} records</span>
     </div>
     <div className="trace-summary">
-      <div><span>Session</span><strong>{session.id}</strong><small>{session.messages} messages · {session.userTurns} user turns</small></div>
-      <div><span>Tools</span><strong>{(session.toolCalls || 0).toLocaleString()}</strong><small>{(session.renderedToolRows || session.toolCalls || 0).toLocaleString()} rendered tool rows</small></div>
-      <div><span>Capture</span><strong>{session.startedAt}–{session.capturedAt}</strong><small>{(session.rawEvents || 0).toLocaleString()} raw events</small></div>
+      <div><span>Session</span><strong>{session.id || 'Selected session'}</strong><small>{viewModel.messageCount.toLocaleString()} messages · {viewModel.conversation.filter((event) => event.role === 'user').length.toLocaleString()} user turns</small></div>
+      <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
+      <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
     <SkillInventory events={events} />
     <InstructionInventory events={events} />
     <div className="context-inventory" aria-label="Prompt and context summary">
-      <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
+      <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
       <span className="context-inventory-note">Use “Prompts & context” below</span>
     </div>
     <div className="trace-controls" role="group" aria-label="Filter session detail">
@@ -177,17 +199,19 @@ export default function TraceView({ session }) {
       <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} rows · {semanticRecords} semantic records</span>
     </div>
     <div className="trace-stream">
-      <div className="stream-intro"><span className="stream-line" /><span>Trace started · {session.startedAt}</span></div>
-      {visibleEvents.map((event) => event.type === 'context'
-        ? <ContextRow key={event.id} event={event} />
-        : filter === 'conversation' && isInstructionEvent(event)
-        ? <ContextRow key={event.id} event={{ ...event, id: `conversation-${event.id}`, type: 'context', contextType: 'instruction-read', files: event.files }} inline />
-        : event.type === 'tool'
-        ? <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} />
-        : event.type === 'system'
-          ? <SystemEvent key={event.id} event={event} />
-          : <ConversationMessage key={event.id} event={event} />)}
-      <div className="stream-end"><span>End of captured session · {session.capturedAt}</span><span className="stream-line" /></div>
+      {traceState !== 'ready' ? <TraceStatePanel state={traceState} onRetry={onRetry} /> : <>
+        {viewModel.partial && <PartialNotice message={viewModel.partialMessage} />}
+        {emptyConversation && <TraceStatePanel state="empty" />}
+        {(visibleEvents.length > 0 || !emptyConversation) && <div className="stream-intro"><span className="stream-line" /><span>Trace started · {viewModel.startedAt}</span></div>}
+        {visibleEvents.map((event) => event.type === 'context'
+          ? <ContextRow key={event.id} event={event} />
+          : event.type === 'tool'
+          ? <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} />
+          : event.type === 'system'
+            ? <SystemEvent key={event.id} event={event} />
+            : <ConversationMessage key={event.id} event={event} />)}
+        {visibleEvents.length > 0 && <div className="stream-end"><span>End of captured session · {viewModel.capturedAt}</span><span className="stream-line" /></div>}
+      </>}
     </div>
   </section>
 }

@@ -110,10 +110,10 @@ function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, fi
   return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} />{apiState === 'connected' ? <><SessionStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} sortBy={sortBy} onSortChange={onSortChange} /></> : <SessionStatePanel state={apiState} onRetry={onRetry} />}</section>
 }
 
-function DetailPage({ session, onBack, apiState }) {
+function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry }) {
   const source = dataSourceCopy(apiState)
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} /><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} /><InsightCards insights={session.insights || { metrics: [] }} /></div></section>
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} /><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards insights={session.insights || { metrics: [] }} /></div></section>
 }
 
 export default function App() {
@@ -125,6 +125,8 @@ export default function App() {
   const [apiState, setApiState] = useState('loading')
   const [handoffState, setHandoffState] = useState('idle')
   const [remoteTrace, setRemoteTrace] = useState(null)
+  const [traceState, setTraceState] = useState('idle')
+  const [traceError, setTraceError] = useState(null)
   const [redirectOnEntry] = useState(() => shouldRedirectOnEntry())
   const redirectedOnEntryRef = useRef(false)
 
@@ -171,19 +173,43 @@ export default function App() {
 
   const selectedSession = useMemo(() => sessions.find((session) => session.id === route.sessionId), [route.sessionId, sessions])
 
+  const loadTrace = useCallback((sessionId, isActive = () => true) => {
+    if (!sessionId) return Promise.resolve(null)
+    setRemoteTrace(null)
+    setTraceError(null)
+    setTraceState('loading')
+    return getTrace(sessionId).then((payload) => {
+      if (!isActive()) return payload
+      setRemoteTrace(payload || {})
+      setTraceState('ready')
+      return payload
+    }).catch((error) => {
+      if (!isActive()) return null
+      setTraceError(error)
+      setTraceState(error instanceof ApiError && error.status === 404
+        ? 'missing'
+        : error instanceof ApiError && error.status === 401
+          ? 'unauthorized'
+          : 'error')
+      return null
+    })
+  }, [])
+
   useEffect(() => {
     let mounted = true
     if (apiState !== 'connected' || route.view !== 'detail' || !route.sessionId) {
       setRemoteTrace(null)
+      setTraceError(null)
+      setTraceState('idle')
       return () => { mounted = false }
     }
-    getTrace(route.sessionId).then((payload) => {
-      if (mounted && payload?.eventsList) setRemoteTrace(payload)
-    }).catch(() => {})
+    loadTrace(route.sessionId, () => mounted)
     return () => { mounted = false }
-  }, [apiState, route.sessionId, route.view])
+  }, [apiState, loadTrace, route.sessionId, route.view])
 
-  const detailSession = selectedSession && remoteTrace ? { ...selectedSession, ...remoteTrace } : selectedSession
+  const detailSession = remoteTrace
+    ? { ...(selectedSession || { id: route.sessionId, title: route.sessionId, status: 'captured' }), ...remoteTrace }
+    : selectedSession || (route.view === 'detail' && route.sessionId ? { id: route.sessionId, title: route.sessionId, status: 'captured' } : null)
 
   function selectSession(id) {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
@@ -193,5 +219,5 @@ export default function App() {
   if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} traceState={traceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

@@ -123,10 +123,12 @@ tool calls, skills, and file evidence.
 ## Install the Codex hook
 
 The checked-in `hooks.json` is the portable Codex hook manifest. It contains
-the event registrations and the `hook-client` command, but no URL, token, or
-other secret. Keep the executable path and runtime credentials outside the
-manifest. Codex expects each event to contain matcher groups with nested
-command handlers; do not add a `version`, `known_gaps`, or `stdin` field.
+the event registrations and the project-relative
+`backend/bin/hook-client.exe` command, but no URL, token, or other secret.
+The command is resolved from the current project directory, so hook delivery
+does not depend on Codex inheriting a user or system PATH entry. Codex expects
+each event to contain matcher groups with nested command handlers; do not add a
+`version`, `known_gaps`, or `stdin` field.
 
 ### 1. Build the hook client
 
@@ -135,14 +137,12 @@ From the repository root:
 ```bash
 cd backend
 mkdir -p bin
-go build -o bin/hook-client ./cmd/hook-client
-export PATH="$(pwd)/bin:$PATH"
-command -v hook-client
+go build -o bin/hook-client.exe ./cmd/hook-client
+test -x bin/hook-client.exe
 ```
 
-The final command must resolve the binary that Codex will launch. On Windows,
-build `bin/hook-client.exe` and place that directory on the PATH visible to
-Codex Desktop.
+The final command must report exit status `0`. The manifest uses this binary
+by project-relative path; no PATH update is required.
 
 ### 2. Set runtime configuration
 
@@ -154,8 +154,9 @@ writes the key to the ignored project config file without printing it:
 bash scripts/install-hook.sh
 ```
 
-The installer creates the project-local file `.codex/nala-trace.env`. Its
-contents are:
+The installer creates the project-local file `.codex/nala-trace.env`, copies
+the checked-in manifest to `.codex/hooks.json`, and builds the client. The
+config contents are:
 
 ```text
 CODEX_TRACE_API_URL=http://127.0.0.1:3003/ingest
@@ -184,21 +185,20 @@ configuration should apply to projects that do not have a local file.
 
 ### 3. Install and trust the manifest
 
-The Codex configuration location and trust prompt can vary by installed Codex
-version. Copy the repository's `hooks.json` to the accepted local configuration
-location (for this workspace, `.codex/hooks.json`), then use the Codex hook
-configuration flow:
+The installer already copies the repository manifest to the accepted local
+configuration location for this workspace, `.codex/hooks.json`. Use the Codex
+hook configuration flow:
 
 ```text
 codex
 /hooks
 ```
 
-When Codex asks to approve `hook-client`, review that it invokes the binary
-from the PATH above, receives JSON on stdin, and does not contain embedded
-credentials. Trust the command only after that review. Keep all nine event
-registrations. JSON stdin is part of Codex command-hook behavior and is not a
-field in `hooks.json`.
+When Codex asks to approve the hook, review that it invokes
+`backend/bin/hook-client.exe` from the project directory, receives JSON on
+stdin, and does not contain embedded credentials. Trust the command only after
+that review. Keep all nine event registrations. JSON stdin is part of Codex
+command-hook behavior and is not a field in `hooks.json`.
 
 ### 4. Generate and inspect a real trace
 

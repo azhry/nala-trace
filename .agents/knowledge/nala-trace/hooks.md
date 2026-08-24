@@ -15,10 +15,12 @@ client is deliberately not part of the Codex success path:
 
 ## Runtime configuration
 
-Build the client and put the resulting `hook-client` executable on the PATH
-used by Codex. The repository installer `bash scripts/install-hook.sh` creates
-the project-local file `.codex/nala-trace.env` and builds the client. The
-client also accepts explicit process environment values, which take
+The repository installer `bash scripts/install-hook.sh` builds the client,
+creates the project-local file `.codex/nala-trace.env`, and copies the checked-
+in manifest to `.codex/hooks.json`. The manifest invokes
+`backend/bin/hook-client.exe` relative to the current project directory, so
+Codex does not need to inherit a PATH entry. The client also accepts explicit
+process environment values, which take
 precedence over file values. `CODEX_TRACE_CONFIG_FILE` can select one explicit
 file. Otherwise, the client checks `.codex/nala-trace.env` in the hook process's
 current project directory, then the user-level fallback
@@ -41,14 +43,13 @@ user-level file when one configuration should apply across projects.
 ## Manifest and trust
 
 `/hooks.json` is the repository manifest. It registers the nine canonical
-events and sends each event as JSON on stdin to the same `hook-client`
-executable. Follow the manual, step-by-step `curl` sequence in the repository
-README to verify delivery against the running API and real dependencies.
+events and sends each event as JSON on stdin to
+`backend/bin/hook-client.exe`. The installer copies it to `.codex/hooks.json`.
+Follow the manual, step-by-step `curl` sequence in the repository README to
+verify delivery against the running API and real dependencies.
 
-Copy or adapt the manifest into the Codex configuration location accepted by
-the installed Codex version, then review and trust the `hook-client` command
-when Codex prompts for hook approval. Keep the executable path and runtime
-environment outside the committed manifest.
+Review and trust the project-relative hook command when Codex prompts for hook
+approval. Keep runtime credentials outside the committed manifest.
 
 ## Known coverage gaps
 

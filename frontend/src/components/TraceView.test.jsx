@@ -45,6 +45,7 @@ describe('TraceView API conversation', () => {
         { id: 'prompt-1', hook_event_name: 'UserPromptSubmit', occurred_at: '2026-08-19T08:00:00Z', raw: {} },
         { id: 'pre-tool', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:01Z', tool_call_index: 0, raw: {} },
         { id: 'post-tool', hook_event_name: 'PostToolUse', occurred_at: '2026-08-19T08:00:02Z', tool_call_index: 0, raw: {} },
+        { id: 'unmatched-post-tool', hook_event_name: 'PostToolUse', occurred_at: '2026-08-19T08:00:02.500Z', tool_call_index: 99, raw: {} },
         { id: 'stop-1', hook_event_name: 'Stop', occurred_at: '2026-08-19T08:00:03Z', raw: {} },
         { id: 'prompt-2', hook_event_name: 'UserPromptSubmit', occurred_at: '2026-08-19T08:00:04Z', raw: {} },
       ],
@@ -113,6 +114,8 @@ describe('TraceView API conversation', () => {
       'assistant',
       'second user',
     ])
+
+    expect(screen.getAllByText('PostToolUse')).toHaveLength(1)
   })
 
   it('renders ordered multi-turn messages with role, timestamp, and turn metadata', () => {

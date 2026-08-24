@@ -377,6 +377,12 @@ function composeApiStream({ conversationEvents, contextEvents, toolEvents, timel
       }
     }
 
+    if (eventName === 'PostToolUse'
+      && Number.isInteger(timeline.toolCallIndex)
+      && emittedTools.has(timeline.toolCallIndex)) {
+      return
+    }
+
     stream.push({ ...timeline, streamOrder })
   })
 

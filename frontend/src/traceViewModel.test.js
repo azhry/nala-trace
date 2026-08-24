@@ -73,4 +73,62 @@ describe('normalizeTraceViewModel', () => {
     expect(model.conversation).toEqual([])
     expect(model.partial).toBe(false)
   })
+
+  it('keeps explicit subagent prompts as provenance-bearing context instead of root chat', () => {
+    const model = normalizeTraceViewModel({
+      schema_version: '1',
+      conversation: [
+        {
+          role: 'user',
+          content: 'Root prompt',
+          raw: { hook_event_name: 'UserPromptSubmit', prompt: 'Root prompt' },
+        },
+        {
+          role: 'user',
+          content: 'Internal agent prompt',
+          raw: {
+            hook_event_name: 'UserPromptSubmit',
+            prompt: 'Internal agent prompt',
+            agent_id: 'agent-7',
+            agent_type: 'worker',
+          },
+        },
+      ],
+    })
+
+    expect(model.conversation.map((event) => event.body)).toEqual(['Root prompt'])
+    expect(model.contextEvents).toEqual([
+      expect.objectContaining({
+        body: 'Internal agent prompt',
+        contextType: 'agent-prompt',
+        provenance: expect.objectContaining({ agentId: 'agent-7', agentType: 'worker' }),
+      }),
+    ])
+  })
+
+  it('keeps raw lifecycle records out of root conversation while retaining audit evidence', () => {
+    const model = normalizeTraceViewModel({
+      schema_version: '1',
+      conversation: [
+        {
+          role: 'unknown',
+          content: 'Session started',
+          raw: { hook_event_name: 'SessionStart', source: 'startup' },
+        },
+      ],
+      timeline: [
+        { id: 'prompt', hook_event_name: 'UserPromptSubmit', occurred_at: '2026-08-19T08:00:00Z', raw: {} },
+        { id: 'pre', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:01Z', raw: {} },
+        { id: 'post', hook_event_name: 'PostToolUse', occurred_at: '2026-08-19T08:00:02Z', raw: {} },
+      ],
+    })
+
+    expect(model.conversation).toEqual([])
+    expect(model.contextEvents.map((event) => event.provenance.eventName)).toEqual(['SessionStart'])
+    expect(model.events.filter((event) => event.type === 'system').map((event) => event.label)).toEqual([
+      'UserPromptSubmit',
+      'PreToolUse',
+      'PostToolUse',
+    ])
+  })
 })

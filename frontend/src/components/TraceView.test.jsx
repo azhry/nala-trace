@@ -46,6 +46,11 @@ describe('TraceView API conversation', () => {
       expect.stringContaining('Assistant reply with code:'),
       expect.stringContaining('<script>alert("unsafe")</script>'),
     ])
+    expect(messages.map((message) => [...message.classList])).toEqual([
+      expect.arrayContaining(['conversation-message', 'user']),
+      expect.arrayContaining(['conversation-message', 'assistant']),
+      expect.arrayContaining(['conversation-message', 'user']),
+    ])
     expect(screen.getAllByRole('separator')).toHaveLength(2)
     expect(screen.getAllByText('turn turn-1')).toHaveLength(2)
     expect(screen.getByText('turn turn-2')).toBeInTheDocument()
@@ -85,5 +90,71 @@ describe('TraceView API conversation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry request' }))
     expect(onRetry).toHaveBeenCalledExactlyOnceWith()
+  })
+
+  it('shows root chat first and keeps an internal agent prompt in Prompts & context', () => {
+    const trace = {
+      schema_version: '1',
+      conversation: [
+        {
+          role: 'user',
+          content: 'Root prompt',
+          raw: { hook_event_name: 'UserPromptSubmit', prompt: 'Root prompt' },
+        },
+        {
+          role: 'user',
+          content: 'Internal agent prompt',
+          raw: {
+            hook_event_name: 'UserPromptSubmit',
+            prompt: 'Internal agent prompt',
+            agent_id: 'agent-7',
+            agent_type: 'worker',
+          },
+        },
+      ],
+      timeline: [
+        { id: 'start', hook_event_name: 'SessionStart', occurred_at: '2026-08-19T08:00:00Z', raw: {} },
+      ],
+    }
+
+    const { container } = render(<TraceView session={trace} />)
+
+    expect(container.querySelectorAll('.conversation-message')).toHaveLength(1)
+    expect(screen.getByText('Root prompt')).toBeInTheDocument()
+    expect(screen.queryByText('Internal agent prompt')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
+
+    expect(screen.getByText('Agent prompt')).toBeInTheDocument()
+    expect(screen.getByText(/agent-7/)).toBeInTheDocument()
+    expect(screen.getByText('Internal agent prompt')).toBeInTheDocument()
+    expect(screen.getByText('SessionStart')).toBeInTheDocument()
+    expect(container.querySelectorAll('.conversation-message')).toHaveLength(0)
+  })
+
+  it('does not render raw lifecycle records as conversation messages', () => {
+    const trace = {
+      schema_version: '1',
+      conversation: [
+        { role: 'unknown', content: 'session lifecycle', raw: { hook_event_name: 'SessionStart' } },
+      ],
+      timeline: [
+        { id: 'prompt', hook_event_name: 'UserPromptSubmit', occurred_at: '2026-08-19T08:00:00Z', raw: {} },
+        { id: 'pre', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:01Z', raw: {} },
+        { id: 'post', hook_event_name: 'PostToolUse', occurred_at: '2026-08-19T08:00:02Z', raw: {} },
+      ],
+    }
+
+    const { container } = render(<TraceView session={trace} />)
+
+    expect(container.querySelectorAll('.conversation-message')).toHaveLength(0)
+    expect(screen.queryByText('SessionStart')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
+
+    expect(screen.getByText('SessionStart')).toBeInTheDocument()
+    expect(screen.getByText('UserPromptSubmit')).toBeInTheDocument()
+    expect(screen.getByText('PreToolUse')).toBeInTheDocument()
+    expect(screen.getByText('PostToolUse')).toBeInTheDocument()
   })
 })

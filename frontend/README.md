@@ -32,12 +32,16 @@ fails closed with a local 401 and does not call the nonexistent relative
 `/api/auth/session` route. JWT mode sends `Authorization: Bearer ...` to
 `/sessions` and `/sessions/<id>`; the protected session request performs the
 actual validation. API-token mode sends `X-Nala-Labs-API-Key` to `/sessions`
-and `/sessions/<id>`. Because `sessionStorage` is origin-scoped, the browser
-handoff works only when the Nala Trace entry point and Nala Labs application
-share the approved same origin (or an approved host integration provides that
-boundary). Separate origins must not use a URL/query-string token workaround.
-Do not place either credential in Vite env files, build-time config, URLs, or
-other bundle artifacts.
+and `/sessions/<id>`. The unauthorized boundary links to the real Nala Labs
+`/login` UI using the non-secret `VITE_NALA_LABS_URL` origin, which defaults to
+`http://localhost:5173/login`. The redirect carries no credentials or query
+parameters. Because `sessionStorage` is origin-scoped, the browser handoff
+works only when the Nala Trace entry point and Nala Labs application share the
+approved same origin (or an approved host integration provides that boundary);
+a separate-origin redirect alone does not transfer the stored JWT to Trace.
+Separate origins must not use a URL/query-string token workaround. Do not place
+either credential in Vite env files, build-time config, URLs, or other bundle
+artifacts.
 
 The shell is source-owned and intentionally uses a compact observability workspace language: persistent navigation, low-contrast surfaces, rounded panels, status/tool chips, filterable rows, and keyboard-visible focus. Sessions, Evals, and Golden Set each have an observable destination; the local demo interactions are stateful until real API data is connected.
 

@@ -23,17 +23,47 @@ function dataSourceCopy(apiState) {
   return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
 }
 
+const DEFAULT_NALA_LABS_ORIGIN = 'http://localhost:5173'
+
+function resolveNalaLabsOrigin(env = import.meta.env) {
+  const configuredOrigin = typeof env?.VITE_NALA_LABS_URL === 'string' ? env.VITE_NALA_LABS_URL.trim() : ''
+  const candidate = configuredOrigin || DEFAULT_NALA_LABS_ORIGIN
+
+  try {
+    const url = new URL(candidate)
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return DEFAULT_NALA_LABS_ORIGIN
+    return url.origin
+  } catch {
+    return DEFAULT_NALA_LABS_ORIGIN
+  }
+}
+
+function resolveNalaLabsLoginUrl(env = import.meta.env) {
+  return `${resolveNalaLabsOrigin(env)}/login`
+}
+
 function AuthBoundary({ apiState, onRetry }) {
   const isLoading = apiState === 'loading'
   const isUnauthorized = apiState === 'unauthorized'
+  const loginUrl = isUnauthorized ? resolveNalaLabsLoginUrl() : null
   const title = isLoading || isUnauthorized ? 'Sign in through Nala Labs' : 'Sessions could not be loaded.'
   const detail = isLoading
     ? 'Your Nala Labs application session is being checked before Trace data can be shown.'
-    : isUnauthorized
-      ? 'Your Nala Labs application session could not be verified. Sign in through Nala Labs, then try again.'
-      : 'The protected Trace session request did not return data. Sign in through Nala Labs, then retry.'
+      : isUnauthorized
+        ? 'Your Nala Labs application session could not be verified. Sign in through Nala Labs, then try again.'
+        : 'The protected Trace session request did not return data. Sign in through Nala Labs, then retry.'
   const actionLabel = isLoading ? 'Retry authentication' : 'Try again'
-  return <main className="auth-boundary" aria-labelledby="auth-boundary-title"><section className="auth-boundary-panel" role={isLoading ? 'status' : 'alert'} aria-live="polite"><p className="eyebrow">Nala Trace access</p><h1 id="auth-boundary-title">{title}</h1><p>{detail}</p><button type="button" className="state-action" onClick={onRetry}>{actionLabel}</button></section></main>
+  return (
+    <main className="auth-boundary" aria-labelledby="auth-boundary-title">
+      <section className="auth-boundary-panel" role={isLoading ? 'status' : 'alert'} aria-live="polite">
+        <p className="eyebrow">Nala Trace access</p>
+        <h1 id="auth-boundary-title">{title}</h1>
+        <p>{detail}</p>
+        {loginUrl && <a className="state-action" href={loginUrl}>Sign in through Nala Labs</a>}
+        <button type="button" className="state-action" onClick={onRetry}>{actionLabel}</button>
+      </section>
+    </main>
+  )
 }
 
 function Topbar({ route, session, apiState }) {

@@ -30,9 +30,27 @@ describe('authenticated sessions flow', () => {
   beforeEach(() => {
     window.location.hash = '#/sessions'
     vi.clearAllMocks()
+    vi.unstubAllEnvs()
     resolveSession.mockResolvedValue({ authenticated: true, user: { id: 'user-1' } })
     getSessions.mockResolvedValue(sessionPayload)
     getTrace.mockResolvedValue({})
+  })
+
+  it('links the unauthorized boundary to the default Nala Labs login route', async () => {
+    resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
+
+    render(<App />)
+
+    expect(await screen.findByRole('link', { name: 'Sign in through Nala Labs' })).toHaveAttribute('href', 'http://localhost:5173/login')
+  })
+
+  it('uses VITE_NALA_LABS_URL for the unauthorized login link', async () => {
+    vi.stubEnv('VITE_NALA_LABS_URL', 'https://nala.example.test/')
+    resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
+
+    render(<App />)
+
+    expect(await screen.findByRole('link', { name: 'Sign in through Nala Labs' })).toHaveAttribute('href', 'https://nala.example.test/login')
   })
 
   it('hides the dashboard shell while authentication and protected data are unresolved', async () => {

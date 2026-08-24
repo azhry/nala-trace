@@ -76,8 +76,8 @@ func TestReconstructConversationReadsCodexAssistantMessages(t *testing.T) {
 			"last_assistant_message": "The trace now includes assistant replies.",
 		}),
 		hookEvent("subagent-stop", "SubagentStop", "turn-1", base.Add(2*time.Second), map[string]any{
-			"agent_id":              agentID,
-			"agent_type":            agentType,
+			"agent_id":               agentID,
+			"agent_type":             agentType,
 			"last_assistant_message": "Internal worker result.",
 		}),
 	}
@@ -86,10 +86,10 @@ func TestReconstructConversationReadsCodexAssistantMessages(t *testing.T) {
 	if len(result.Conversation) != 3 {
 		t.Fatalf("conversation length = %d, want 3", len(result.Conversation))
 	}
-	if result.Conversation[0].Role != "user" || string(result.Conversation[0].Content) != `"What changed?"` {
+	if result.Conversation[0].EventID != "prompt" || result.Conversation[0].Role != "user" || string(result.Conversation[0].Content) != `"What changed?"` {
 		t.Fatalf("user conversation item = %#v", result.Conversation[0])
 	}
-	if result.Conversation[1].Role != "assistant" || string(result.Conversation[1].Content) != `"The trace now includes assistant replies."` {
+	if result.Conversation[1].EventID != "stop" || result.Conversation[1].Role != "assistant" || string(result.Conversation[1].Content) != `"The trace now includes assistant replies."` {
 		t.Fatalf("assistant conversation item = %#v", result.Conversation[1])
 	}
 	if result.Conversation[2].Role != "assistant" || string(result.Conversation[2].Content) != `"Internal worker result."` {

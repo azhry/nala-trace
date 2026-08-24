@@ -171,6 +171,7 @@ function normalizeConversationItem(item = {}, index) {
   const role = normalizeRole(item.role)
   const raw = rawRecord(item.raw)
   const provenance = normalizeProvenance(item, raw)
+  const eventId = cleanString(item.event_id ?? item.eventId)
   const isAgentEvidence = Boolean(provenance.agentId || provenance.agentType)
   const isRootUserPrompt = provenance.eventName === 'UserPromptSubmit' && role === 'user' && !isAgentEvidence
   const isLifecycleEvidence = LIFECYCLE_EVENTS.has(provenance.eventName) && !isRootUserPrompt
@@ -183,6 +184,7 @@ function normalizeConversationItem(item = {}, index) {
 
   return {
     id: `conversation-${index}`,
+    eventId: eventId || null,
     type: conversationVisible ? role : 'context',
     role,
     roleLabel: roleLabel(role),
@@ -196,7 +198,7 @@ function normalizeConversationItem(item = {}, index) {
     time: formatTraceTimestamp(occurredAt),
     partial: !hasContent || !hasTurnId || !hasTimestamp || role === 'unknown',
     conversationVisible,
-    contextType: isAgentEvidence ? 'agent-prompt' : 'system-event',
+    contextType: isAgentEvidence ? role === 'assistant' ? 'agent-reply' : 'agent-prompt' : 'system-event',
     raw: item.raw ?? null,
     provenance,
     lifecycleEvent: provenance.eventName,
@@ -215,6 +217,7 @@ function markConversationBoundaries(events) {
 function normalizeToolCall(call = {}, index) {
   const startedAt = call.started_at ?? call.startedAt
   const completedAt = call.completed_at ?? call.completedAt
+  const occurredAt = startedAt || completedAt
   const start = startedAt ? new Date(startedAt).getTime() : NaN
   const end = completedAt ? new Date(completedAt).getTime() : NaN
   const duration = Number.isFinite(start) && Number.isFinite(end) && end >= start
@@ -245,6 +248,8 @@ function normalizeToolCall(call = {}, index) {
     skills: EMPTY_LIST,
     files: EMPTY_LIST,
     raw: call.raw ?? null,
+    occurredAt,
+    turnId: cleanString(call.turn_id ?? call.turnId) || null,
     provenance,
     lifecycleEvent: provenance.eventName,
   }
@@ -254,17 +259,133 @@ function normalizeTimelineEvent(event = {}, index) {
   const raw = rawRecord(event.raw)
   const provenance = normalizeProvenance(event, raw)
   const label = provenance.eventName || 'Timeline event'
+  const occurredAt = event.occurred_at ?? event.occurredAt
+  const toolCallIndex = Number.isInteger(event.tool_call_index)
+    ? event.tool_call_index
+    : Number.isInteger(event.toolCallIndex)
+      ? event.toolCallIndex
+      : null
   return {
     id: cleanString(event.id) || `timeline-${index}`,
     type: 'system',
     label,
     body: cleanString(event.partial_reason ?? event.partialReason) || 'Recorded trace event',
-    time: formatTraceTimestamp(event.occurred_at ?? event.occurredAt),
+    time: formatTraceTimestamp(occurredAt),
+    occurredAt,
+    turnId: cleanString(event.turn_id ?? event.turnId) || null,
+    toolCallIndex,
     record: null,
     raw: event.raw ?? null,
     provenance,
     lifecycleEvent: provenance.eventName,
   }
+}
+
+function eventTimestamp(value) {
+  if (!value) return Number.POSITIVE_INFINITY
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY
+}
+
+function eventMatchKey(eventName, occurredAt, turnId) {
+  return `${eventName || ''}|${eventTimestamp(occurredAt)}|${turnId || ''}`
+}
+
+function eventTimeKey(eventName, occurredAt) {
+  return `${eventName || ''}|${eventTimestamp(occurredAt)}`
+}
+
+function withTimelinePosition(event, timeline, streamOrder) {
+  return {
+    ...event,
+    streamOrder,
+    timelineId: timeline.id,
+    occurredAt: event.occurredAt || timeline.occurredAt,
+    time: event.time === 'Time not recorded' ? timeline.time : event.time,
+    turnId: event.turnId || timeline.turnId,
+  }
+}
+
+function sortStreamEvents(events) {
+  return [...events].sort((left, right) => eventTimestamp(left.occurredAt) - eventTimestamp(right.occurredAt) || (left.streamOrder ?? 0) - (right.streamOrder ?? 0))
+}
+
+function composeApiStream({ conversationEvents, contextEvents, toolEvents, timelineEvents }) {
+  if (!timelineEvents.length) return sortStreamEvents([...conversationEvents, ...contextEvents, ...toolEvents])
+
+  const messagesById = new Map()
+  const messagesByKey = new Map()
+  const messagesByTime = new Map()
+  const claimedMessages = new Set()
+  const addMessage = (message) => {
+    if (message.eventId) {
+      const byId = messagesById.get(message.eventId) || []
+      byId.push(message)
+      messagesById.set(message.eventId, byId)
+    }
+    const key = eventMatchKey(message.provenance.eventName, message.occurredAt, message.turnId)
+    const byKey = messagesByKey.get(key) || []
+    byKey.push(message)
+    messagesByKey.set(key, byKey)
+    const timeKey = eventTimeKey(message.provenance.eventName, message.occurredAt)
+    const byTime = messagesByTime.get(timeKey) || []
+    byTime.push(message)
+    messagesByTime.set(timeKey, byTime)
+  }
+  conversationEvents.forEach(addMessage)
+  contextEvents.forEach(addMessage)
+
+  const consume = (collection, key) => {
+    const values = collection.get(key)
+    if (!values?.length) return null
+    while (values.length) {
+      const message = values.shift()
+      if (!claimedMessages.has(message.id)) {
+        claimedMessages.add(message.id)
+        return message
+      }
+    }
+    return null
+  }
+  const stream = []
+  const emittedTools = new Set()
+  const messageEvents = new Set(['UserPromptSubmit', 'Stop', 'SubagentStop'])
+
+  timelineEvents.forEach((timeline, streamOrder) => {
+    const eventName = timeline.provenance.eventName
+    if (messageEvents.has(eventName)) {
+      const message = consume(messagesById, timeline.id)
+        || consume(messagesByKey, eventMatchKey(eventName, timeline.occurredAt, timeline.turnId))
+        || consume(messagesByTime, eventTimeKey(eventName, timeline.occurredAt))
+      if (message) {
+        stream.push(withTimelinePosition(message, timeline, streamOrder))
+        return
+      }
+    }
+
+    if (eventName === 'PreToolUse' && Number.isInteger(timeline.toolCallIndex)) {
+      const toolIndex = timeline.toolCallIndex
+      const tool = toolEvents[toolIndex]
+      if (tool && !emittedTools.has(toolIndex)) {
+        emittedTools.add(toolIndex)
+        stream.push(withTimelinePosition(tool, timeline, streamOrder))
+        return
+      }
+    }
+
+    stream.push({ ...timeline, streamOrder })
+  })
+
+  const usedMessages = new Set()
+  stream.forEach((event) => {
+    if (event.type === 'user' || event.type === 'assistant' || event.type === 'context') usedMessages.add(event.id)
+  })
+  const leftovers = [...conversationEvents, ...contextEvents].filter((event) => !usedMessages.has(event.id))
+  toolEvents.forEach((event, index) => {
+    if (!emittedTools.has(index)) leftovers.push(event)
+  })
+  leftovers.forEach((event, index) => stream.push({ ...event, streamOrder: timelineEvents.length + index }))
+  return sortStreamEvents(stream)
 }
 
 function apiTraceViewModel(trace) {
@@ -281,9 +402,11 @@ function apiTraceViewModel(trace) {
   const summary = trace.summary && typeof trace.summary === 'object' ? trace.summary : {}
   const partial = conversationEvents.some((event) => event.partial)
 
+  const orderedEvents = composeApiStream({ conversationEvents, contextEvents, toolEvents, timelineEvents })
+
   return {
     source: 'api',
-    events: [...conversationEvents, ...contextEvents, ...toolEvents, ...timelineEvents],
+    events: orderedEvents,
     conversation: conversationEvents,
     contextEvents,
     partial,
@@ -291,8 +414,8 @@ function apiTraceViewModel(trace) {
     semanticRecords: Number.isFinite(Number(summary.event_count)) ? Number(summary.event_count) : timelineEvents.length,
     messageCount: conversationEvents.length,
     toolCount: Number.isFinite(Number(summary.tool_call_count)) ? Number(summary.tool_call_count) : toolEvents.length,
-    startedAt: conversationEvents[0]?.time || timelineEvents[0]?.time || 'Time not recorded',
-    capturedAt: conversationEvents.at(-1)?.time || timelineEvents.at(-1)?.time || 'Time not recorded',
+    startedAt: orderedEvents[0]?.time || 'Time not recorded',
+    capturedAt: orderedEvents.at(-1)?.time || 'Time not recorded',
   }
 }
 

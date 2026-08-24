@@ -37,6 +37,84 @@ const apiTrace = {
 }
 
 describe('TraceView API conversation', () => {
+  it('renders the Everything stream in API timeline order across messages and tool calls', () => {
+    const trace = {
+      schema_version: '1',
+      session_id: 'session-timeline-order',
+      timeline: [
+        { id: 'prompt-1', hook_event_name: 'UserPromptSubmit', occurred_at: '2026-08-19T08:00:00Z', raw: {} },
+        { id: 'pre-tool', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:01Z', tool_call_index: 0, raw: {} },
+        { id: 'post-tool', hook_event_name: 'PostToolUse', occurred_at: '2026-08-19T08:00:02Z', tool_call_index: 0, raw: {} },
+        { id: 'stop-1', hook_event_name: 'Stop', occurred_at: '2026-08-19T08:00:03Z', raw: {} },
+        { id: 'prompt-2', hook_event_name: 'UserPromptSubmit', occurred_at: '2026-08-19T08:00:04Z', raw: {} },
+      ],
+      conversation: [
+        {
+          role: 'user',
+          content: 'First user message',
+          occurred_at: '2026-08-19T08:00:00Z',
+          turn_id: 'turn-1',
+          raw: { hook_event_name: 'UserPromptSubmit' },
+        },
+        {
+          role: 'assistant',
+          content: 'Assistant message',
+          occurred_at: '2026-08-19T08:00:03Z',
+          turn_id: 'turn-1',
+          raw: { hook_event_name: 'Stop' },
+        },
+        {
+          role: 'user',
+          content: 'Second user message',
+          occurred_at: '2026-08-19T08:00:04Z',
+          turn_id: 'turn-2',
+          raw: { hook_event_name: 'UserPromptSubmit' },
+        },
+      ],
+      tool_calls: [
+        {
+          tool_use_id: 'tool-1',
+          tool_name: 'shell_command',
+          input: { command: 'npm test', workdir: 'C:\\workspace' },
+          output: 'Tests passed',
+          started_at: '2026-08-19T08:00:01Z',
+          completed_at: '2026-08-19T08:00:02Z',
+          status: 'completed',
+          raw: { hook_event_name: 'PreToolUse' },
+        },
+      ],
+      summary: { event_count: 5, message_count: 3, tool_call_count: 1 },
+    }
+
+    const { container } = render(<TraceView session={trace} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Everything' }))
+
+    const streamRecords = [...container.querySelector('.trace-stream').children]
+      .filter((record) => record.matches('.conversation-message, .tool-card'))
+    expect(streamRecords.map((record) => record.textContent)).toEqual([
+      expect.stringContaining('First user message'),
+      expect.stringContaining('shell_command'),
+      expect.stringContaining('Assistant message'),
+      expect.stringContaining('Second user message'),
+    ])
+
+    const chronologicalRecords = [...container.querySelector('.trace-stream').children]
+      .filter((record) => record.matches('.conversation-message, .tool-card, .system-event'))
+      .map((record) => {
+        if (record.matches('.tool-card')) return 'tool:shell_command'
+        if (record.matches('.system-event')) return `system:${record.querySelector('strong').textContent}`
+        return record.textContent.includes('Assistant message') ? 'assistant' : record.textContent.includes('Second user message') ? 'second user' : 'user'
+      })
+
+    expect(chronologicalRecords).toEqual([
+      'user',
+      'tool:shell_command',
+      'system:PostToolUse',
+      'assistant',
+      'second user',
+    ])
+  })
+
   it('renders ordered multi-turn messages with role, timestamp, and turn metadata', () => {
     const { container } = render(<TraceView session={apiTrace} />)
 
@@ -121,6 +199,10 @@ describe('TraceView API conversation', () => {
 
     expect(container.querySelectorAll('.conversation-message')).toHaveLength(1)
     expect(screen.getByText('Root prompt')).toBeInTheDocument()
+    expect(screen.getByText('Internal agent prompt')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }))
+
     expect(screen.queryByText('Internal agent prompt')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
@@ -180,6 +262,10 @@ describe('TraceView API conversation', () => {
     expect(messages[0]).toHaveClass('user')
     expect(messages[1]).toHaveTextContent('Root assistant reply from the session.')
     expect(messages[1]).toHaveClass('assistant')
+    expect(screen.getByText('Internal worker result.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }))
+
     expect(screen.queryByText('Internal worker result.')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
@@ -205,7 +291,7 @@ describe('TraceView API conversation', () => {
     const { container } = render(<TraceView session={trace} />)
 
     expect(container.querySelectorAll('.conversation-message')).toHaveLength(0)
-    expect(screen.queryByText('SessionStart')).not.toBeInTheDocument()
+    expect(screen.getByText('SessionStart')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
 

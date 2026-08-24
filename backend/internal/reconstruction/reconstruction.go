@@ -54,6 +54,7 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 			if role := conversationRole(event.HookEventName); role != "" {
 				if content := messageContent(event.Payload, event.HookEventName); content != nil {
 					result.Conversation = append(result.Conversation, trace.ConversationItem{
+						EventID:    timelineID,
 						Role:       role,
 						Content:    content,
 						OccurredAt: event.ReceivedAt.UTC(),

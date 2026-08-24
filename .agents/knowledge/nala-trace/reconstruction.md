@@ -6,12 +6,15 @@ those formats are undocumented and can drift between Codex versions.
 
 ## Conversation
 
-`UserPromptSubmit` events become `user` conversation items and `Stop` events
-become `assistant` conversation items. Content is selected from the event
-payload in this order:
+`UserPromptSubmit` events become `user` conversation items and `Stop` and
+`SubagentStop` events become `assistant` conversation items. Each emitted
+conversation item retains its source timeline event ID so the UI can render
+messages, tool calls, and lifecycle records in captured order. Content is
+selected from the event payload in this order:
 
 - user prompt: `prompt`, `user_prompt`, `content`, `text`
-- assistant stop: `response`, `stop_message`, `message`, `content`, `text`
+- assistant stop: `last_assistant_message`, `response`, `stop_message`,
+  `message`, `content`, `text`
 
 The first non-null, non-empty value is preserved as JSON. Missing content is
 skipped while the event remains in the timeline. The stored turn ID and event

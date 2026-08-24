@@ -45,9 +45,9 @@ function FileTag({ file }) {
 
 function ContextRow({ event, inline = false }) {
   const isPrompt = event.contextType !== 'instruction-read'
-  const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
+  const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'agent-reply' ? 'Agent reply' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
   const agentLabel = [event.provenance?.agentType, event.provenance?.agentId].filter(Boolean).join(' · ')
-  const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'agent-prompt' ? `Agent${agentLabel ? ` · ${agentLabel}` : ''}` : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label || event.provenance?.eventName || 'Lifecycle event' : event.tool || 'Captured context'
+  const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'agent-prompt' || event.contextType === 'agent-reply' ? `Agent${agentLabel ? ` · ${agentLabel}` : ''}` : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label || event.provenance?.eventName || 'Lifecycle event' : event.tool || 'Captured context'
   const recordLabel = event.record || event.provenance?.eventName || 'not recorded'
   return <article className={`context-row ${event.contextType} ${inline ? 'inline-context' : ''}`}>
     <div className="context-row-header">
@@ -56,8 +56,8 @@ function ContextRow({ event, inline = false }) {
     </div>
     <div className="context-row-tags">{(event.files || []).map((file) => <FileTag file={file} key={`file-${file}`} />)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
     <details open={isPrompt}>
-      <summary>{event.contextType === 'instruction-read' ? 'Show command and content read' : 'Show recorded prompt'}</summary>
-      {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : 'context'}</span><pre>{event.body}</pre></div>}
+      <summary>{event.contextType === 'instruction-read' ? 'Show command and content read' : event.contextType === 'agent-reply' ? 'Show recorded reply' : 'Show recorded prompt'}</summary>
+      {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : event.contextType === 'agent-reply' ? 'reply' : 'context'}</span><pre>{event.body}</pre></div>}
       {event.input && <div className="context-code"><span>tool_input</span><pre>{event.input}</pre></div>}
       {event.response && <div className="context-code"><span>tool_response / content read</span><pre>{event.response}</pre></div>}
     </details>
@@ -135,7 +135,7 @@ function PartialNotice({ message }) {
 }
 
 export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {} }) {
-  const [filter, setFilter] = useState('conversation')
+  const [filter, setFilter] = useState('all')
   const viewModel = useMemo(() => normalizeTraceViewModel(session), [session])
   const events = viewModel.events || EMPTY_EVENTS
   const contextRows = useMemo(() => {
@@ -178,7 +178,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div>
         <p className="section-label">Conversation and trace</p>
         <h2 id="trace-view-title">Session detail</h2>
-        <p className="panel-description">The complete audited rollout: User and Codex turns, every recorded tool call, paired output, file/instruction reference, skill tag, and context marker.</p>
+        <p className="panel-description">The captured event stream: User and Codex turns, recorded tool calls with paired output, lifecycle/context markers, file and instruction references, and skill tags. Private model reasoning is not part of the hook data.</p>
       </div>
       <span className="record-count">{semanticRecords} records</span>
     </div>
@@ -190,7 +190,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
     <SkillInventory events={events} />
     <InstructionInventory events={events} />
     <div className="context-inventory" aria-label="Prompt and context summary">
-      <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
+      <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
       <span className="context-inventory-note">Use “Prompts & context” below</span>
     </div>
     <div className="trace-controls" role="group" aria-label="Filter session detail">

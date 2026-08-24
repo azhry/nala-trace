@@ -42,6 +42,7 @@ type TimelineEvent struct {
 }
 
 type ConversationItem struct {
+	EventID    string          `json:"event_id,omitempty"`
 	Role       string          `json:"role"`
 	Content    json.RawMessage `json:"content"`
 	OccurredAt time.Time       `json:"occurred_at"`

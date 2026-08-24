@@ -12,7 +12,7 @@ func main() {
 	// observability endpoint is unavailable, misconfigured, or rejects input.
 	// Keep the detailed error contract in hookclient.Send for unit callers, but
 	// never turn it into a process failure at the hook boundary.
-	cfg, err := hookclient.ConfigFromEnv(os.Getenv)
+	cfg, err := hookclient.ConfigFromRuntime()
 	if err != nil {
 		return
 	}

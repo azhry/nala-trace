@@ -21,5 +21,6 @@ frontend/dist/
 .env.local
 .env.production
 .vault-config
+# Local Codex hooks/configuration; nala-trace.env may contain an API key.
 .codex
 backend/bin

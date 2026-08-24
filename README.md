@@ -146,22 +146,29 @@ Codex Desktop.
 
 ### 2. Set runtime configuration
 
-Set these values in the process environment used by Codex. Do not put them in
-`hooks.json`, a committed file, a Vite environment file, or a browser bundle.
+Run the installer from Git Bash or another Bash shell. It prompts only for
+the ingest URL and API key, builds the hook client, and writes the key to the
+user-scoped config file without printing it:
 
 ```bash
-export CODEX_TRACE_API_URL="http://127.0.0.1:3003/ingest"
-printf 'Paste the Nala Labs API key accepted by the shared api_key table: '
-read -r -s CODEX_TRACE_API_TOKEN
-printf '\n'
-export CODEX_TRACE_API_TOKEN
-export CODEX_TRACE_API_TIMEOUT="2s"
+bash scripts/install-hook.sh
 ```
 
-Obtain the API key through the approved Nala Labs API-key flow for your
-environment and keep it in a secret store or the current process only. The
-hook client sends it in `X-Nala-Labs-API-Key`; raw Casdoor provider
-credentials are not part of this application contract.
+The installer creates the user-editable file `%USERPROFILE%\\.codex\\nala-trace.env`
+on Windows or `$HOME/.codex/nala-trace.env` on macOS/Linux. Its contents are:
+
+```text
+CODEX_TRACE_API_URL=http://127.0.0.1:3003/ingest
+CODEX_TRACE_API_TOKEN=<your Nala Labs API key>
+CODEX_TRACE_API_TIMEOUT=2s
+```
+
+The hook client loads this file for every invocation, so new Codex chats do not
+depend on a long-lived Codex process inheriting environment values. Keep the
+file user-readable only and never commit it. The hook client sends the key in
+`X-Nala-Labs-API-Key`; raw Casdoor provider credentials are not part of this
+application contract. Explicit process environment values still override the
+file when supplied.
 
 ### 3. Install and trust the manifest
 

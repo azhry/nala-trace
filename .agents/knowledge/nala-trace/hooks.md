@@ -16,13 +16,18 @@ client is deliberately not part of the Codex success path:
 ## Runtime configuration
 
 Build the client and put the resulting `hook-client` executable on the PATH
-used by Codex. Configure the following values in the process environment, not
-in `hooks.json`:
+used by Codex. Configure the following values in the user-editable file
+`%USERPROFILE%\\.codex\\nala-trace.env` on Windows or
+`$HOME/.codex/nala-trace.env` on macOS/Linux. The repository installer
+`bash scripts/install-hook.sh` creates this file and builds the client. The
+client also accepts explicit process environment values, which take
+precedence over the file, and `CODEX_TRACE_CONFIG_FILE` can override the
+default file path. Do not put credentials in `hooks.json`:
 
 ```text
 CODEX_TRACE_API_URL=https://trace.example.test/ingest
 # Set CODEX_TRACE_API_TOKEN to the raw key created by the README's Nala Labs
-# login and POST /api/auth/api-key steps. Keep it in the process environment.
+# login and POST /api/auth/api-key steps. Keep this file user-readable only.
 CODEX_TRACE_API_TIMEOUT=2s
 ```
 

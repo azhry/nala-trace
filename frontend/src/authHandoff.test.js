@@ -8,6 +8,7 @@ import {
   redirectToNalaLabs,
   redeemNalaLabsAuthCode,
   resolveNalaLabsOrigin,
+  signOutFromTrace,
   TRACE_HANDOFF_REDEEM_PATH,
 } from './authHandoff'
 import { clearAuthConfiguration, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY } from './api'
@@ -25,7 +26,7 @@ function createWindowHarness(search = '?trace_origin=http%3A%2F%2Flocalhost%3A50
       assign,
     },
     history: { state: { page: 'trace' }, replaceState },
-    sessionStorage: { setItem: vi.fn(), getItem: vi.fn() },
+    sessionStorage: { setItem: vi.fn(), getItem: vi.fn(), removeItem: vi.fn() },
     replaceState,
     assign,
   }
@@ -61,6 +62,14 @@ describe('Nala Labs same-tab authentication handoff', () => {
     expect(windowRef.assign).toHaveBeenCalledExactlyOnceWith(
       'https://nala.example.test/login?trace_origin=http%3A%2F%2Flocalhost%3A5005',
     )
+  })
+
+  it('clears the Trace token and stays on a signed-out boundary', () => {
+    const windowRef = createWindowHarness('?nala_labs_auth_code=stale-code')
+
+    expect(signOutFromTrace({ windowRef })).toBe(true)
+    expect(windowRef.sessionStorage.removeItem).toHaveBeenCalledExactlyOnceWith(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
+    expect(windowRef.assign).toHaveBeenCalledExactlyOnceWith('/?signed_out=1')
   })
 
   it('falls back to the default Nala Labs origin for malformed configuration', () => {

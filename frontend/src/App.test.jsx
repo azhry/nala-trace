@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, clearAuthConfiguration, getSessions, getTrace, resolveSession } from './api'
-import { redirectToNalaLabs, redeemNalaLabsAuthCode } from './authHandoff'
+import { redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import App from './App'
 
 vi.mock('./api', async (importOriginal) => {
@@ -20,6 +20,7 @@ vi.mock('./authHandoff', async (importOriginal) => {
     ...actual,
     redirectToNalaLabs: vi.fn(),
     redeemNalaLabsAuthCode: vi.fn(),
+    signOutFromTrace: vi.fn(),
   }
 })
 
@@ -44,6 +45,7 @@ describe('authenticated sessions flow', () => {
     clearAuthConfiguration()
     window.sessionStorage.clear()
     redirectToNalaLabs.mockReturnValue(true)
+    signOutFromTrace.mockReturnValue(true)
     redeemNalaLabsAuthCode.mockResolvedValue({ attempted: false, authenticated: false })
     resolveSession.mockResolvedValue({ authenticated: true, user: { id: 'user-1' } })
     getSessions.mockResolvedValue(sessionPayload)
@@ -78,6 +80,14 @@ describe('authenticated sessions flow', () => {
     expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
     expect(redeemNalaLabsAuthCode.mock.invocationCallOrder[0]).toBeLessThan(resolveSession.mock.invocationCallOrder[0])
     expect(getSessions).toHaveBeenCalledExactlyOnceWith()
+  })
+
+  it('shows a Trace sign-out control for authenticated sessions', async () => {
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'Sign out' })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(signOutFromTrace).toHaveBeenCalledExactlyOnceWith()
   })
 
   it('hides the dashboard shell while authentication and protected data are unresolved', async () => {

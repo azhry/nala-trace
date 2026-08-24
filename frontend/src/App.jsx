@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, getSessions, getTrace, resolveSession } from './api'
-import { AuthHandoffError, redirectToNalaLabs, redeemNalaLabsAuthCode } from './authHandoff'
+import { AuthHandoffError, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
@@ -24,7 +24,7 @@ function dataSourceCopy(apiState) {
   return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
 }
 
-function AuthBoundary({ apiState, handoffState, onRetry }) {
+function AuthBoundary({ apiState, handoffState, onRetry, signedOut }) {
   const isLoading = apiState === 'loading'
   const isUnauthorized = apiState === 'unauthorized'
   const redirectedRef = useRef(false)
@@ -34,7 +34,9 @@ function AuthBoundary({ apiState, handoffState, onRetry }) {
       : isUnauthorized
         ? 'Your Nala Labs application session could not be verified. Sign in through Nala Labs, then try again.'
         : 'The protected Trace session request did not return data. Sign in through Nala Labs, then retry.'
-  const detail = handoffState === 'waiting'
+  const detail = signedOut
+    ? 'You are signed out of Nala Trace. Sign in through Nala Labs to continue.'
+    : handoffState === 'waiting'
     ? 'Redirecting to Nala Labs for sign-in.'
     : handoffState === 'invalid'
       ? 'Nala Labs did not return a usable session. Start sign-in again, then retry.'
@@ -42,10 +44,10 @@ function AuthBoundary({ apiState, handoffState, onRetry }) {
   const actionLabel = isLoading ? 'Retry authentication' : 'Try again'
 
   useEffect(() => {
-    if (!isUnauthorized || handoffState !== 'idle' || redirectedRef.current) return
+    if (signedOut || !isUnauthorized || handoffState !== 'idle' || redirectedRef.current) return
     redirectedRef.current = true
     redirectToNalaLabs()
-  }, [handoffState, isUnauthorized])
+  }, [handoffState, isUnauthorized, signedOut])
 
   function openLogin() {
     redirectToNalaLabs()
@@ -66,9 +68,9 @@ function AuthBoundary({ apiState, handoffState, onRetry }) {
   )
 }
 
-function Topbar({ route, session, apiState }) {
+function Topbar({ route, session, apiState, onSignOut }) {
   const source = dataSourceCopy(apiState)
-  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}</div></header>
+  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}<button type="button" className="sign-out-button" onClick={() => onSignOut()}>Sign out</button></div></header>
 }
 
 function SessionStats({ sessions }) {
@@ -113,6 +115,7 @@ export default function App() {
   const [apiState, setApiState] = useState('loading')
   const [handoffState, setHandoffState] = useState('idle')
   const [remoteTrace, setRemoteTrace] = useState(null)
+  const signedOut = new URLSearchParams(window.location.search).get('signed_out') === '1'
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute())
@@ -168,8 +171,8 @@ export default function App() {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
   }
 
-  if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
+  if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} signedOut={signedOut} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

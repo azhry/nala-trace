@@ -1,4 +1,4 @@
-import { bootstrapAuthFromSessionStorage, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY } from './api'
+import { bootstrapAuthFromSessionStorage, clearAuthConfiguration, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY } from './api'
 
 export const DEFAULT_NALA_LABS_ORIGIN = 'http://localhost:5173'
 export const NALA_LABS_AUTH_CODE_QUERY_PARAM = 'nala_labs_auth_code'
@@ -82,6 +82,23 @@ export function redirectToNalaLabs({ env = import.meta.env, windowRef = globalTh
   } catch {
     return false
   }
+}
+
+export function signOutFromTrace({ windowRef = globalThis } = {}) {
+  const storage = getSessionStorage(windowRef)
+  try {
+    storage?.removeItem?.(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
+  } catch {
+    // Continue clearing the in-memory credential when storage is unavailable.
+  }
+  clearAuthConfiguration()
+
+  if (typeof windowRef?.location?.assign !== 'function' || typeof windowRef?.location?.href !== 'string') return false
+  const url = new URL(windowRef.location.href)
+  url.searchParams.delete(NALA_LABS_AUTH_CODE_QUERY_PARAM)
+  url.searchParams.set('signed_out', '1')
+  windowRef.location.assign(`${url.pathname}${url.search}${url.hash}`)
+  return true
 }
 
 export async function redeemNalaLabsAuthCode({

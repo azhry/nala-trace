@@ -59,9 +59,11 @@ func run() error {
 		mongoProbe = mongoStore.Ping
 	}
 	health := server.NewHealthChecker(cfg, mongoProbe)
-	middleware := auth.NewMiddleware(cfg, auth.NewIAMClient(cfg.Auth), apiKeyStore)
+	iamClient := auth.NewIAMClient(cfg.Auth)
+	middleware := auth.NewMiddleware(cfg, iamClient, apiKeyStore)
 	routes := []server.Route{
 		server.HealthRoute(health),
+		{Pattern: server.TraceHandoffRedeemPath, Handler: server.NewTraceHandoffRedeemHandler(iamClient, cfg.AllowedOrigin)},
 		server.ProtectedRoute("/ingest", server.NewIngestHandler(repository), middleware),
 		server.ProtectedRoute("/sessions", server.NewSessionsHandler(repository), middleware),
 		server.ProtectedRoute("/sessions/:id", server.NewSessionTraceHandler(repository), middleware),

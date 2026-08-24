@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, getSessions, getTrace, resolveSession } from './api'
-import { createNalaLabsAuthHandoff } from './authHandoff'
+import { AuthHandoffError, redirectToNalaLabs, redeemNalaLabsAuthCode } from './authHandoff'
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
@@ -24,11 +24,10 @@ function dataSourceCopy(apiState) {
   return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
 }
 
-function AuthBoundary({ apiState, onRetry }) {
+function AuthBoundary({ apiState, handoffState, onRetry }) {
   const isLoading = apiState === 'loading'
   const isUnauthorized = apiState === 'unauthorized'
-  const [handoffState, setHandoffState] = useState('idle')
-  const handoffRef = useRef(null)
+  const redirectedRef = useRef(false)
   const title = isLoading || isUnauthorized ? 'Sign in through Nala Labs' : 'Sessions could not be loaded.'
   const defaultDetail = isLoading
     ? 'Your Nala Labs application session is being checked before Trace data can be shown.'
@@ -36,45 +35,23 @@ function AuthBoundary({ apiState, onRetry }) {
         ? 'Your Nala Labs application session could not be verified. Sign in through Nala Labs, then try again.'
         : 'The protected Trace session request did not return data. Sign in through Nala Labs, then retry.'
   const detail = handoffState === 'waiting'
-    ? 'Complete sign-in in the Nala Labs window. Trace will retry automatically after it returns a valid session.'
-    : handoffState === 'blocked'
-      ? 'Your browser blocked the Nala Labs sign-in window. Allow popups for this site, then try again.'
-      : handoffState === 'invalid'
-        ? 'Nala Labs did not return a usable session. Start sign-in again, then retry.'
+    ? 'Redirecting to Nala Labs for sign-in.'
+    : handoffState === 'invalid'
+      ? 'Nala Labs did not return a usable session. Start sign-in again, then retry.'
         : defaultDetail
   const actionLabel = isLoading ? 'Retry authentication' : 'Try again'
 
   useEffect(() => {
-    if (!isUnauthorized) return undefined
-
-    const handoff = createNalaLabsAuthHandoff({
-      onAuthenticated: () => {
-        if (!handoff.isAuthenticated()) {
-          setHandoffState('invalid')
-          return
-        }
-        onRetry()
-      },
-      onPopupBlocked: () => setHandoffState('blocked'),
-      onStorageError: () => setHandoffState('invalid'),
-    })
-    handoffRef.current = handoff
-
-    return () => {
-      handoff.dispose()
-      handoffRef.current = null
-    }
-  }, [isUnauthorized, onRetry])
+    if (!isUnauthorized || handoffState !== 'idle' || redirectedRef.current) return
+    redirectedRef.current = true
+    redirectToNalaLabs()
+  }, [handoffState, isUnauthorized])
 
   function openLogin() {
-    setHandoffState('waiting')
-    if (!handoffRef.current?.open()) setHandoffState('blocked')
+    redirectToNalaLabs()
   }
 
-  function retry() {
-    setHandoffState('idle')
-    onRetry()
-  }
+  function retry() { onRetry() }
 
   return (
     <main className="auth-boundary" aria-labelledby="auth-boundary-title">
@@ -134,6 +111,7 @@ export default function App() {
   const [filter, setFilter] = useState('all')
   const [sortBy, setSortBy] = useState('recent')
   const [apiState, setApiState] = useState('loading')
+  const [handoffState, setHandoffState] = useState('idle')
   const [remoteTrace, setRemoteTrace] = useState(null)
 
   useEffect(() => {
@@ -144,16 +122,22 @@ export default function App() {
 
   const loadSessions = useCallback((isActive = () => true) => {
     setApiState('loading')
-    resolveSession().then(() => {
+    redeemNalaLabsAuthCode().then((result) => {
+      if (!isActive()) return null
+      setHandoffState(result.attempted ? 'waiting' : 'idle')
+      return resolveSession()
+    }).then(() => {
       if (!isActive()) return null
       return getSessions()
     }).then((payload) => {
       if (!isActive() || !payload) return
+      setHandoffState('idle')
       const normalized = normalizeSessionSummaries(payload)
       setSessions(normalized)
       setApiState('connected')
     }).catch((error) => {
       if (!isActive()) return
+      setHandoffState(error instanceof AuthHandoffError ? 'invalid' : 'idle')
       setApiState(error instanceof ApiError && error.status === 401 ? 'unauthorized' : 'error')
     })
   }, [])
@@ -184,7 +168,7 @@ export default function App() {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
   }
 
-  if (apiState !== 'connected') return <AuthBoundary apiState={apiState} onRetry={loadSessions} />
+  if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
   return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>

@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, clearAuthConfiguration, getSessions, getTrace, resolveSession } from './api'
+import { redirectToNalaLabs, redeemNalaLabsAuthCode } from './authHandoff'
 import App from './App'
 
 vi.mock('./api', async (importOriginal) => {
@@ -10,6 +11,15 @@ vi.mock('./api', async (importOriginal) => {
     getSessions: vi.fn(),
     getTrace: vi.fn(),
     resolveSession: vi.fn(),
+  }
+})
+
+vi.mock('./authHandoff', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    redirectToNalaLabs: vi.fn(),
+    redeemNalaLabsAuthCode: vi.fn(),
   }
 })
 
@@ -33,38 +43,41 @@ describe('authenticated sessions flow', () => {
     vi.unstubAllEnvs()
     clearAuthConfiguration()
     window.sessionStorage.clear()
+    redirectToNalaLabs.mockReturnValue(true)
+    redeemNalaLabsAuthCode.mockResolvedValue({ attempted: false, authenticated: false })
     resolveSession.mockResolvedValue({ authenticated: true, user: { id: 'user-1' } })
     getSessions.mockResolvedValue(sessionPayload)
     getTrace.mockResolvedValue({})
   })
 
-  it('opens the configured Nala Labs login popup and retries after a valid handoff', async () => {
-    vi.stubEnv('VITE_NALA_LABS_URL', 'https://nala.example.test/')
+  it('automatically redirects an unauthorized entry to Nala Labs in the same tab', async () => {
     resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
-    const popup = { closed: false }
-    const open = vi.spyOn(window, 'open').mockReturnValue(popup)
 
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Sign in through Nala Labs' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign in through Nala Labs')
+    expect(redirectToNalaLabs).toHaveBeenCalledExactlyOnceWith()
+  })
 
-    expect(open).toHaveBeenCalledExactlyOnceWith(
-      `https://nala.example.test/login?trace_origin=${encodeURIComponent(window.location.origin)}`,
-      'nala-labs-login',
-      'popup,width=480,height=720',
-    )
+  it('keeps a manual same-tab sign-in button as the fallback', async () => {
+    resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
 
-    const message = new Event('message')
-    Object.defineProperties(message, {
-      origin: { value: 'https://nala.example.test' },
-      source: { value: popup },
-      data: { value: { type: 'nala-labs-authenticated', token: 'jwt-from-nala' } },
-    })
-    act(() => window.dispatchEvent(message))
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'Sign in through Nala Labs' })
+    await waitFor(() => expect(redirectToNalaLabs).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in through Nala Labs' }))
+    expect(redirectToNalaLabs).toHaveBeenCalledTimes(2)
+  })
+
+  it('redeems a returned code before resolving the protected session', async () => {
+    redeemNalaLabsAuthCode.mockResolvedValueOnce({ attempted: true, authenticated: true })
+
+    render(<App />)
 
     expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
+    expect(redeemNalaLabsAuthCode.mock.invocationCallOrder[0]).toBeLessThan(resolveSession.mock.invocationCallOrder[0])
     expect(getSessions).toHaveBeenCalledExactlyOnceWith()
-    expect(window.sessionStorage.getItem('nala_labs_access_token')).toBe('jwt-from-nala')
   })
 
   it('hides the dashboard shell while authentication and protected data are unresolved', async () => {
@@ -79,6 +92,7 @@ describe('authenticated sessions flow', () => {
     expect(screen.queryByRole('heading', { name: 'All captured sessions' })).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Sign in through Nala Labs')
 
+    await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
     resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
 
     expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()

@@ -1,10 +1,33 @@
 import { bootstrapAuthFromSessionStorage, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY } from './api'
 
 export const DEFAULT_NALA_LABS_ORIGIN = 'http://localhost:5173'
-export const NALA_LABS_AUTH_MESSAGE_TYPE = 'nala-labs-authenticated'
+export const NALA_LABS_AUTH_CODE_QUERY_PARAM = 'nala_labs_auth_code'
+export const TRACE_HANDOFF_REDEEM_PATH = '/api/auth/trace-handoff/redeem'
+
+export class AuthHandoffError extends Error {
+  constructor(message, status = 0) {
+    super(message)
+    this.name = 'AuthHandoffError'
+    this.status = status
+  }
+}
 
 function getLocationOrigin(windowRef) {
   return typeof windowRef?.location?.origin === 'string' ? windowRef.location.origin : ''
+}
+
+function normalizeValue(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeTraceOrigin(value) {
+  const candidate = normalizeValue(value)
+  try {
+    const url = new URL(candidate)
+    return ['http:', 'https:'].includes(url.protocol) ? url.origin : ''
+  } catch {
+    return ''
+  }
 }
 
 export function resolveNalaLabsOrigin(env = import.meta.env) {
@@ -20,16 +43,6 @@ export function resolveNalaLabsOrigin(env = import.meta.env) {
   }
 }
 
-export function buildNalaLabsLoginUrl({ env = import.meta.env, traceOrigin = getLocationOrigin(globalThis) } = {}) {
-  const url = new URL('/login', resolveNalaLabsOrigin(env))
-  if (typeof traceOrigin === 'string' && traceOrigin.trim()) url.searchParams.set('trace_origin', traceOrigin.trim())
-  return url.toString()
-}
-
-function normalizeToken(value) {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
 function getSessionStorage(windowRef) {
   try {
     return windowRef?.sessionStorage || null
@@ -38,84 +51,77 @@ function getSessionStorage(windowRef) {
   }
 }
 
-export function createNalaLabsAuthHandoff({
-  env = import.meta.env,
+export function buildNalaLabsLoginUrl({ env = import.meta.env, traceOrigin = getLocationOrigin(globalThis) } = {}) {
+  const url = new URL('/login', resolveNalaLabsOrigin(env))
+  const origin = normalizeTraceOrigin(traceOrigin)
+  if (origin) url.searchParams.set('trace_origin', origin)
+  return url.toString()
+}
+
+export function readNalaLabsAuthCode(windowRef = globalThis) {
+  const search = typeof windowRef?.location?.search === 'string' ? windowRef.location.search : ''
+  return normalizeValue(new URLSearchParams(search).get(NALA_LABS_AUTH_CODE_QUERY_PARAM))
+}
+
+export function clearNalaLabsAuthCode(windowRef = globalThis) {
+  if (typeof windowRef?.history?.replaceState !== 'function' || typeof windowRef?.location?.href !== 'string') return false
+
+  const url = new URL(windowRef.location.href)
+  url.searchParams.delete(NALA_LABS_AUTH_CODE_QUERY_PARAM)
+  const nextURL = `${url.pathname}${url.search}${url.hash}`
+  windowRef.history.replaceState(windowRef.history.state, '', nextURL)
+  return true
+}
+
+export function redirectToNalaLabs({ env = import.meta.env, windowRef = globalThis, traceOrigin = getLocationOrigin(windowRef) } = {}) {
+  const assign = windowRef?.location?.assign
+  if (typeof assign !== 'function') return false
+  try {
+    assign.call(windowRef.location, buildNalaLabsLoginUrl({ env, traceOrigin }))
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function redeemNalaLabsAuthCode({
   windowRef = globalThis,
   storage = getSessionStorage(windowRef),
-  traceOrigin = getLocationOrigin(windowRef),
-  onAuthenticated = () => {},
-  onPopupBlocked = () => {},
-  onStorageError = () => {},
+  fetchImpl = typeof windowRef?.fetch === 'function' ? windowRef.fetch.bind(windowRef) : globalThis.fetch,
 } = {}) {
-  const expectedOrigin = resolveNalaLabsOrigin(env)
-  let popup = null
-  let listening = false
+  const code = readNalaLabsAuthCode(windowRef)
+  if (!code) return { attempted: false, authenticated: false }
 
-  function stopListening() {
-    if (!listening || typeof windowRef.removeEventListener !== 'function') return
-    windowRef.removeEventListener('message', handleMessage)
-    listening = false
+  clearNalaLabsAuthCode(windowRef)
+  if (typeof fetchImpl !== 'function') throw new AuthHandoffError('Nala Labs sign-in is unavailable')
+
+  let response
+  try {
+    response = await fetchImpl(TRACE_HANDOFF_REDEEM_PATH, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+  } catch {
+    throw new AuthHandoffError('Nala Labs sign-in could not be completed')
   }
 
-  function handleMessage(event) {
-    if (event?.origin !== expectedOrigin || event?.source !== popup) return false
-    if (!event.data || event.data.type !== NALA_LABS_AUTH_MESSAGE_TYPE) return false
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) throw new AuthHandoffError('Nala Labs sign-in could not be completed', response.status)
 
-    const token = normalizeToken(event.data.token)
-    if (!token || !storage || typeof storage.setItem !== 'function') {
-      onStorageError()
-      return false
-    }
-
-    try {
-      storage.setItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, token)
-    } catch {
-      onStorageError()
-      return false
-    }
-
-    stopListening()
-    onAuthenticated()
-    return true
+  const token = normalizeValue(payload?.token ?? payload?.access_token)
+  if (!token || !storage || typeof storage.setItem !== 'function') {
+    throw new AuthHandoffError('Nala Labs sign-in did not return a usable session')
   }
 
-  function open() {
-    stopListening()
-    popup = null
-
-    let nextPopup
-    try {
-      nextPopup = typeof windowRef.open === 'function'
-        ? windowRef.open(buildNalaLabsLoginUrl({ env, traceOrigin }), 'nala-labs-login', 'popup,width=480,height=720')
-        : null
-    } catch {
-      nextPopup = null
-    }
-
-    if (!nextPopup) {
-      onPopupBlocked()
-      return null
-    }
-
-    popup = nextPopup
-    if (typeof windowRef.addEventListener === 'function') {
-      windowRef.addEventListener('message', handleMessage)
-      listening = true
-    }
-    return popup
+  try {
+    storage.setItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, token)
+  } catch {
+    throw new AuthHandoffError('Nala Labs sign-in did not return a usable session')
+  }
+  if (!bootstrapAuthFromSessionStorage(storage)) {
+    throw new AuthHandoffError('Nala Labs sign-in did not return a usable session')
   }
 
-  function dispose() {
-    stopListening()
-    popup = null
-  }
-
-  return {
-    buildLoginUrl: () => buildNalaLabsLoginUrl({ env, traceOrigin }),
-    expectedOrigin,
-    handleMessage,
-    open,
-    dispose,
-    isAuthenticated: () => bootstrapAuthFromSessionStorage(storage),
-  }
+  return { attempted: true, authenticated: true }
 }

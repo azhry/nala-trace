@@ -164,7 +164,7 @@ func conversationRole(eventName string) string {
 	switch eventName {
 	case "UserPromptSubmit":
 		return "user"
-	case "Stop":
+	case "Stop", "SubagentStop":
 		return "assistant"
 	default:
 		return ""
@@ -173,8 +173,8 @@ func conversationRole(eventName string) string {
 
 func messageContent(payload bson.Raw, eventName string) json.RawMessage {
 	keys := []string{"prompt", "user_prompt", "content", "text"}
-	if eventName == "Stop" {
-		keys = []string{"response", "stop_message", "message", "content", "text"}
+	if eventName == "Stop" || eventName == "SubagentStop" {
+		keys = []string{"last_assistant_message", "response", "stop_message", "message", "content", "text"}
 	}
 	for _, key := range keys {
 		content := payloadField(payload, key)

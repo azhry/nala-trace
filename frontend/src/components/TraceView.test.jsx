@@ -132,6 +132,63 @@ describe('TraceView API conversation', () => {
     expect(container.querySelectorAll('.conversation-message')).toHaveLength(0)
   })
 
+  it('renders a root Stop assistant reply while keeping a provenance-bearing agent reply contextual', () => {
+    const trace = {
+      schema_version: '1',
+      conversation: [
+        {
+          role: 'user',
+          content: 'Root prompt from the session.',
+          occurred_at: '2026-08-19T08:00:00Z',
+          turn_id: 'turn-1',
+          raw: {
+            hook_event_name: 'UserPromptSubmit',
+            prompt: 'Root prompt from the session.',
+          },
+        },
+        {
+          role: 'assistant',
+          content: 'Root assistant reply from the session.',
+          occurred_at: '2026-08-19T08:00:02Z',
+          turn_id: 'turn-1',
+          raw: {
+            hook_event_name: 'Stop',
+            last_assistant_message: 'Root assistant reply from the session.',
+          },
+        },
+        {
+          role: 'assistant',
+          content: 'Internal worker result.',
+          occurred_at: '2026-08-19T08:00:03Z',
+          turn_id: 'turn-1',
+          raw: {
+            hook_event_name: 'SubagentStop',
+            last_assistant_message: 'Internal worker result.',
+            agent_id: 'agent-7',
+            agent_type: 'worker',
+          },
+        },
+      ],
+      timeline: [],
+    }
+
+    const { container } = render(<TraceView session={trace} />)
+    const messages = [...container.querySelectorAll('.conversation-message')]
+
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toHaveTextContent('Root prompt from the session.')
+    expect(messages[0]).toHaveClass('user')
+    expect(messages[1]).toHaveTextContent('Root assistant reply from the session.')
+    expect(messages[1]).toHaveClass('assistant')
+    expect(screen.queryByText('Internal worker result.')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
+
+    expect(screen.getByText('Internal worker result.')).toBeInTheDocument()
+    expect(screen.getByText(/agent-7/)).toBeInTheDocument()
+    expect(container.querySelectorAll('.conversation-message')).toHaveLength(0)
+  })
+
   it('does not render raw lifecycle records as conversation messages', () => {
     const trace = {
       schema_version: '1',

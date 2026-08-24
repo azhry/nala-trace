@@ -64,6 +64,46 @@ func TestReconstructConversationSkipsMissingContent(t *testing.T) {
 	}
 }
 
+func TestReconstructConversationReadsCodexAssistantMessages(t *testing.T) {
+	base := time.Unix(40, 0).UTC()
+	agentID := "agent-1"
+	agentType := "worker"
+	events := []storage.HookEvent{
+		hookEvent("prompt", "UserPromptSubmit", "turn-1", base, map[string]any{
+			"prompt": "What changed?",
+		}),
+		hookEvent("stop", "Stop", "turn-1", base.Add(time.Second), map[string]any{
+			"last_assistant_message": "The trace now includes assistant replies.",
+		}),
+		hookEvent("subagent-stop", "SubagentStop", "turn-1", base.Add(2*time.Second), map[string]any{
+			"agent_id":              agentID,
+			"agent_type":            agentType,
+			"last_assistant_message": "Internal worker result.",
+		}),
+	}
+
+	result := Reconstruct("session-1", "user-1", events)
+	if len(result.Conversation) != 3 {
+		t.Fatalf("conversation length = %d, want 3", len(result.Conversation))
+	}
+	if result.Conversation[0].Role != "user" || string(result.Conversation[0].Content) != `"What changed?"` {
+		t.Fatalf("user conversation item = %#v", result.Conversation[0])
+	}
+	if result.Conversation[1].Role != "assistant" || string(result.Conversation[1].Content) != `"The trace now includes assistant replies."` {
+		t.Fatalf("assistant conversation item = %#v", result.Conversation[1])
+	}
+	if result.Conversation[2].Role != "assistant" || string(result.Conversation[2].Content) != `"Internal worker result."` {
+		t.Fatalf("subagent conversation item = %#v", result.Conversation[2])
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(result.Conversation[2].Raw, &raw); err != nil {
+		t.Fatalf("subagent raw payload is not JSON: %v", err)
+	}
+	if raw["agent_id"] != agentID || raw["agent_type"] != agentType {
+		t.Fatalf("subagent provenance = %#v", raw)
+	}
+}
+
 func TestReconstructDetectsApplyPatchShellFileSkillAndAmbiguousPayloads(t *testing.T) {
 	base := time.Unix(20, 0).UTC()
 	events := []storage.HookEvent{

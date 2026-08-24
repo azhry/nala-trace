@@ -1,15 +1,29 @@
 function getRuntimeMetadata(session) {
-  const metadata = session?.runtimeMetadata || session?.metadata?.runtime || session?.metadata || {}
+  const sources = [
+    session?.runtime_metadata,
+    session?.runtimeMetadata,
+    session?.metadata?.runtime,
+    session?.metadata,
+  ].filter((value) => value && typeof value === 'object' && !Array.isArray(value))
+  const valueFor = (keys) => {
+    for (const source of sources) {
+      for (const key of keys) {
+        if (source[key] != null && source[key] !== '') return source[key]
+      }
+    }
+    return ''
+  }
+
   return {
-    model: metadata.model || metadata.modelName,
-    provider: metadata.provider || metadata.modelProvider || metadata.model_provider,
-    reasoningEffort: metadata.reasoningEffort || metadata.reasoning_effort || metadata.effort,
-    contextWindowTokens: metadata.contextWindowTokens || metadata.context_window_tokens || metadata.modelContextWindow || metadata.model_context_window,
-    client: metadata.client || metadata.originator,
-    clientVersion: metadata.clientVersion || metadata.cliVersion || metadata.cli_version,
-    source: metadata.source,
-    threadSource: metadata.threadSource || metadata.thread_source,
-    recordedFrom: metadata.recordedFrom,
+    model: valueFor(['model', 'model_name', 'modelName']),
+    provider: valueFor(['provider', 'model_provider', 'modelProvider']),
+    reasoningEffort: valueFor(['reasoning_effort', 'reasoningEffort', 'effort']),
+    contextWindowTokens: valueFor(['context_window_tokens', 'contextWindowTokens', 'model_context_window', 'modelContextWindow']),
+    client: valueFor(['client', 'originator']),
+    clientVersion: valueFor(['client_version', 'clientVersion', 'cli_version', 'cliVersion']),
+    source: valueFor(['source']),
+    threadSource: valueFor(['thread_source', 'threadSource']),
+    recordedFrom: valueFor(['recorded_from', 'recordedFrom']),
   }
 }
 
@@ -24,7 +38,8 @@ function formatClient(client, version) {
 }
 
 function MetadataField({ label, value, mono = true }) {
-  return <div className="session-metadata-field"><span>{label}</span><strong className={mono ? 'metadata-value-mono' : ''}>{value || 'Not recorded'}</strong></div>
+  const displayValue = value == null || value === '' ? 'Not recorded' : value
+  return <div className="session-metadata-field"><span>{label}</span><strong className={mono ? 'metadata-value-mono' : ''}>{displayValue}</strong></div>
 }
 
 export default function SessionMetadata({ session }) {

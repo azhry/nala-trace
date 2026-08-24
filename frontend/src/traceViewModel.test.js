@@ -217,4 +217,55 @@ describe('normalizeTraceViewModel', () => {
       time: formatTraceTimestamp('2026-08-19T10:02:00Z'),
     })
   })
+
+  it('projects API skill and file signals by timeline event ID and exposes read counts', () => {
+    const model = normalizeTraceViewModel({
+      schema_version: '1',
+      timeline: [
+        { id: 'pre-first', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:01Z', tool_call_index: 0 },
+        { id: 'pre-second', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:02Z', tool_call_index: 1 },
+        { id: 'context-signal', hook_event_name: 'SessionStart', occurred_at: '2026-08-19T08:00:03Z' },
+      ],
+      tool_calls: [
+        { tool_name: 'read_file', input: { path: 'README.md' } },
+        { tool_name: 'apply_patch', input: { patch: '*** Update File: src/App.jsx' } },
+      ],
+      skill_invocations: [
+        { name: 'frontend-design', event_id: 'pre-first', confidence: 'explicit' },
+        { name: 'review', event_id: 'pre-second', confidence: 'inferred' },
+        { name: 'context-skill', event_id: 'context-signal', confidence: 'ambiguous' },
+      ],
+      files: [
+        { path: 'README.md', operation: 'read', event_id: 'pre-first' },
+        { path: 'src/App.jsx', operation: 'write', event_id: 'pre-first' },
+        { path: 'src/traceViewModel.js', operation: 'read', event_id: 'pre-second' },
+        { path: 'AGENTS.md', operation: 'read', event_id: 'context-signal' },
+      ],
+      summary: { event_count: 3, tool_call_count: 2, skill_invocation_count: 3, file_operation_count: 4, file_read_count: 3 },
+    })
+
+    const toolEvents = model.events.filter((event) => event.type === 'tool')
+    expect(toolEvents[0]).toMatchObject({
+      skills: ['frontend-design'],
+      files: ['README.md', 'src/App.jsx'],
+      skillRecords: [expect.objectContaining({ eventId: 'pre-first', confidence: 'explicit' })],
+      fileRecords: [
+        expect.objectContaining({ path: 'README.md', operation: 'read', eventId: 'pre-first' }),
+        expect.objectContaining({ path: 'src/App.jsx', operation: 'write', eventId: 'pre-first' }),
+      ],
+    })
+    expect(toolEvents[1]).toMatchObject({
+      skills: ['review'],
+      files: ['src/traceViewModel.js'],
+    })
+
+    expect(model.events.find((event) => event.id === 'context-signal')).toMatchObject({
+      skills: ['context-skill'],
+      files: ['AGENTS.md'],
+    })
+    expect(model.skillInvocationCount).toBe(3)
+    expect(model.fileOperationCount).toBe(4)
+    expect(model.fileReadCount).toBe(3)
+    expect(model.signalCounts).toEqual({ skills: 3, files: 4, fileReads: 3 })
+  })
 })

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
+import { normalizeTraceViewModel } from '../traceViewModel'
 
 const filters = [
   ['all', 'Everything'],
@@ -21,11 +22,16 @@ function SkillTags({ skills = [] }) {
 
 function ConversationMessage({ event }) {
   const isUser = event.role === 'user'
-  return <article className={`conversation-message ${isUser ? 'user' : 'assistant'}`}>
-    <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{isUser ? 'User' : 'Codex'}</strong><span>{event.time}</span><span className="message-record">record {event.record}</span></div>
-    <p>{event.body}</p>
-    <SkillTags skills={event.skills} />
-  </article>
+  const body = event.hasContent === false ? 'Content not recorded' : event.body
+  return <>
+    {event.turnBoundary && <div className="turn-boundary" role="separator" aria-label={event.turnLabel}><span>Turn boundary</span><strong>{event.turnLabel}</strong></div>}
+    <article className={`conversation-message ${isUser ? 'user' : 'assistant'}`}>
+      <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}</div>
+      {event.contentIsCode ? <pre className="message-content-code">{body}</pre> : <p>{body}</p>}
+      {event.partial && <span className="message-partial">partial evidence</span>}
+      <SkillTags skills={event.skills} />
+    </article>
+  </>
 }
 
 function SystemEvent({ event }) {
@@ -117,9 +123,23 @@ function InstructionInventory({ events }) {
   </div>
 }
 
-export default function TraceView({ session }) {
+function TraceStatePanel({ state, onRetry }) {
+  if (state === 'loading') return <div className="trace-state-panel" role="status" aria-live="polite"><strong>Loading trace conversation…</strong><span>Reading the selected session from the protected Go API.</span></div>
+  if (state === 'missing') return <div className="trace-state-panel" role="alert"><strong>Session trace not found.</strong><span>No stored events were returned for this session.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
+  if (state === 'unauthorized') return <div className="trace-state-panel" role="alert"><strong>Trace access needs authentication.</strong><span>The trace request was rejected. Refresh the application session, then retry.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
+  if (state === 'error') return <div className="trace-state-panel" role="alert"><strong>Trace conversation could not be loaded.</strong><span>The protected trace request failed before conversation data was available.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
+  if (state === 'empty') return <div className="trace-state-panel" role="status"><strong>No conversation messages were recorded.</strong><span>This session has no reconstructed user or assistant content to display.</span></div>
+  return null
+}
+
+function PartialNotice({ message }) {
+  return <div className="trace-partial-notice" role="status"><strong>Partial conversation data</strong><span>{message}</span></div>
+}
+
+export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {} }) {
   const [filter, setFilter] = useState('all')
-  const events = session.eventsList || EMPTY_EVENTS
+  const viewModel = useMemo(() => normalizeTraceViewModel(session), [session])
+  const events = viewModel.events || EMPTY_EVENTS
   const contextRows = useMemo(() => {
     const rows = []
     events.forEach((event) => {
@@ -148,7 +168,9 @@ export default function TraceView({ session }) {
       return event.type === 'system'
     })
   }, [contextRows, events, filter])
-  const semanticRecords = (session.events || session.eventsList?.length || 0).toLocaleString()
+  const semanticRecords = String(viewModel.semanticRecords ?? 0)
+  const isApiTrace = viewModel.source === 'api'
+  const emptyConversation = isApiTrace && viewModel.conversation.length === 0
   const contextCounts = contextRows.reduce((counts, event) => ({ ...counts, [event.contextType]: (counts[event.contextType] || 0) + 1 }), {})
 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
@@ -161,9 +183,9 @@ export default function TraceView({ session }) {
       <span className="record-count">{semanticRecords} records</span>
     </div>
     <div className="trace-summary">
-      <div><span>Session</span><strong>{session.id}</strong><small>{session.messages} messages · {session.userTurns} user turns</small></div>
-      <div><span>Tools</span><strong>{(session.toolCalls || 0).toLocaleString()}</strong><small>{(session.renderedToolRows || session.toolCalls || 0).toLocaleString()} rendered tool rows</small></div>
-      <div><span>Capture</span><strong>{session.startedAt}–{session.capturedAt}</strong><small>{(session.rawEvents || 0).toLocaleString()} raw events</small></div>
+      <div><span>Session</span><strong>{session.id || 'Selected session'}</strong><small>{viewModel.messageCount.toLocaleString()} messages · {viewModel.conversation.filter((event) => event.role === 'user').length.toLocaleString()} user turns</small></div>
+      <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
+      <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
     <SkillInventory events={events} />
     <InstructionInventory events={events} />
@@ -177,17 +199,21 @@ export default function TraceView({ session }) {
       <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} rows · {semanticRecords} semantic records</span>
     </div>
     <div className="trace-stream">
-      <div className="stream-intro"><span className="stream-line" /><span>Trace started · {session.startedAt}</span></div>
-      {visibleEvents.map((event) => event.type === 'context'
-        ? <ContextRow key={event.id} event={event} />
-        : filter === 'conversation' && isInstructionEvent(event)
-        ? <ContextRow key={event.id} event={{ ...event, id: `conversation-${event.id}`, type: 'context', contextType: 'instruction-read', files: event.files }} inline />
-        : event.type === 'tool'
-        ? <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} />
-        : event.type === 'system'
-          ? <SystemEvent key={event.id} event={event} />
-          : <ConversationMessage key={event.id} event={event} />)}
-      <div className="stream-end"><span>End of captured session · {session.capturedAt}</span><span className="stream-line" /></div>
+      {traceState !== 'ready' ? <TraceStatePanel state={traceState} onRetry={onRetry} /> : <>
+        {viewModel.partial && <PartialNotice message={viewModel.partialMessage} />}
+        {emptyConversation && <TraceStatePanel state="empty" />}
+        {(visibleEvents.length > 0 || !emptyConversation) && <div className="stream-intro"><span className="stream-line" /><span>Trace started · {viewModel.startedAt}</span></div>}
+        {visibleEvents.map((event) => event.type === 'context'
+          ? <ContextRow key={event.id} event={event} />
+          : filter === 'conversation' && isInstructionEvent(event)
+          ? <ContextRow key={event.id} event={{ ...event, id: `conversation-${event.id}`, type: 'context', contextType: 'instruction-read', files: event.files }} inline />
+          : event.type === 'tool'
+          ? <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} />
+          : event.type === 'system'
+            ? <SystemEvent key={event.id} event={event} />
+            : <ConversationMessage key={event.id} event={event} />)}
+        {visibleEvents.length > 0 && <div className="stream-end"><span>End of captured session · {viewModel.capturedAt}</span><span className="stream-line" /></div>}
+      </>}
     </div>
   </section>
 }

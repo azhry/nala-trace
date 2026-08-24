@@ -127,3 +127,25 @@ body { font-size: 16px; }
   .sort-control select { flex: 1; }
   .session-state-panel { padding: 24px 16px; }
 }
+
+/* API-shaped conversation evidence and resilient trace states. */
+.trace-state-panel { display: grid; gap: 7px; margin: 3px 0 18px; padding: 24px 18px; border: 1px solid rgba(239,182,110,.24); border-radius: 8px; background: rgba(239,182,110,.06); }
+.trace-state-panel strong { color: var(--text); font-size: 15px; }
+.trace-state-panel span { color: var(--muted); font-size: 13px; }
+.trace-state-panel .state-action { margin-top: 4px; }
+.trace-partial-notice { display: flex; align-items: baseline; gap: 9px; margin: 0 0 16px; padding: 9px 11px; border: 1px solid rgba(239,182,110,.25); border-radius: 6px; background: rgba(239,182,110,.06); color: var(--muted); font-size: 12px; }
+.trace-partial-notice strong { color: var(--amber); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; }
+.turn-boundary { display: flex; align-items: center; gap: 8px; margin: 22px 0 0; color: var(--faint); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.turn-boundary::after { height: 1px; flex: 1; background: var(--line); content: ''; }
+.turn-boundary strong { color: var(--purple); font-size: 10px; font-weight: 600; }
+.message-turn { padding: 2px 5px; border: 1px solid rgba(187,165,255,.22); border-radius: 3px; color: var(--purple); font-family: var(--mono); font-size: 9px; }
+.message-content-code { max-height: 360px; margin: 9px 0 0; padding: 11px 12px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: rgba(15,19,24,.72); color: var(--muted); font-family: var(--mono); font-size: 12px; line-height: 1.55; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-partial { display: inline-block; margin-top: 9px; color: var(--amber); font-family: var(--mono); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
+
+@media (max-width: 720px) {
+  .trace-partial-notice { display: grid; gap: 4px; }
+  .turn-boundary { margin-top: 18px; font-size: 9px; }
+  .message-turn { font-size: 8px; }
+  .message-content-code { max-height: 300px; padding: 9px 10px; font-size: 11px; }
+  .trace-state-panel { padding: 20px 14px; }
+}

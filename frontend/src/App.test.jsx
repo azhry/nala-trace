@@ -37,6 +37,40 @@ const sessionPayload = {
   limit: 100,
 }
 
+const apiTracePayload = {
+  schema_version: '1',
+  session_id: 'authenticated-session',
+  user_id: 'user-1',
+  timeline: [],
+  conversation: [
+    {
+      role: 'user',
+      content: 'Show the recorded conversation.',
+      occurred_at: '2026-08-19T08:00:00Z',
+      turn_id: 'turn-1',
+      raw: {},
+    },
+    {
+      role: 'assistant',
+      content: { result: 'ordered and safe' },
+      occurred_at: '2026-08-19T08:00:02Z',
+      turn_id: 'turn-1',
+      raw: {},
+    },
+    {
+      role: 'user',
+      content: 'Keep the next turn visible.',
+      occurred_at: '2026-08-19T08:01:00Z',
+      turn_id: 'turn-2',
+      raw: {},
+    },
+  ],
+  tool_calls: [],
+  skill_invocations: [],
+  files: [],
+  summary: { event_count: 3, message_count: 3, tool_call_count: 0 },
+}
+
 describe('authenticated sessions flow', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/#/sessions')
@@ -160,5 +194,30 @@ describe('authenticated sessions flow', () => {
     getSessions.mockRejectedValueOnce(new ApiError('Request failed', 503))
     render(<App />)
     await waitFor(() => expect(screen.getAllByText('Sessions could not be loaded.').length).toBeGreaterThan(0))
+  })
+
+  it('hands the API-shaped trace payload to the conversation view in order', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    getTrace.mockResolvedValueOnce(apiTracePayload)
+
+    render(<App />)
+
+    expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
+    expect(screen.getByText('Keep the next turn visible.')).toBeInTheDocument()
+    expect(screen.getByText('turn turn-2')).toBeInTheDocument()
+    expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session')
+  })
+
+  it('shows a missing trace state and retries the selected session request', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    getTrace.mockRejectedValueOnce(new ApiError('trace not found', 404, { code: 'trace_not_found' }))
+    getTrace.mockResolvedValueOnce(apiTracePayload)
+
+    render(<App />)
+
+    expect(await screen.findByText('Session trace not found.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry request' }))
+    expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
+    expect(getTrace).toHaveBeenCalledTimes(2)
   })
 })

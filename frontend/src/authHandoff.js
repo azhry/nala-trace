@@ -84,7 +84,13 @@ export function redirectToNalaLabs({ env = import.meta.env, windowRef = globalTh
   }
 }
 
-export function signOutFromTrace({ windowRef = globalThis } = {}) {
+export function buildNalaLabsLogoutUrl({ env = import.meta.env } = {}) {
+  const url = new URL('/login', resolveNalaLabsOrigin(env))
+  url.searchParams.set('logout', '1')
+  return url.toString()
+}
+
+export function signOutFromTrace({ env = import.meta.env, windowRef = globalThis } = {}) {
   const storage = getSessionStorage(windowRef)
   try {
     storage?.removeItem?.(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
@@ -93,11 +99,8 @@ export function signOutFromTrace({ windowRef = globalThis } = {}) {
   }
   clearAuthConfiguration()
 
-  if (typeof windowRef?.location?.assign !== 'function' || typeof windowRef?.location?.href !== 'string') return false
-  const url = new URL(windowRef.location.href)
-  url.searchParams.delete(NALA_LABS_AUTH_CODE_QUERY_PARAM)
-  url.searchParams.set('signed_out', '1')
-  windowRef.location.assign(`${url.pathname}${url.search}${url.hash}`)
+  if (typeof windowRef?.location?.assign !== 'function') return false
+  windowRef.location.assign(buildNalaLabsLogoutUrl({ env }))
   return true
 }
 

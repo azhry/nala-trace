@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AuthHandoffError,
   buildNalaLabsLoginUrl,
+  buildNalaLabsLogoutUrl,
   clearNalaLabsAuthCode,
   NALA_LABS_AUTH_CODE_QUERY_PARAM,
   readNalaLabsAuthCode,
@@ -69,7 +70,8 @@ describe('Nala Labs same-tab authentication handoff', () => {
 
     expect(signOutFromTrace({ windowRef })).toBe(true)
     expect(windowRef.sessionStorage.removeItem).toHaveBeenCalledExactlyOnceWith(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
-    expect(windowRef.assign).toHaveBeenCalledExactlyOnceWith('/?signed_out=1')
+    expect(windowRef.assign).toHaveBeenCalledExactlyOnceWith('http://localhost:5173/login?logout=1')
+    expect(buildNalaLabsLogoutUrl()).toBe('http://localhost:5173/login?logout=1')
   })
 
   it('falls back to the default Nala Labs origin for malformed configuration', () => {

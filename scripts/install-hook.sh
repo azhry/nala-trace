@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Install the local Codex hook client configuration. The API key is read
-# silently and written only to the user-scoped config file.
+# Install the local Codex hook client and project manifest. The API key is read
+# silently and written only to the ignored project config file.
 set -u
 
 REPOSITORY_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,6 +30,9 @@ fi
 CONFIG_DIR="$REPOSITORY_ROOT/.codex"
 CONFIG_FILE="$CONFIG_DIR/nala-trace.env"
 CONFIG_TEMP="$CONFIG_FILE.tmp.$$"
+MANIFEST_SOURCE="$REPOSITORY_ROOT/hooks.json"
+MANIFEST_FILE="$CONFIG_DIR/hooks.json"
+MANIFEST_TEMP="$MANIFEST_FILE.tmp.$$"
 mkdir -p "$CONFIG_DIR"
 if [[ $? -ne 0 ]]; then
   printf '%s\n' "Cannot create $CONFIG_DIR." >&2
@@ -64,6 +67,24 @@ if [[ $BUILD_STATUS -ne 0 ]]; then
   exit 1
 fi
 
+if [[ ! -f "$MANIFEST_SOURCE" ]]; then
+  printf '%s\n' "Cannot find $MANIFEST_SOURCE." >&2
+  exit 1
+fi
+cp -- "$MANIFEST_SOURCE" "$MANIFEST_TEMP"
+if [[ $? -ne 0 ]]; then
+  printf '%s\n' "Cannot stage $MANIFEST_FILE." >&2
+  rm -f -- "$MANIFEST_TEMP"
+  exit 1
+fi
+mv -f -- "$MANIFEST_TEMP" "$MANIFEST_FILE"
+if [[ $? -ne 0 ]]; then
+  printf '%s\n' "Cannot install $MANIFEST_FILE." >&2
+  rm -f -- "$MANIFEST_TEMP"
+  exit 1
+fi
+
 printf '%s\n' 'Nala Trace hook installed.'
 printf '%s\n' "Project config: $CONFIG_FILE"
+printf '%s\n' "Project hooks: $MANIFEST_FILE"
 printf '%s\n' 'The hook client reads this file on every invocation; no environment restart is required.'

@@ -2,31 +2,31 @@
   "description": "Nala Trace lifecycle hooks.",
   "hooks": {
     "SessionStart": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ],
     "UserPromptSubmit": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ],
     "PreToolUse": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ],
     "PostToolUse": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ],
     "SubagentStart": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ],
     "SubagentStop": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ],
     "PreCompact": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ],
     "PostCompact": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ],
     "Stop": [
-      {"hooks": [{"type": "command", "command": "hook-client"}]}
+      {"hooks": [{"type": "command", "command": "backend/bin/hook-client.exe"}]}
     ]
   }
 }

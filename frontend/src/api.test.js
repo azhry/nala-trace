@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearAuthConfiguration, configureAuth, getSessions, getTrace, resolveSession } from './api'
+import {
+  bootstrapAuthFromSessionStorage,
+  clearAuthConfiguration,
+  configureAuth,
+  getSessions,
+  getTrace,
+  NALA_LABS_ACCESS_TOKEN_STORAGE_KEY,
+  resolveSession,
+} from './api'
 
 function jsonResponse(body, ok = true, status = 200) {
   return {
@@ -45,31 +53,67 @@ describe('API auth configuration', () => {
 
   it('sends the configured JWT to session resolution and protected calls', async () => {
     configureAuth({ jwt: 'jwt-token' })
-    fetch.mockResolvedValueOnce(jsonResponse({ authenticated: true, user: { id: 'user-1' } }))
     fetch.mockResolvedValueOnce(jsonResponse({ sessions: [], limit: 100 }))
     fetch.mockResolvedValueOnce(jsonResponse({ eventsList: [] }))
 
-    await resolveSession()
+    await expect(resolveSession()).resolves.toEqual({ authenticated: true, authenticationMode: 'jwt' })
     await getSessions()
     await getTrace('session-2')
 
-    expect(fetch).toHaveBeenNthCalledWith(1, '/api/auth/session', {
+    expect(fetch).toHaveBeenNthCalledWith(1, '/sessions?limit=100', {
       headers: {
         Accept: 'application/json',
         Authorization: 'Bearer jwt-token',
       },
     })
-    expect(fetch).toHaveBeenNthCalledWith(2, '/sessions?limit=100', {
+    expect(fetch).toHaveBeenNthCalledWith(2, '/sessions/session-2', {
       headers: {
         Accept: 'application/json',
         Authorization: 'Bearer jwt-token',
       },
     })
-    expect(fetch).toHaveBeenNthCalledWith(3, '/sessions/session-2', {
+    expect(fetch).not.toHaveBeenCalledWith('/api/auth/session', expect.anything())
+  })
+
+  it('bootstraps the approved same-origin session token into JWT mode', async () => {
+    const storage = { getItem: vi.fn(() => 'stored-jwt') }
+    expect(bootstrapAuthFromSessionStorage(storage)).toBe(true)
+    expect(storage.getItem).toHaveBeenCalledExactlyOnceWith(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
+
+    fetch.mockResolvedValueOnce(jsonResponse({ sessions: [], limit: 100 }))
+
+    await expect(resolveSession()).resolves.toEqual({ authenticated: true, authenticationMode: 'jwt' })
+    await getSessions()
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledWith('/sessions?limit=100', {
       headers: {
         Accept: 'application/json',
-        Authorization: 'Bearer jwt-token',
+        Authorization: 'Bearer stored-jwt',
       },
+    })
+  })
+
+  it('does not replace an explicit API-token configuration during bootstrap', async () => {
+    configureAuth({ apiToken: 'api-token' })
+
+    expect(bootstrapAuthFromSessionStorage({ getItem: vi.fn(() => 'stored-jwt') })).toBe(false)
+    await expect(resolveSession()).resolves.toEqual({ authenticated: true, authenticationMode: 'apiToken' })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', { getItem: vi.fn(() => null) }],
+    ['unavailable', { getItem: vi.fn(() => { throw new Error('storage unavailable') }) }],
+  ])('keeps the default auth mode when session storage is %s', async (_state, storage) => {
+    expect(bootstrapAuthFromSessionStorage(storage)).toBe(false)
+    fetch.mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+
+    await resolveSession()
+
+    expect(fetch).toHaveBeenCalledWith('/api/auth/session', {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
     })
   })
 

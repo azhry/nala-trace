@@ -24,11 +24,19 @@ an implemented client-side route.
 Authentication stays cookie-backed by default. The frontend also exposes a
 runtime-only in-memory auth seam in `frontend/src/api.js`: configure exactly one
 of `jwt` or `apiToken` at runtime if a trusted host application needs explicit
-credential forwarding. JWT mode sends `Authorization: Bearer ...` to
-`/api/auth/session`, `/sessions`, and `/sessions/<id>`. API-token mode sends
-`X-Nala-Labs-API-Key` to `/sessions` and `/sessions/<id>` and intentionally
-skips `/api/auth/session`, which expects a JWT. Do not place either credential
-in Vite env files, build-time config, or other bundle artifacts.
+credential forwarding. At startup, the browser entry point makes a best-effort
+read of only `sessionStorage.getItem('nala_labs_access_token')` and configures
+that value in the existing in-memory JWT mode. JWT mode skips the Nala Trace
+`/api/auth/session` preflight and sends `Authorization: Bearer ...` to
+`/sessions` and `/sessions/<id>`; the protected session request performs the
+actual validation. API-token mode sends `X-Nala-Labs-API-Key` to `/sessions`
+and `/sessions/<id>` and intentionally skips `/api/auth/session`, which expects
+a JWT. Because `sessionStorage` is origin-scoped, the browser handoff works
+only when the Nala Trace entry point and Nala Labs application share the
+approved same origin (or an approved host integration provides that boundary).
+Separate origins must not use a URL/query-string token workaround. Do not
+place either credential in Vite env files, build-time config, URLs, or other
+bundle artifacts.
 
 The shell is source-owned and intentionally uses a compact observability workspace language: persistent navigation, low-contrast surfaces, rounded panels, status/tool chips, filterable rows, and keyboard-visible focus. Sessions, Evals, and Golden Set each have an observable destination; the local demo interactions are stateful until real API data is connected.
 

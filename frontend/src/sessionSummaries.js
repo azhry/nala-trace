@@ -22,7 +22,8 @@ export function formatSessionDate(value) {
 }
 
 export function normalizeSessionSummary(summary = {}) {
-  const id = cleanString(summary.session_id || summary.id)
+  const id = cleanString(summary.session_id) || cleanString(summary.id)
+  const title = cleanString(summary.title) || id || 'Untitled session'
   const firstEventAt = cleanString(summary.first_event_at || summary.firstEventAt)
   const lastEventAt = cleanString(summary.last_event_at || summary.lastEventAt)
   const evaluationStatus = statusValue(summary)
@@ -31,7 +32,7 @@ export function normalizeSessionSummary(summary = {}) {
 
   return {
     id,
-    title: id || 'Untitled session',
+    title,
     firstEventAt,
     lastEventAt,
     firstEventTime: Number.isNaN(firstDate.getTime()) ? null : firstDate.getTime(),
@@ -81,6 +82,7 @@ export function sortSessionSummaries(summaries, sortBy = 'recent') {
 
 function searchableMetadata(summary) {
   return [
+    summary.title,
     summary.id,
     summary.firstEventAt,
     summary.lastEventAt,

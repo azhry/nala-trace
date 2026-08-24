@@ -48,7 +48,7 @@ export default function SessionList({
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search ID, dates, counts, or status"
+            placeholder="Search titles, IDs, dates, counts, or status"
           />
           {query && <button type="button" className="clear-search" onClick={() => onQueryChange('')} aria-label="Clear search">×</button>}
         </label>
@@ -85,14 +85,14 @@ export default function SessionList({
           <button
             key={session.id}
             type="button"
-            aria-label={`Open session ${session.id}`}
+            aria-label={sessionAccessibleLabel(session)}
             className={`session-record ${selectedId === session.id ? 'is-selected' : ''}`}
             aria-pressed={selectedId === session.id}
             onClick={() => onSelect(session.id)}
           >
             <span className="session-record-main">
-              <span className="session-record-title"><strong>{session.id}</strong><StatusBadge status={session.status} /></span>
-              <span className="session-record-id">{formatRange(session.firstEventAt, session.lastEventAt)}</span>
+              <span className="session-record-title"><strong>{sessionTitle(session)}</strong><StatusBadge status={session.status} /></span>
+              <span className="session-record-id">{session.id}</span>
             </span>
             <span className="session-counts" aria-label={`${session.toolCallCount} tool calls, ${session.skillInvocationCount} skills, ${session.fileOperationCount} files`}>
               <CountBadge value={session.toolCallCount} label="tools" />
@@ -119,6 +119,11 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-function formatRange(start, end) {
-  return `${formatDate(start)} → ${formatDate(end)}`
+function sessionTitle(session) {
+  return typeof session.title === 'string' && session.title.trim() ? session.title.trim() : session.id || 'Untitled session'
+}
+
+function sessionAccessibleLabel(session) {
+  const title = sessionTitle(session)
+  return title === session.id ? `Open session ${title}` : `Open session ${title} (${session.id})`
 }

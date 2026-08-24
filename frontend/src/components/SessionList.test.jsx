@@ -7,6 +7,7 @@ const sessions = normalizeSessionSummaries({
   sessions: [
     {
       session_id: 'session-a',
+      title: 'Review the session title',
       first_event_at: '2026-08-18T08:00:00Z',
       last_event_at: '2026-08-18T08:05:00Z',
       event_count: 10,
@@ -16,6 +17,7 @@ const sessions = normalizeSessionSummaries({
     },
     {
       session_id: 'session-b',
+      title: 'Investigate the flagged session',
       first_event_at: '2026-08-19T08:00:00Z',
       last_event_at: '2026-08-19T08:05:00Z',
       event_count: 30,
@@ -48,10 +50,13 @@ function recordIds() {
 }
 
 describe('SessionList', () => {
-  it('renders representative summaries with accessible operation badges', () => {
+  it('renders titles as primary labels and IDs as row metadata', () => {
     renderList()
 
-    expect(screen.getByRole('button', { name: 'Open session session-a' })).toBeInTheDocument()
+    expect(screen.getByText('Review the session title')).toBeInTheDocument()
+    expect(screen.getByText('session-a')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open session Review the session title (session-a)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open session Review the session title (session-a)' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('8 tools')).toBeInTheDocument()
     expect(screen.getByLabelText('5 files')).toBeInTheDocument()
     expect(screen.getByLabelText('1 skills')).toBeInTheDocument()
@@ -61,7 +66,7 @@ describe('SessionList', () => {
     const onSortChange = vi.fn()
     renderList({ onSortChange })
 
-    expect(recordIds()).toEqual(['session-b', 'session-a'])
+    expect(recordIds()).toEqual(['Investigate the flagged session', 'Review the session title'])
     fireEvent.change(screen.getByRole('combobox', { name: 'Sort sessions' }), { target: { value: 'tools' } })
     expect(onSortChange).toHaveBeenCalledWith('tools')
   })
@@ -74,9 +79,24 @@ describe('SessionList', () => {
     fireEvent.change(search, { target: { value: 'files 5' } })
     expect(onQueryChange).toHaveBeenCalledWith('files 5')
     rerender(<SessionList sessions={sessions} selectedId="session-b" onSelect={vi.fn()} query="files 5" onQueryChange={onQueryChange} filter="all" onFilterChange={vi.fn()} sortBy="recent" onSortChange={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'Open session session-b' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Open session Investigate the flagged session (session-b)' })).toHaveAttribute('aria-pressed', 'true')
 
     rerender(<SessionList sessions={sessions} selectedId="session-b" onSelect={vi.fn()} query="missing" onQueryChange={onQueryChange} filter="all" onFilterChange={vi.fn()} sortBy="recent" onSortChange={vi.fn()} />)
     expect(screen.getByText('No sessions match your filters.')).toBeInTheDocument()
+  })
+
+  it('keeps legacy summaries without a title readable and navigable by ID', () => {
+    const legacySessions = normalizeSessionSummaries({
+      sessions: [{ session_id: 'legacy-session', event_count: 1 }],
+    })
+    const onSelect = vi.fn()
+
+    renderList({ sessions: legacySessions, selectedId: null, onSelect })
+
+    const row = screen.getByRole('button', { name: 'Open session legacy-session' })
+    expect(row).toBeInTheDocument()
+    expect(screen.getAllByText('legacy-session')).toHaveLength(2)
+    fireEvent.click(row)
+    expect(onSelect).toHaveBeenCalledWith('legacy-session')
   })
 })

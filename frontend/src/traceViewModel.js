@@ -300,14 +300,18 @@ function withTimelinePosition(event, timeline, streamOrder) {
     ...event,
     streamOrder,
     timelineId: timeline.id,
-    occurredAt: event.occurredAt || timeline.occurredAt,
-    time: event.time === 'Time not recorded' ? timeline.time : event.time,
+    occurredAt: timeline.occurredAt,
+    time: timeline.time,
     turnId: event.turnId || timeline.turnId,
   }
 }
 
 function sortStreamEvents(events) {
   return [...events].sort((left, right) => eventTimestamp(left.occurredAt) - eventTimestamp(right.occurredAt) || (left.streamOrder ?? 0) - (right.streamOrder ?? 0))
+}
+
+function sortTimelineStreamEvents(events) {
+  return [...events].sort((left, right) => (left.streamOrder ?? Number.POSITIVE_INFINITY) - (right.streamOrder ?? Number.POSITIVE_INFINITY))
 }
 
 function composeApiStream({ conversationEvents, contextEvents, toolEvents, timelineEvents }) {
@@ -385,7 +389,7 @@ function composeApiStream({ conversationEvents, contextEvents, toolEvents, timel
     if (!emittedTools.has(index)) leftovers.push(event)
   })
   leftovers.forEach((event, index) => stream.push({ ...event, streamOrder: timelineEvents.length + index }))
-  return sortStreamEvents(stream)
+  return sortTimelineStreamEvents(stream)
 }
 
 function apiTraceViewModel(trace) {

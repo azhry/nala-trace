@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeTraceViewModel } from './traceViewModel'
+import { formatTraceTimestamp, normalizeTraceViewModel } from './traceViewModel'
 
 const apiTrace = {
   schema_version: '1',
@@ -170,5 +170,51 @@ describe('normalizeTraceViewModel', () => {
       'PreToolUse',
       'PostToolUse',
     ])
+  })
+
+  it('keeps timeline stream order authoritative when timestamps disagree', () => {
+    const model = normalizeTraceViewModel({
+      schema_version: '1',
+      conversation: [
+        {
+          event_id: 'prompt-1',
+          role: 'user',
+          content: 'Run the command.',
+          occurred_at: '2026-08-19T10:00:00Z',
+          turn_id: 'turn-1',
+        },
+        {
+          event_id: 'stop-1',
+          role: 'assistant',
+          content: 'The command completed.',
+          occurred_at: '2026-08-19T09:00:00Z',
+          turn_id: 'turn-1',
+        },
+      ],
+      timeline: [
+        { id: 'prompt-1', hook_event_name: 'UserPromptSubmit', occurred_at: '2026-08-19T10:00:00Z' },
+        { id: 'pre-1', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T10:01:00Z', tool_call_index: 0 },
+        { id: 'stop-1', hook_event_name: 'Stop', occurred_at: '2026-08-19T10:02:00Z' },
+      ],
+      tool_calls: [
+        {
+          tool_name: 'Bash',
+          input: { command: 'npm test' },
+          started_at: '2026-08-19T08:00:00Z',
+          completed_at: '2026-08-19T08:01:00Z',
+        },
+      ],
+    })
+
+    expect(model.events.map((event) => event.type)).toEqual(['user', 'tool', 'assistant'])
+    expect(model.events.map((event) => event.streamOrder)).toEqual([0, 1, 2])
+    expect(model.events[1]).toMatchObject({
+      occurredAt: '2026-08-19T10:01:00Z',
+      time: formatTraceTimestamp('2026-08-19T10:01:00Z'),
+    })
+    expect(model.events[2]).toMatchObject({
+      occurredAt: '2026-08-19T10:02:00Z',
+      time: formatTraceTimestamp('2026-08-19T10:02:00Z'),
+    })
   })
 })

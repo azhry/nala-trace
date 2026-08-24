@@ -28,27 +28,14 @@ describe('API auth configuration', () => {
     vi.unstubAllGlobals()
   })
 
-  it('preserves cookie-backed requests when no explicit credential is configured', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-    fetch.mockResolvedValueOnce(jsonResponse({ sessions: [], limit: 100 }))
-    fetch.mockResolvedValueOnce(jsonResponse({ eventsList: [] }))
+  it('fails closed without a credential and never calls the nonexistent auth-session route', async () => {
+    await expect(resolveSession()).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'Authentication is required',
+      status: 401,
+    })
 
-    await resolveSession()
-    await getSessions()
-    await getTrace('session-1')
-
-    expect(fetch).toHaveBeenNthCalledWith(1, '/api/auth/session', {
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
-    })
-    expect(fetch).toHaveBeenNthCalledWith(2, '/sessions?limit=100', {
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
-    })
-    expect(fetch).toHaveBeenNthCalledWith(3, '/sessions/session-1', {
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
-    })
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('sends the configured JWT to session resolution and protected calls', async () => {
@@ -107,14 +94,14 @@ describe('API auth configuration', () => {
     ['unavailable', { getItem: vi.fn(() => { throw new Error('storage unavailable') }) }],
   ])('keeps the default auth mode when session storage is %s', async (_state, storage) => {
     expect(bootstrapAuthFromSessionStorage(storage)).toBe(false)
-    fetch.mockResolvedValueOnce(jsonResponse({ authenticated: true }))
 
-    await resolveSession()
-
-    expect(fetch).toHaveBeenCalledWith('/api/auth/session', {
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
+    await expect(resolveSession()).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'Authentication is required',
+      status: 401,
     })
+
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('skips session resolution in API-token mode and sends the API key to protected calls', async () => {

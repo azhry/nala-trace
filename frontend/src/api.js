@@ -1,4 +1,5 @@
 const JSON_HEADERS = { Accept: 'application/json' }
+const AUTHENTICATION_REQUIRED_MESSAGE = 'Authentication is required'
 export const NALA_LABS_ACCESS_TOKEN_STORAGE_KEY = 'nala_labs_access_token'
 const authConfiguration = {
   jwt: null,
@@ -113,12 +114,7 @@ export function resolveSession() {
     return Promise.resolve({ authenticated: true, authenticationMode: 'jwt' })
   }
 
-  return fetchJSON('/api/auth/session').then((payload) => {
-    if (payload?.authenticated === false || (!payload?.authenticated && !payload?.user && !payload?.id && !payload?.user_id)) {
-      throw new ApiError('Authentication is required', 401, payload)
-    }
-    return payload
-  })
+  return Promise.reject(new ApiError(AUTHENTICATION_REQUIRED_MESSAGE, 401))
 }
 
 export function getSessions() {

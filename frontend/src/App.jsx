@@ -23,6 +23,19 @@ function dataSourceCopy(apiState) {
   return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
 }
 
+function AuthBoundary({ apiState, onRetry }) {
+  const isLoading = apiState === 'loading'
+  const isUnauthorized = apiState === 'unauthorized'
+  const title = isLoading || isUnauthorized ? 'Sign in through Nala Labs' : 'Sessions could not be loaded.'
+  const detail = isLoading
+    ? 'Your Nala Labs application session is being checked before Trace data can be shown.'
+    : isUnauthorized
+      ? 'Your Nala Labs application session could not be verified. Sign in through Nala Labs, then try again.'
+      : 'The protected Trace session request did not return data. Sign in through Nala Labs, then retry.'
+  const actionLabel = isLoading ? 'Retry authentication' : 'Try again'
+  return <main className="auth-boundary" aria-labelledby="auth-boundary-title"><section className="auth-boundary-panel" role={isLoading ? 'status' : 'alert'} aria-live="polite"><p className="eyebrow">Nala Trace access</p><h1 id="auth-boundary-title">{title}</h1><p>{detail}</p><button type="button" className="state-action" onClick={onRetry}>{actionLabel}</button></section></main>
+}
+
 function Topbar({ route, session, apiState }) {
   const source = dataSourceCopy(apiState)
   return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}</div></header>
@@ -102,7 +115,7 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true
-    if (route.view !== 'detail' || !route.sessionId) {
+    if (apiState !== 'connected' || route.view !== 'detail' || !route.sessionId) {
       setRemoteTrace(null)
       return () => { mounted = false }
     }
@@ -110,13 +123,15 @@ export default function App() {
       if (mounted && payload?.eventsList) setRemoteTrace(payload)
     }).catch(() => {})
     return () => { mounted = false }
-  }, [route.sessionId, route.view])
+  }, [apiState, route.sessionId, route.view])
 
   const detailSession = selectedSession && remoteTrace ? { ...selectedSession, ...remoteTrace } : selectedSession
 
   function selectSession(id) {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
   }
+
+  if (apiState !== 'connected') return <AuthBoundary apiState={apiState} onRetry={loadSessions} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
   return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>

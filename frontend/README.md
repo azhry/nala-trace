@@ -21,22 +21,23 @@ The current UI uses hash navigation. Open a detail view with
 `http://localhost:5005/#/sessions/<id>`. A path such as `/sessions/<id>` is not
 an implemented client-side route.
 
-Authentication stays cookie-backed by default. The frontend also exposes a
-runtime-only in-memory auth seam in `frontend/src/api.js`: configure exactly one
-of `jwt` or `apiToken` at runtime if a trusted host application needs explicit
-credential forwarding. At startup, the browser entry point makes a best-effort
-read of only `sessionStorage.getItem('nala_labs_access_token')` and configures
-that value in the existing in-memory JWT mode. JWT mode skips the Nala Trace
-`/api/auth/session` preflight and sends `Authorization: Bearer ...` to
+Authentication is owned by Nala Labs: Trace does not provide a login form or
+own a cookie session. The frontend exposes a runtime-only in-memory auth seam in
+`frontend/src/api.js`: configure exactly one of `jwt` or `apiToken` at runtime if
+a trusted host application needs explicit credential forwarding. At startup,
+the browser entry point makes a best-effort read of only
+`sessionStorage.getItem('nala_labs_access_token')` and configures that value in
+the existing in-memory JWT mode. If no JWT or API key is configured, Trace
+fails closed with a local 401 and does not call the nonexistent relative
+`/api/auth/session` route. JWT mode sends `Authorization: Bearer ...` to
 `/sessions` and `/sessions/<id>`; the protected session request performs the
 actual validation. API-token mode sends `X-Nala-Labs-API-Key` to `/sessions`
-and `/sessions/<id>` and intentionally skips `/api/auth/session`, which expects
-a JWT. Because `sessionStorage` is origin-scoped, the browser handoff works
-only when the Nala Trace entry point and Nala Labs application share the
-approved same origin (or an approved host integration provides that boundary).
-Separate origins must not use a URL/query-string token workaround. Do not
-place either credential in Vite env files, build-time config, URLs, or other
-bundle artifacts.
+and `/sessions/<id>`. Because `sessionStorage` is origin-scoped, the browser
+handoff works only when the Nala Trace entry point and Nala Labs application
+share the approved same origin (or an approved host integration provides that
+boundary). Separate origins must not use a URL/query-string token workaround.
+Do not place either credential in Vite env files, build-time config, URLs, or
+other bundle artifacts.
 
 The shell is source-owned and intentionally uses a compact observability workspace language: persistent navigation, low-contrast surfaces, rounded panels, status/tool chips, filterable rows, and keyboard-visible focus. Sessions, Evals, and Golden Set each have an observable destination; the local demo interactions are stateful until real API data is connected.
 

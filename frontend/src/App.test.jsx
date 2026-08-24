@@ -35,6 +35,35 @@ describe('authenticated sessions flow', () => {
     getTrace.mockResolvedValue({})
   })
 
+  it('hides the dashboard shell while authentication and protected data are unresolved', async () => {
+    let resolveAuthentication
+    resolveSession.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveAuthentication = resolve
+    }))
+
+    render(<App />)
+
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'All captured sessions' })).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Sign in through Nala Labs')
+
+    resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
+
+    expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
+    expect(screen.getByRole('banner')).toBeInTheDocument()
+  })
+
+  it('shows the sign-in boundary and retry when authentication is unauthorized', async () => {
+    resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
+
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign in through Nala Labs')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'All captured sessions' })).not.toBeInTheDocument()
+  })
+
   it('resolves the application session before requesting GET /sessions', async () => {
     render(<App />)
 
@@ -57,7 +86,7 @@ describe('authenticated sessions flow', () => {
 
     resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
     render(<App />)
-    expect(await screen.findByText('Sign in to view sessions.')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign in through Nala Labs')
 
     resolveSession.mockResolvedValueOnce({ authenticated: true })
     getSessions.mockRejectedValueOnce(new ApiError('Request failed', 503))

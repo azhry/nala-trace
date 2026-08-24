@@ -123,8 +123,8 @@ tool calls, skills, and file evidence.
 ## Install the Codex hook
 
 The checked-in `hooks.json` is the portable Codex hook manifest. It contains
-the event registrations and the project-relative
-`backend/bin/hook-client.exe` command, but no URL, token, or other secret.
+the event registrations and the project-relative `.codex/hook-client.exe`
+command, but no URL, token, or other secret.
 The command is resolved from the current project directory, so hook delivery
 does not depend on Codex inheriting a user or system PATH entry. Codex expects
 each event to contain matcher groups with nested command handlers; do not add a
@@ -141,21 +141,31 @@ go build -o bin/hook-client.exe ./cmd/hook-client
 test -x bin/hook-client.exe
 ```
 
-The final command must report exit status `0`. The manifest uses this binary
-by project-relative path; no PATH update is required.
+The final command must report exit status `0`. The installer copies this
+binary into the target project's `.codex` directory; no PATH update is
+required.
 
 ### 2. Set runtime configuration
 
-Run the installer from Git Bash or another Bash shell at the repository root.
-It prompts only for the ingest URL and API key, builds the hook client, and
-writes the key to the ignored project config file without printing it:
+Run the installer from Git Bash or another Bash shell. By default it installs
+into the current working directory; use `--project-root` to install into a
+different repository. It prompts only for the ingest URL and API key, builds
+the hook client, and writes the key to the ignored project config file without
+printing it:
 
 ```bash
 bash scripts/install-hook.sh
+# Or, from the Nala Trace checkout, install into another project:
+bash scripts/install-hook.sh --project-root /path/to/other-project
 ```
 
-The installer creates the project-local file `.codex/nala-trace.env`, copies
-the checked-in manifest to `.codex/hooks.json`, and builds the client. The
+The installer creates these files inside the target project:
+
+- `.codex/nala-trace.env` — local URL, API key, and timeout.
+- `.codex/hooks.json` — copied manifest with the project-relative client path.
+- `.codex/hook-client.exe` — the built client executable.
+
+Add `.codex` to the target project's ignore rules before committing. The
 config contents are:
 
 ```text
@@ -185,9 +195,8 @@ configuration should apply to projects that do not have a local file.
 
 ### 3. Install and trust the manifest
 
-The installer already copies the repository manifest to the accepted local
-configuration location for this workspace, `.codex/hooks.json`. Use the Codex
-hook configuration flow:
+The installer already copies the repository manifest to `.codex/hooks.json` in
+the target project. Use the Codex hook configuration flow from that project:
 
 ```text
 codex
@@ -195,9 +204,9 @@ codex
 ```
 
 When Codex asks to approve the hook, review that it invokes
-`backend/bin/hook-client.exe` from the project directory, receives JSON on
-stdin, and does not contain embedded credentials. Trust the command only after
-that review. Keep all nine event registrations. JSON stdin is part of Codex
+`.codex/hook-client.exe` from the project directory, receives JSON on stdin,
+and does not contain embedded credentials. Trust the command only after that
+review. Keep all nine event registrations. JSON stdin is part of Codex
 command-hook behavior and is not a field in `hooks.json`.
 
 ### 4. Generate and inspect a real trace

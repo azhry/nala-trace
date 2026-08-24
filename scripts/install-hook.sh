@@ -5,14 +5,6 @@
 set -u
 
 REPOSITORY_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-USER_HOME_DIR="${USERPROFILE:-${HOME:-}}"
-if [[ -z "$USER_HOME_DIR" ]]; then
-  printf '%s\n' 'Cannot determine the user home directory.' >&2
-  exit 1
-fi
-if [[ "${OS:-}" == 'Windows_NT' && "$USER_HOME_DIR" == *:*\\* ]] && command -v cygpath >/dev/null 2>&1; then
-  USER_HOME_DIR="$(cygpath -u "$USER_HOME_DIR")"
-fi
 
 API_URL="${1:-}"
 if [[ -z "$API_URL" ]]; then
@@ -35,7 +27,7 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
-CONFIG_DIR="$USER_HOME_DIR/.codex"
+CONFIG_DIR="$REPOSITORY_ROOT/.codex"
 CONFIG_FILE="$CONFIG_DIR/nala-trace.env"
 CONFIG_TEMP="$CONFIG_FILE.tmp.$$"
 mkdir -p "$CONFIG_DIR"
@@ -73,5 +65,5 @@ if [[ $BUILD_STATUS -ne 0 ]]; then
 fi
 
 printf '%s\n' 'Nala Trace hook installed.'
-printf '%s\n' "User config: $CONFIG_FILE"
+printf '%s\n' "Project config: $CONFIG_FILE"
 printf '%s\n' 'The hook client reads this file on every invocation; no environment restart is required.'

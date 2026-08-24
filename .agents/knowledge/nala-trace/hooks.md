@@ -16,13 +16,15 @@ client is deliberately not part of the Codex success path:
 ## Runtime configuration
 
 Build the client and put the resulting `hook-client` executable on the PATH
-used by Codex. Configure the following values in the user-editable file
-`%USERPROFILE%\\.codex\\nala-trace.env` on Windows or
-`$HOME/.codex/nala-trace.env` on macOS/Linux. The repository installer
-`bash scripts/install-hook.sh` creates this file and builds the client. The
+used by Codex. The repository installer `bash scripts/install-hook.sh` creates
+the project-local file `.codex/nala-trace.env` and builds the client. The
 client also accepts explicit process environment values, which take
-precedence over the file, and `CODEX_TRACE_CONFIG_FILE` can override the
-default file path. Do not put credentials in `hooks.json`:
+precedence over file values. `CODEX_TRACE_CONFIG_FILE` can select one explicit
+file. Otherwise, the client checks `.codex/nala-trace.env` in the hook process's
+current project directory, then the user-level fallback
+`%USERPROFILE%\\.codex\\nala-trace.env` on Windows or
+`$HOME/.codex/nala-trace.env` on macOS/Linux. Do not put credentials in
+`hooks.json`:
 
 ```text
 CODEX_TRACE_API_URL=https://trace.example.test/ingest
@@ -32,6 +34,9 @@ CODEX_TRACE_API_TIMEOUT=2s
 ```
 
 The token is intentionally absent from this repository.
+
+The project config is ignored and must remain user-readable only. Use the
+user-level file when one configuration should apply across projects.
 
 ## Manifest and trust
 

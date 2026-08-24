@@ -12,40 +12,70 @@ import (
 	"strings"
 )
 
-const userConfigRelativePath = ".codex/nala-trace.env"
+const (
+	projectConfigRelativePath = ".codex/nala-trace.env"
+	userConfigRelativePath    = ".codex/nala-trace.env"
+)
 
-// ConfigFromRuntime loads explicit process values first, then falls back to a
-// user-editable Codex configuration file. The file is deliberately outside
-// the repository so a local API key is never part of hooks.json or source.
+// ConfigFromRuntime loads explicit process values first, then an explicit
+// config path, then the current project's ignored Codex config, and finally
+// the user-level config shared across projects.
 func ConfigFromRuntime() (Config, error) {
-	return ConfigFromSources(os.Getenv, os.UserHomeDir, os.ReadFile)
+	workingDir, _ := os.Getwd()
+	return configFromFiles(os.Getenv, workingDir, os.UserHomeDir, os.ReadFile)
 }
 
 // ConfigFromSources is split out so the runtime precedence and file parser can
-// be tested without changing the real user configuration.
+// be tested without changing the real project or user configuration. It
+// preserves the explicit-file behavior used by callers that provide a config
+// path through CODEX_TRACE_CONFIG_FILE.
 func ConfigFromSources(
 	lookup func(string) string,
 	homeDir func() (string, error),
 	readFile func(string) ([]byte, error),
 ) (Config, error) {
+	return configFromFiles(lookup, "", homeDir, readFile)
+}
+
+func configFromFiles(
+	lookup func(string) string,
+	workingDir string,
+	homeDir func() (string, error),
+	readFile func(string) ([]byte, error),
+) (Config, error) {
 	configPath := strings.TrimSpace(lookup("CODEX_TRACE_CONFIG_FILE"))
-	if configPath == "" {
+	fileValues := map[string]string{}
+	if configPath != "" {
+		values, err := readConfigFile(configPath, readFile)
+		if err != nil {
+			return Config{}, err
+		}
+		mergeConfigValues(fileValues, values)
+	} else {
+		if workingDir != "" {
+			projectPath := filepath.Join(workingDir, filepath.FromSlash(projectConfigRelativePath))
+			values, err := readConfigFile(projectPath, readFile)
+			if err != nil {
+				return Config{}, err
+			}
+			mergeConfigValues(fileValues, values)
+		}
+
 		home, err := homeDir()
 		if err != nil {
 			return Config{}, errors.New("hook client user config unavailable")
 		}
-		configPath = filepath.Join(home, filepath.FromSlash(userConfigRelativePath))
-	}
-
-	fileValues := map[string]string{}
-	data, err := readFile(configPath)
-	if err == nil {
-		fileValues, err = parseConfigFile(data)
+		userPath := filepath.Join(home, filepath.FromSlash(userConfigRelativePath))
+		values, err := readConfigFile(userPath, readFile)
 		if err != nil {
 			return Config{}, err
 		}
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return Config{}, errors.New("hook client user config unavailable")
+		userValues := map[string]string{}
+		mergeConfigValues(userValues, values)
+		for key, value := range fileValues {
+			userValues[key] = value
+		}
+		fileValues = userValues
 	}
 
 	return ConfigFromEnv(func(key string) string {
@@ -54,6 +84,27 @@ func ConfigFromSources(
 		}
 		return fileValues[key]
 	})
+}
+
+func readConfigFile(path string, readFile func(string) ([]byte, error)) (map[string]string, error) {
+	data, err := readFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.New("hook client config unavailable")
+	}
+	values, err := parseConfigFile(data)
+	if err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func mergeConfigValues(destination, source map[string]string) {
+	for key, value := range source {
+		destination[key] = value
+	}
 }
 
 func parseConfigFile(data []byte) (map[string]string, error) {

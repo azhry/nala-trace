@@ -177,6 +177,40 @@ func TestReconstructDetectsMultipleShellReadPaths(t *testing.T) {
 	}
 }
 
+func TestReconstructSeparatesMCPCallsAndServersFromToolCalls(t *testing.T) {
+	base := time.Unix(90, 0).UTC()
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEventWithTool("mcp-linear", "PreToolUse", "turn-1", "mcp__codex_apps__linear_get_issue", base, map[string]any{
+			"tool_input": map[string]any{"id": "AZH-500"},
+		}),
+		hookEventWithTool("mcp-github", "PreToolUse", "turn-1", "mcp__github__get_issue", base.Add(time.Second), map[string]any{
+			"tool_input": map[string]any{"number": 26},
+		}),
+		hookEventWithTool("mcp-linear-post", "PostToolUse", "turn-1", "mcp__codex_apps__linear_get_issue", base.Add(2*time.Second), map[string]any{
+			"tool_response": map[string]any{"id": "AZH-500"},
+		}),
+		hookEventWithTool("ordinary", "PreToolUse", "turn-1", "shell_command", base.Add(3*time.Second), map[string]any{
+			"tool_input": map[string]any{"command": "go test ./..."},
+		}),
+	})
+
+	if result.Summary.ToolCallCount != 4 || result.Summary.MCPCallCount != 2 {
+		t.Fatalf("summary counts = %#v, want 4 total calls and 2 MCP calls", result.Summary)
+	}
+	wantServers := []string{"codex_apps", "github"}
+	if len(result.Summary.MCPServers) != len(wantServers) {
+		t.Fatalf("MCP servers = %#v, want %#v", result.Summary.MCPServers, wantServers)
+	}
+	for index, want := range wantServers {
+		if result.Summary.MCPServers[index] != want {
+			t.Fatalf("MCP server[%d] = %q, want %q", index, result.Summary.MCPServers[index], want)
+		}
+	}
+	if result.ToolCalls[0].MCPServer != "codex_apps" || result.ToolCalls[1].MCPServer != "github" {
+		t.Fatalf("tool MCP server projection = %#v", result.ToolCalls[:2])
+	}
+}
+
 func TestReconstructDetectsSignalsInsideNestedRawPayload(t *testing.T) {
 	payload, err := bson.Marshal(bson.M{
 		"payload": bson.M{

@@ -14,6 +14,8 @@ type SessionSummary struct {
 	LastEventAt          time.Time `bson:"last_event_at" json:"last_event_at"`
 	EventCount           int64     `bson:"event_count" json:"event_count"`
 	ToolCallCount        int64     `bson:"tool_call_count" json:"tool_call_count"`
+	MCPCallCount         int64     `bson:"mcp_call_count" json:"mcp_call_count"`
+	MCPServers           []string  `bson:"mcp_servers" json:"mcp_servers"`
 	SkillInvocationCount int64     `bson:"skill_invocation_count" json:"skill_invocation_count"`
 	FileOperationCount   int64     `bson:"file_operation_count" json:"file_operation_count"`
 	FileReadCount        int64     `bson:"file_read_count" json:"file_read_count"`
@@ -28,6 +30,7 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 	skillEvent := andExpression(toolEvent, skillSignalExpression())
 	fileEvent := andExpression(toolEvent, fileSignalExpression())
 	fileReadEvent := andExpression(toolEvent, fileSignalExpression(), fileReadSignalExpression())
+	mcpEvent := andExpression(toolEvent, mcpSignalExpression())
 	explicitTitle := firstNonEmptyString(bson.A{
 		stringFieldCandidate("$payload.title"),
 		stringFieldCandidate("$payload.session_title"),
@@ -49,6 +52,8 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "last_event_at", Value: bson.D{{Key: "$max", Value: "$received_at"}}},
 			{Key: "event_count", Value: bson.D{{Key: "$sum", Value: 1}}},
 			{Key: "tool_call_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{toolEvent, 1, 0}}}}}},
+			{Key: "mcp_call_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{mcpEvent, 1, 0}}}}}},
+			{Key: "mcp_servers", Value: bson.D{{Key: "$addToSet", Value: bson.D{{Key: "$cond", Value: bson.A{mcpEvent, mcpServerExpression(), nil}}}}}},
 			{Key: "skill_invocation_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{skillEvent, 1, 0}}}}}},
 			{Key: "file_operation_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{fileEvent, 1, 0}}}}}},
 			{Key: "file_read_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{fileReadEvent, 1, 0}}}}}},
@@ -62,6 +67,12 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "last_event_at", Value: 1},
 			{Key: "event_count", Value: 1},
 			{Key: "tool_call_count", Value: 1},
+			{Key: "mcp_call_count", Value: 1},
+			{Key: "mcp_servers", Value: bson.D{{Key: "$filter", Value: bson.D{
+				{Key: "input", Value: "$mcp_servers"},
+				{Key: "as", Value: "server"},
+				{Key: "cond", Value: bson.D{{Key: "$ne", Value: bson.A{"$$server", nil}}}},
+			}}}},
 			{Key: "skill_invocation_count", Value: 1},
 			{Key: "file_operation_count", Value: 1},
 			{Key: "file_read_count", Value: 1},
@@ -119,6 +130,31 @@ func fileReadSignalExpression() bson.D {
 	}}}
 }
 
+func mcpSignalExpression() bson.D {
+	return anyRegexFieldExpression(append([]string{"$tool_name"}, payloadFieldPaths("tool_name")...), `^mcp__.+__.+$`)
+}
+
+func mcpToolNameExpression() bson.D {
+	return firstMatchingString(bson.A{
+		stringFieldCandidate("$tool_name"),
+		stringFieldCandidate("$payload.tool_name"),
+		stringFieldCandidate("$payload.payload.tool_name"),
+		stringFieldCandidate("$payload.raw.tool_name"),
+		stringFieldCandidate("$payload.data.tool_name"),
+		stringFieldCandidate("$payload.event.tool_name"),
+	}, `^mcp__.+__.+$`)
+}
+
+func mcpServerExpression() bson.D {
+	name := mcpToolNameExpression()
+	separator := bson.D{{Key: "$indexOfCP", Value: bson.A{name, "__", 5}}}
+	return bson.D{{Key: "$toLower", Value: bson.D{{Key: "$substrCP", Value: bson.A{
+		name,
+		5,
+		bson.D{{Key: "$subtract", Value: bson.A{separator, 5}}},
+	}}}}}
+}
+
 func payloadFieldPaths(field string) []string {
 	return []string{
 		"$payload." + field,
@@ -127,6 +163,25 @@ func payloadFieldPaths(field string) []string {
 		"$payload.data." + field,
 		"$payload.event." + field,
 	}
+}
+
+func firstMatchingString(candidates bson.A, regex string) bson.D {
+	return bson.D{{Key: "$arrayElemAt", Value: bson.A{
+		bson.D{{Key: "$map", Value: bson.D{
+			{Key: "input", Value: bson.D{{Key: "$filter", Value: bson.D{
+				{Key: "input", Value: candidates},
+				{Key: "as", Value: "candidate"},
+				{Key: "cond", Value: bson.D{{Key: "$regexMatch", Value: bson.D{
+					{Key: "input", Value: "$$candidate"},
+					{Key: "regex", Value: regex},
+					{Key: "options", Value: "i"},
+				}}}},
+			}}}},
+			{Key: "as", Value: "candidate"},
+			{Key: "in", Value: "$$candidate"},
+		}}},
+		0,
+	}}}
 }
 
 func anyNonEmptyStringExpression(paths ...string) bson.D {

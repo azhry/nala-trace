@@ -54,6 +54,7 @@ type ConversationItem struct {
 type ToolCall struct {
 	ToolUseID   *string         `json:"tool_use_id"`
 	ToolName    string          `json:"tool_name"`
+	MCPServer   string          `json:"mcp_server,omitempty"`
 	Input       json.RawMessage `json:"input"`
 	Output      json.RawMessage `json:"output"`
 	StartedAt   *time.Time      `json:"started_at"`
@@ -98,12 +99,14 @@ type RuntimeMetadata struct {
 }
 
 type Summary struct {
-	EventCount           int `json:"event_count"`
-	MessageCount         int `json:"message_count"`
-	ToolCallCount        int `json:"tool_call_count"`
-	SkillInvocationCount int `json:"skill_invocation_count"`
-	FileOperationCount   int `json:"file_operation_count"`
-	FileReadCount        int `json:"file_read_count"`
+	EventCount           int      `json:"event_count"`
+	MessageCount         int      `json:"message_count"`
+	ToolCallCount        int      `json:"tool_call_count"`
+	MCPCallCount         int      `json:"mcp_call_count"`
+	MCPServers           []string `json:"mcp_servers"`
+	SkillInvocationCount int      `json:"skill_invocation_count"`
+	FileOperationCount   int      `json:"file_operation_count"`
+	FileReadCount        int      `json:"file_read_count"`
 }
 
 func New(sessionID, userID string) Trace {
@@ -116,5 +119,6 @@ func New(sessionID, userID string) Trace {
 		ToolCalls:        make([]ToolCall, 0),
 		SkillInvocations: make([]SkillInvocation, 0),
 		Files:            make([]FileOperation, 0),
+		Summary:          Summary{MCPServers: make([]string, 0)},
 	}
 }

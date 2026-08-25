@@ -43,9 +43,11 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 	result := trace.New(sessionID, userID)
 	ordered := Order(events)
 	pending := make(map[string]int)
+	mcpServers := make(map[string]struct{})
 	for _, item := range ordered {
 		event := item.Event
 		raw := payloadJSON(event.Payload)
+		toolName := toolNameForEvent(event, raw)
 		timelineID := eventID(event, item.OriginalIndex)
 		result.RuntimeMetadata = mergeRuntimeMetadata(result.RuntimeMetadata, runtimeMetadataFromPayload(event.Payload, event.HookEventName))
 		reason := partialReason(event)
@@ -70,15 +72,22 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 			kind = "tool"
 		}
 		if event.HookEventName == "PreToolUse" {
+			if server, ok := trace.MCPServerFromToolName(toolName); ok {
+				result.Summary.MCPCallCount++
+				mcpServers[server] = struct{}{}
+			}
 			index := len(result.ToolCalls)
 			toolCallIndex = &index
 			toolID := value(event.ToolUseID)
 			call := trace.ToolCall{
 				ToolUseID: event.ToolUseID,
-				ToolName:  value(event.ToolName),
+				ToolName:  toolName,
 				Input:     nil,
 				Status:    trace.ToolCallPending,
 				Raw:       raw,
+			}
+			if server, ok := trace.MCPServerFromToolName(call.ToolName); ok {
+				call.MCPServer = server
 			}
 			if payloadSafe {
 				call.Input = payloadField(event.Payload, "tool_input")
@@ -119,7 +128,7 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 				toolCallIndex = &index
 				result.ToolCalls = append(result.ToolCalls, trace.ToolCall{
 					ToolUseID: event.ToolUseID,
-					ToolName:  value(event.ToolName),
+					ToolName:  toolName,
 					Output:    nil,
 					Status:    trace.ToolCallUnmatched,
 					Raw:       raw,
@@ -158,6 +167,11 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 	result.Summary.EventCount = len(result.Timeline)
 	result.Summary.MessageCount = len(result.Conversation)
 	result.Summary.ToolCallCount = len(result.ToolCalls)
+	result.Summary.MCPServers = make([]string, 0, len(mcpServers))
+	for server := range mcpServers {
+		result.Summary.MCPServers = append(result.Summary.MCPServers, server)
+	}
+	sort.Strings(result.Summary.MCPServers)
 	result.Summary.SkillInvocationCount = len(result.SkillInvocations)
 	result.Summary.FileOperationCount = len(result.Files)
 	for _, file := range result.Files {
@@ -177,6 +191,16 @@ func conversationRole(eventName string) string {
 	default:
 		return ""
 	}
+}
+
+func toolNameForEvent(event storage.HookEvent, raw json.RawMessage) string {
+	if name := value(event.ToolName); name != "" {
+		return name
+	}
+	if name, ok := stringField(documentValue(raw), "tool_name"); ok {
+		return name
+	}
+	return ""
 }
 
 func messageContent(payload bson.Raw, eventName string) json.RawMessage {
@@ -222,7 +246,7 @@ var (
 func detectSkillInvocation(event storage.HookEvent, eventID string, raw json.RawMessage) (trace.SkillInvocation, bool) {
 	input := toolInputDocument(event.Payload)
 	payload := payloadDocument(event.Payload)
-	toolName := value(event.ToolName)
+	toolName := toolNameForEvent(event, raw)
 	if name, ok := stringField(input, "skill_name", "skill"); ok {
 		return newSkillInvocation(name, event, eventID, raw, confidenceExplicit), true
 	}
@@ -244,7 +268,7 @@ func newSkillInvocation(name string, event storage.HookEvent, eventID string, ra
 		Name:       name,
 		EventID:    eventID,
 		ToolUseID:  event.ToolUseID,
-		ToolName:   value(event.ToolName),
+		ToolName:   toolNameForEvent(event, raw),
 		Confidence: confidence,
 		OccurredAt: event.ReceivedAt.UTC(),
 		Raw:        raw,
@@ -265,7 +289,7 @@ func skillNameFromToolName(toolName string) string {
 
 func detectFileOperations(event storage.HookEvent, eventID string, raw json.RawMessage) []trace.FileOperation {
 	input := toolInputDocument(event.Payload)
-	toolName := value(event.ToolName)
+	toolName := toolNameForEvent(event, raw)
 	toolNameLower := strings.ToLower(toolName)
 	toolInputText := toolInputText(event.Payload)
 	patchText := toolInputText
@@ -331,7 +355,7 @@ func newFileOperation(path, operation, confidence string, event storage.HookEven
 		Operation:  operation,
 		EventID:    eventID,
 		ToolUseID:  event.ToolUseID,
-		ToolName:   value(event.ToolName),
+		ToolName:   toolNameForEvent(event, raw),
 		Confidence: confidence,
 		OccurredAt: event.ReceivedAt.UTC(),
 		Raw:        raw,

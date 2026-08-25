@@ -328,6 +328,28 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText('No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
   })
 
+  it('locates a referenced instruction source in its captured timeline event', () => {
+    const trace = {
+      schema_version: '1',
+      timeline: [
+        { id: 'pre-read', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:00Z', tool_call_index: 0 },
+      ],
+      tool_calls: [{ tool_name: 'shell_command', input: { command: 'read frontend workflow' } }],
+      files: [
+        { path: '.agents/workflows/frontend.md', operation: 'read', event_id: 'pre-read' },
+      ],
+    }
+
+    const { container } = render(<TraceView session={trace} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Locate captured instruction source .agents/workflows/frontend.md in the trace' }))
+
+    expect(screen.getByText('.agents/workflows/frontend.md')).toBeInTheDocument()
+    expect(screen.getByText(/1 matching timeline event selected/)).toBeInTheDocument()
+    expect(container.querySelector('[data-trace-event-id="tool-0"]')).toHaveAttribute('data-trace-event-selected', 'true')
+    expect(container.querySelector('[data-trace-event-id="tool-0"]')).toHaveClass('is-evidence-selected')
+  })
+
   it('infers a skill label from a read of any file inside a skill directory', () => {
     const trace = {
       schema_version: '1',
@@ -376,10 +398,15 @@ describe('TraceView API conversation', () => {
       ],
     }
 
-    render(<TraceView session={trace} />)
+    const { container } = render(<TraceView session={trace} />)
 
     expect(screen.getByText(/1 SKILL\.md read across 1 unique skill document · 1 inferred tag occurrence across 1 inferred label/)).toBeInTheDocument()
     expect(screen.getByText(/2 read records · 2 unique instruction sources/)).toBeInTheDocument()
     expect(screen.getByText('inferred / frontend-design')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Locate captured instruction source .agents/workflows/frontend.md in the trace' }))
+
+    expect(screen.getByText(/No matching timeline event was found\./)).toBeInTheDocument()
+    expect(container.querySelector('.evidence-selection-notice')).toHaveTextContent(/no event was invented/)
   })
 })

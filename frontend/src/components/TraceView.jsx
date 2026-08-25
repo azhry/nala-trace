@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
 import { getFileOperations, isReadFileOperation, normalizeTraceViewModel, skillNameFromFilePath } from '../traceViewModel'
@@ -11,17 +11,52 @@ const filters = [
 ]
 const EMPTY_EVENTS = []
 
+function evidencePath(file) {
+  return normalizePath(file ?? '').toLowerCase()
+}
+
+function evidenceOperation(record = {}) {
+  return String(record.operation ?? record.action ?? '').trim().toLowerCase() || 'ambiguous'
+}
+
+function sameFileOperation(left, right) {
+  return evidencePath(left.path) === evidencePath(right.path) && evidenceOperation(left) === evidenceOperation(right)
+}
+
+function isSkillDocumentRead(record) {
+  return isReadFileOperation(record) && /\.agents\/skills\/[^/]+\/SKILL\.md$/i.test(normalizePath(record.path))
+}
+
+function skillDocumentRecords(fileRecords, skill) {
+  const target = String(skill || '').trim().toLowerCase()
+  return fileRecords.filter((record) => isSkillDocumentRead(record) && skillNameFromFilePath(record.path).toLowerCase() === target)
+}
+
+function skillReadRecords(fileRecords, skill) {
+  const target = String(skill || '').trim().toLowerCase()
+  return fileRecords.filter((record) => isReadFileOperation(record) && skillNameFromFilePath(record.path).toLowerCase() === target)
+}
+
+function eventAnchorId(eventId) {
+  return `trace-event-${encodeURIComponent(String(eventId || 'unknown'))}`
+}
+
+function eventMatchesEvidence(event, record) {
+  if (getFileOperations(event).some((candidate) => sameFileOperation(candidate, record))) return true
+  return Boolean(record.eventId && [event.id, event.timelineId].includes(record.eventId))
+}
+
 function SkillTags({ skills = [] }) {
   if (!skills.length) return null
   return <span className="message-tags">{skills.map((skill) => <span className="message-tag" key={skill}>inferred / {skill}</span>)}</span>
 }
 
-function ConversationMessage({ event }) {
+function ConversationMessage({ event, selected = false }) {
   const isUser = event.role === 'user'
   const body = event.hasContent === false ? 'Content not recorded' : event.body
   return <>
     {event.turnBoundary && <div className="turn-boundary" role="separator" aria-label={event.turnLabel}><span>Turn boundary</span><strong>{event.turnLabel}</strong></div>}
-    <article className={`conversation-message ${isUser ? 'user' : 'assistant'}`}>
+    <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`conversation-message ${isUser ? 'user' : 'assistant'} ${selected ? 'is-evidence-selected' : ''}`}>
       <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}</div>
       {event.contentIsCode ? <pre className="message-content-code">{body}</pre> : <p>{body}</p>}
       {event.partial && <span className="message-partial">partial evidence</span>}
@@ -30,31 +65,33 @@ function ConversationMessage({ event }) {
   </>
 }
 
-function SystemEvent({ event }) {
-  return <div className="system-event"><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body}</small></span><span className="system-event-line" /></div>
+function SystemEvent({ event, selected = false }) {
+  return <div id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`system-event ${selected ? 'is-evidence-selected' : ''}`}><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body}</small></span><span className="system-event-line" /></div>
 }
 
 function InstructionScopeBadge({ scope, compact = false }) {
   return <span className={`instruction-scope-badge ${scope.kind}`}>{compact ? scope.shortLabel : scope.label}</span>
 }
 
-function FileTag({ file }) {
+function FileTag({ file, onSelect }) {
   const scope = isInstructionFile(file) ? getInstructionScope(file) : null
-  return <span className="context-tag file"><span>file / {file}</span>{scope && <InstructionScopeBadge scope={scope} compact />}</span>
+  const content = <><span>file / {file}</span>{scope && <InstructionScopeBadge scope={scope} compact />}</>
+  if (!onSelect) return <span className="context-tag file">{content}</span>
+  return <button type="button" className="context-tag file" aria-label={`Locate captured file ${file} in the trace`} title={`Locate captured file ${file} in the trace`} onClick={() => onSelect(file)}>{content}</button>
 }
 
-function ContextRow({ event, inline = false }) {
+function ContextRow({ event, inline = false, selected = false, onFileSelect }) {
   const isPrompt = event.contextType !== 'instruction-read'
   const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'agent-reply' ? 'Agent reply' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
   const agentLabel = [event.provenance?.agentType, event.provenance?.agentId].filter(Boolean).join(' · ')
   const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'agent-prompt' || event.contextType === 'agent-reply' ? `Agent${agentLabel ? ` · ${agentLabel}` : ''}` : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label || event.provenance?.eventName || 'Lifecycle event' : event.tool || 'Captured context'
   const recordLabel = event.record || event.provenance?.eventName || 'not recorded'
-  return <article className={`context-row ${event.contextType} ${inline ? 'inline-context' : ''}`}>
+  return <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`context-row ${event.contextType} ${inline ? 'inline-context' : ''} ${selected ? 'is-evidence-selected' : ''}`}>
     <div className="context-row-header">
       <div><span className="context-row-kind">{title}</span><strong>{source}</strong><small>record {recordLabel} · {event.time}</small></div>
       <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} inferred tags</span>
     </div>
-    <div className="context-row-tags">{(event.files || []).map((file) => <FileTag file={file} key={`file-${file}`} />)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
+    <div className="context-row-tags">{(event.files || []).map((file) => <FileTag file={file} key={`file-${file}`} onSelect={onFileSelect} />)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
     <details open={isPrompt}>
       <summary>{event.contextType === 'instruction-read' ? 'Show command and content read' : event.contextType === 'agent-reply' ? 'Show recorded reply' : 'Show recorded prompt'}</summary>
       {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : event.contextType === 'agent-reply' ? 'reply' : 'context'}</span><pre>{event.body}</pre></div>}
@@ -64,7 +101,7 @@ function ContextRow({ event, inline = false }) {
   </article>
 }
 
-function SkillInventory({ events, fileRecords = EMPTY_EVENTS, literalSkillInvocationCount = 0 }) {
+function SkillInventory({ events, fileRecords = EMPTY_EVENTS, literalSkillInvocationCount = 0, onEvidenceSelect, selectedEvidenceKey = '' }) {
   const skillCounts = useMemo(() => {
     const counts = new Map()
     const addSkill = (skill) => {
@@ -105,19 +142,24 @@ function SkillInventory({ events, fileRecords = EMPTY_EVENTS, literalSkillInvoca
   const skillInventoryNote = recordedLiteralSkillInvocationCount
     ? `${formatCount(recordedLiteralSkillInvocationCount, 'literal skill-invocation event')} ${recordedLiteralSkillInvocationCount === 1 ? 'was' : 'were'} recorded; inferred tags are shown separately from document reads.`
     : 'No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.'
+  const selectSkill = (skill, documentsOnly = false) => onEvidenceSelect?.({
+    key: `skill:${skill.toLowerCase()}`,
+    label: `skill ${skill}`,
+    records: documentsOnly ? skillDocumentRecords(fileRecords, skill) : skillReadRecords(fileRecords, skill),
+  })
 
   return <div className="skill-inventory" aria-label="Skill evidence summary">
     <div className="skill-inventory-heading">
       <div><span className="section-label">Skill evidence</span><strong>What the audit actually recorded</strong><small>{formatCount(skillReadCount, 'SKILL.md read')} across {formatCount(skillReadCounts.length, 'unique skill document')} · {formatCount(inferredTagCount, 'inferred tag occurrence')} across {formatCount(skillCounts.length, 'inferred label')}</small></div>
       <span className="record-count">from tool trace</span>
     </div>
-    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Skill documents actually read</span><strong>{formatCount(skillReadCount, 'read')} · {formatCount(skillReadCounts.length, 'unique skill doc')}</strong></div>{skillReadCounts.length ? <div className="skill-inventory-list">{skillReadCounts.map(([skill, count]) => <span className="skill-inventory-item" key={`read-${skill}`}><span>skill / {skill}</span><strong>{count.toLocaleString()}</strong></span>)}</div> : <p className="skill-inventory-empty">No SKILL.md file read was recorded.</p>}</div>
-    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Inferred tags attached to operations</span><strong>{formatCount(inferredTagCount, 'tag occurrence')} · {formatCount(skillCounts.length, 'label')}</strong></div>{skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, value]) => <span className="skill-inventory-item inferred" key={`tag-${skill}`}><span>inferred / {value.name}</span><strong>{value.count.toLocaleString()}</strong></span>)}</div> : null}</div>
+    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Skill documents actually read</span><strong>{formatCount(skillReadCount, 'read')} · {formatCount(skillReadCounts.length, 'unique skill doc')}</strong></div>{skillReadCounts.length ? <div className="skill-inventory-list">{skillReadCounts.map(([skill, count]) => <button type="button" className="skill-inventory-item" key={`read-${skill}`} aria-label={`Locate captured skill ${skill} in the trace`} title={`Locate captured skill ${skill} in the trace`} aria-pressed={selectedEvidenceKey === `skill:${skill.toLowerCase()}`} onClick={() => selectSkill(skill, true)}><span>skill / {skill}</span><strong>{count.toLocaleString()}</strong></button>)}</div> : <p className="skill-inventory-empty">No SKILL.md file read was recorded.</p>}</div>
+    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Inferred tags attached to operations</span><strong>{formatCount(inferredTagCount, 'tag occurrence')} · {formatCount(skillCounts.length, 'label')}</strong></div>{skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, value]) => <button type="button" className="skill-inventory-item inferred" key={`tag-${skill}`} aria-label={`Locate inferred skill ${value.name} in the trace`} title={`Locate inferred skill ${value.name} in the trace`} aria-pressed={selectedEvidenceKey === `skill:${skill}`} onClick={() => selectSkill(value.name)}><span>inferred / {value.name}</span><strong>{value.count.toLocaleString()}</strong></button>)}</div> : null}</div>
     <p className="skill-inventory-note">{skillInventoryNote}</p>
   </div>
 }
 
-function InstructionInventory({ fileRecords = EMPTY_EVENTS }) {
+function InstructionInventory({ fileRecords = EMPTY_EVENTS, onEvidenceSelect, selectedEvidenceKey = '' }) {
   const sources = useMemo(() => {
     const counts = new Map()
     fileRecords.forEach((record) => {
@@ -136,12 +178,28 @@ function InstructionInventory({ fileRecords = EMPTY_EVENTS }) {
     counts[scope.kind] += 1
     return counts
   }, { global: 0, project: 0, unknown: 0 })
+  const selectSource = (path) => onEvidenceSelect?.({
+    key: `file:${evidencePath(path)}`,
+    label: path,
+    records: fileRecords.filter((record) => evidencePath(record.path) === evidencePath(path)),
+  })
 
   return <div className="instruction-inventory" aria-label="Instruction source inventory">
     <div className="instruction-inventory-heading"><div><span className="section-label">Instruction sources</span><strong>Files the agent referenced and read</strong><small>{readRecords.toLocaleString()} read records · {sources.length} unique instruction sources · {scopeCounts.global} global · {scopeCounts.project} local project</small></div><div className="instruction-scope-legend" aria-label="Instruction scope legend"><InstructionScopeBadge scope={{ kind: 'global', label: 'Global instruction', shortLabel: 'Global' }} /><InstructionScopeBadge scope={{ kind: 'project', label: 'Local project instruction', shortLabel: 'Local project' }} /></div></div>
-    {sources.length ? <div className="instruction-source-list">{sources.map(([path, count]) => { const scope = getInstructionScope(path); return <span className="instruction-source-item" key={path}><span className="instruction-source-path">file / {path}</span><InstructionScopeBadge scope={scope} /><strong>{count.reads.toLocaleString()} reads</strong><small>{count.references.toLocaleString()} refs</small></span> })}</div> : <p className="skill-inventory-empty">No instruction-source references were recorded.</p>}
+    {sources.length ? <div className="instruction-source-list">{sources.map(([path, count]) => { const scope = getInstructionScope(path); const key = `file:${evidencePath(path)}`; return <button type="button" className="instruction-source-item" key={path} aria-label={`Locate captured instruction source ${path} in the trace`} title={`Locate captured instruction source ${path} in the trace`} aria-pressed={selectedEvidenceKey === key} onClick={() => selectSource(path)}><span className="instruction-source-path">file / {path}</span><InstructionScopeBadge scope={scope} /><strong>{count.reads.toLocaleString()} reads</strong><small>{count.references.toLocaleString()} refs</small></button> })}</div> : <p className="skill-inventory-empty">No instruction-source references were recorded.</p>}
     <p className="instruction-inventory-note">Includes AGENTS.md, .agents/workflows, .agents/skills, templates, and project knowledge. Global means a user-level agent skill; Local project means this repository’s instruction files. Unknown roots are not guessed. Open “Prompts & context” to inspect each recorded command and content read.</p>
   </div>
+}
+
+function EvidenceSelectionNotice({ selection, onClear }) {
+  if (!selection) return null
+  const matchedMessage = selection.eventIds.length
+    ? `${selection.eventIds.length} matching timeline event${selection.eventIds.length === 1 ? '' : 's'} selected.`
+    : 'No matching timeline event was found.'
+  const unmatchedMessage = selection.unmatchedRecordCount
+    ? ` ${selection.unmatchedRecordCount} captured record${selection.unmatchedRecordCount === 1 ? '' : 's'} ${selection.unmatchedRecordCount === 1 ? 'has' : 'have'} no matching timeline event; no event was invented.`
+    : ''
+  return <div className="evidence-selection-notice" role="status" aria-live="polite"><strong>{selection.label}</strong><span>{matchedMessage}{unmatchedMessage}</span><button type="button" onClick={onClear}>Clear selection</button></div>
 }
 
 function TraceStatePanel({ state, onRetry }) {
@@ -159,6 +217,7 @@ function PartialNotice({ message }) {
 
 export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {} }) {
   const [filter, setFilter] = useState('all')
+  const [selection, setSelection] = useState(null)
   const viewModel = useMemo(() => normalizeTraceViewModel(session), [session])
   const events = viewModel.events || EMPTY_EVENTS
   const contextRows = useMemo(() => {
@@ -196,6 +255,25 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   const emptyConversation = isApiTrace && viewModel.conversation.length === 0
   const contextCounts = contextRows.reduce((counts, event) => ({ ...counts, [event.contextType]: (counts[event.contextType] || 0) + 1 }), {})
   const inventoryFiles = viewModel.source === 'api' ? viewModel.files : events.flatMap(getFileOperations)
+  const selectEvidence = ({ key, label, records = EMPTY_EVENTS }) => {
+    const matchingEvents = events.filter((event) => records.some((record) => eventMatchesEvidence(event, record)))
+    const eventIds = [...new Set(matchingEvents.map((event) => event.id).filter(Boolean))]
+    const matchedRecordCount = records.filter((record) => matchingEvents.some((event) => eventMatchesEvidence(event, record))).length
+    setSelection({ key, label, eventIds, unmatchedRecordCount: records.length - matchedRecordCount })
+    setFilter('all')
+  }
+  const selectFile = (file) => selectEvidence({
+    key: `file:${evidencePath(file)}`,
+    label: `file / ${file}`,
+    records: inventoryFiles.filter((record) => evidencePath(record.path) === evidencePath(file)),
+  })
+
+  useEffect(() => {
+    if (!selection?.eventIds.length) return
+    const target = document.getElementById(eventAnchorId(selection.eventIds[0]))
+    if (target?.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    target?.focus?.({ preventScroll: true })
+  }, [selection])
 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
     <div className="panel-header trace-panel-header">
@@ -211,12 +289,13 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
       <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
-    <SkillInventory events={events} fileRecords={inventoryFiles} literalSkillInvocationCount={viewModel.skillInvocations?.length || 0} />
-    <InstructionInventory fileRecords={inventoryFiles} />
+    <SkillInventory events={events} fileRecords={inventoryFiles} literalSkillInvocationCount={viewModel.skillInvocations?.length || 0} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
+    <InstructionInventory fileRecords={inventoryFiles} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <div className="context-inventory" aria-label="Prompt and context summary">
       <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
       <span className="context-inventory-note">Use “Prompts & context” below</span>
     </div>
+    <EvidenceSelectionNotice selection={selection} onClear={() => setSelection(null)} />
     <div className="trace-controls" role="group" aria-label="Filter session detail">
       <span>Show</span>
       {filters.map(([id, label]) => <button key={id} type="button" className={filter === id ? 'is-active' : ''} aria-pressed={filter === id} onClick={() => setFilter(id)}>{label}</button>)}
@@ -228,12 +307,12 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
         {emptyConversation && <TraceStatePanel state="empty" />}
         {(visibleEvents.length > 0 || !emptyConversation) && <div className="stream-intro"><span className="stream-line" /><span>Trace started · {viewModel.startedAt}</span></div>}
         {visibleEvents.map((event) => event.type === 'context'
-          ? <ContextRow key={event.id} event={event} />
+          ? <ContextRow key={event.id} event={event} selected={selection?.eventIds.includes(event.id)} onFileSelect={selectFile} />
           : event.type === 'tool'
-          ? <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} />
+          ? <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} selected={selection?.eventIds.includes(event.id)} />
           : event.type === 'system'
-            ? <SystemEvent key={event.id} event={event} />
-            : <ConversationMessage key={event.id} event={event} />)}
+            ? <SystemEvent key={event.id} event={event} selected={selection?.eventIds.includes(event.id)} />
+            : <ConversationMessage key={event.id} event={event} selected={selection?.eventIds.includes(event.id)} />)}
         {visibleEvents.length > 0 && <div className="stream-end"><span>End of captured session · {viewModel.capturedAt}</span><span className="stream-line" /></div>}
       </>}
     </div>

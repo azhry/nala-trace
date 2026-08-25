@@ -208,12 +208,14 @@ func anyNonEmptyStringExpression(paths ...string) bson.D {
 func anyArrayNonEmptyExpression(paths ...string) bson.D {
 	values := make(bson.A, 0, len(paths))
 	for _, path := range paths {
-		values = append(values, bson.D{{Key: "$and", Value: bson.A{
+		arrayValue := bson.D{{Key: "$cond", Value: bson.A{
 			bson.D{{Key: "$isArray", Value: path}},
-			bson.D{{Key: "$gt", Value: bson.A{
-				bson.D{{Key: "$size", Value: path}},
-				0,
-			}}},
+			path,
+			bson.A{},
+		}}}
+		values = append(values, bson.D{{Key: "$gt", Value: bson.A{
+			bson.D{{Key: "$size", Value: arrayValue}},
+			0,
 		}}})
 	}
 	return bson.D{{Key: "$or", Value: values}}

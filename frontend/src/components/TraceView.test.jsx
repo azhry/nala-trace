@@ -65,6 +65,20 @@ function createLargeTrace(size = 125) {
 }
 
 describe('TraceView API conversation', () => {
+  it('renders MCP usage and an explicit empty state from the API summary', () => {
+    const { rerender } = render(<TraceView session={{ ...apiTrace, summary: { ...apiTrace.summary, mcp_call_count: 4, mcp_servers: ['github', 'linear'] } }} />)
+
+    expect(screen.getByText('4 calls')).toBeInTheDocument()
+    expect(screen.getByText('2 distinct servers')).toBeInTheDocument()
+    expect(screen.getByText('github')).toBeInTheDocument()
+    expect(screen.getByText('linear')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'MCP usage summary' })).toBeInTheDocument()
+
+    rerender(<TraceView session={{ ...apiTrace, summary: { ...apiTrace.summary, mcp_call_count: 0, mcp_servers: [] } }} />)
+
+    expect(screen.getByText('No MCP calls or MCP servers were recorded.')).toBeInTheDocument()
+  })
+
   it('bounds the initially mounted stream and loads more rows on demand', () => {
     const { container } = render(<TraceView session={createLargeTrace()} />)
 

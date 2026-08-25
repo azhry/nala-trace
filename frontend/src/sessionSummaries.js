@@ -26,6 +26,11 @@ function cleanString(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function serverNamesValue(value) {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.map(cleanString).filter(Boolean))]
+}
+
 function statusValue(summary) {
   const value = cleanString(summary.evaluation_status || summary.evaluationStatus || summary.status).toLowerCase()
   if (['pass', 'passed', 'success', 'successful'].includes(value)) return 'passed'
@@ -57,6 +62,8 @@ export function normalizeSessionSummary(summary = {}) {
     lastEventTime: Number.isNaN(lastDate.getTime()) ? null : lastDate.getTime(),
     eventCount: numberOrZero(summary.event_count ?? summary.eventCount),
     toolCallCount: numberOrZero(summary.tool_call_count ?? summary.toolCallCount),
+    mcpCallCount: numberOrZero(summary.mcp_call_count ?? summary.mcpCallCount),
+    mcpServers: serverNamesValue(summary.mcp_servers ?? summary.mcpServers),
     skillInvocationCount: countValue(
       summary,
       ['skill_invocation_count', 'skillInvocationCount', 'skill_count', 'skillCount'],
@@ -112,6 +119,9 @@ function searchableMetadata(summary) {
     formatSessionDate(summary.lastEventAt),
     `events ${summary.eventCount}`,
     `tools ${summary.toolCallCount}`,
+    `mcp ${summary.mcpCallCount}`,
+    `mcp calls ${summary.mcpCallCount}`,
+    `mcp servers ${summary.mcpServers.join(' ')}`,
     `skills ${summary.skillInvocationCount}`,
     `files ${summary.fileOperationCount}`,
     `status ${summary.evaluationStatus}`,

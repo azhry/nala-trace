@@ -31,6 +31,8 @@ const sessionPayload = {
     last_event_at: '2026-08-19T08:05:00Z',
     event_count: 3,
     tool_call_count: 1,
+    mcp_call_count: 2,
+    mcp_servers: ['github', 'linear'],
     skill_invocation_count: 0,
     file_operation_count: 0,
   }],
@@ -102,7 +104,7 @@ describe('authenticated sessions flow', () => {
     render(<App />)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Sign in through Nala Labs')
-    expect(redirectToNalaLabs).toHaveBeenCalledExactlyOnceWith()
+    await waitFor(() => expect(redirectToNalaLabs).toHaveBeenCalledExactlyOnceWith())
   })
 
   it('keeps a manual same-tab sign-in button as the fallback', async () => {
@@ -171,6 +173,16 @@ describe('authenticated sessions flow', () => {
 
     expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
     expect(resolveSession.mock.invocationCallOrder[0]).toBeLessThan(getSessions.mock.invocationCallOrder[0])
+  })
+
+  it('shows aggregate MCP calls and unique servers in workspace stats', async () => {
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'Open session authenticated-session' })
+
+    expect(screen.getByText('MCP calls')).toBeInTheDocument()
+    expect(screen.getByText('2 unique servers')).toBeInTheDocument()
+    expect(screen.getByText('MCP: github · linear')).toBeInTheDocument()
   })
 
   it('keeps row selection addressable through the hash route', async () => {

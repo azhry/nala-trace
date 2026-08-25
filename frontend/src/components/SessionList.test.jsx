@@ -12,6 +12,8 @@ const sessions = normalizeSessionSummaries({
       last_event_at: '2026-08-18T08:05:00Z',
       event_count: 10,
       tool_call_count: 2,
+      mcp_call_count: 3,
+      mcp_servers: ['github', 'linear'],
       skill_invocation_count: 1,
       file_operation_count: 2,
     },
@@ -22,6 +24,8 @@ const sessions = normalizeSessionSummaries({
       last_event_at: '2026-08-19T08:05:00Z',
       event_count: 30,
       tool_call_count: 8,
+      mcp_call_count: 0,
+      mcp_servers: [],
       skill_invocation_count: 0,
       file_operation_count: 5,
       evaluation_status: 'attention',
@@ -58,8 +62,11 @@ describe('SessionList', () => {
     expect(screen.getByRole('button', { name: 'Open session Review the session title (session-a)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open session Review the session title (session-a)' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('8 tools')).toBeInTheDocument()
+    expect(screen.getByLabelText('3 MCP calls')).toBeInTheDocument()
     expect(screen.getByLabelText('5 files')).toBeInTheDocument()
     expect(screen.getByLabelText('1 skills')).toBeInTheDocument()
+    expect(screen.getByText('MCP servers: github · linear')).toBeInTheDocument()
+    expect(screen.getByText('MCP servers: none recorded')).toBeInTheDocument()
   })
 
   it('renders stable recency and metric ordering controls', () => {

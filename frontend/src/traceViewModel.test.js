@@ -241,7 +241,7 @@ describe('normalizeTraceViewModel', () => {
         { path: 'src/traceViewModel.js', operation: 'read', event_id: 'pre-second' },
         { path: 'AGENTS.md', operation: 'read', event_id: 'context-signal' },
       ],
-      summary: { event_count: 3, tool_call_count: 2, skill_invocation_count: 3, file_operation_count: 4, file_read_count: 3 },
+      summary: { event_count: 3, tool_call_count: 2, mcp_call_count: 4, mcp_servers: ['github', 'linear', 'github'], skill_invocation_count: 3, file_operation_count: 4, file_read_count: 3 },
     })
 
     const toolEvents = model.events.filter((event) => event.type === 'tool')
@@ -266,6 +266,8 @@ describe('normalizeTraceViewModel', () => {
     expect(model.skillInvocationCount).toBe(3)
     expect(model.fileOperationCount).toBe(4)
     expect(model.fileReadCount).toBe(3)
-    expect(model.signalCounts).toEqual({ skills: 3, files: 4, fileReads: 3 })
+    expect(model.mcpCallCount).toBe(4)
+    expect(model.mcpServers).toEqual(['github', 'linear'])
+    expect(model.signalCounts).toEqual({ skills: 3, files: 4, fileReads: 3, mcpCalls: 4, mcpServers: 2 })
   })
 })

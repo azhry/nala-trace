@@ -193,6 +193,20 @@ function InstructionInventory({ fileRecords = EMPTY_EVENTS, onEvidenceSelect, se
   </div>
 }
 
+function McpInventory({ callCount = 0, servers = EMPTY_EVENTS }) {
+  const safeCallCount = Number.isFinite(Number(callCount)) ? Number(callCount) : 0
+  const safeServers = Array.isArray(servers) ? servers.filter((server) => typeof server === 'string' && server.trim()) : EMPTY_EVENTS
+  const serverSummary = safeServers.length ? safeServers.join(', ') : ''
+  const emptyMessage = safeCallCount === 0 && safeServers.length === 0
+    ? 'No MCP calls or MCP servers were recorded.'
+    : 'MCP server names were not recorded for these calls.'
+
+  return <div className="mcp-inventory" role="region" aria-label="MCP usage summary">
+    <div className="mcp-inventory-heading"><div><span className="section-label">MCP usage</span><strong>Recorded MCP calls and servers</strong><small>{safeCallCount.toLocaleString()} MCP calls · {safeServers.length.toLocaleString()} distinct server{safeServers.length === 1 ? '' : 's'}</small></div><span className="record-count">from session summary</span></div>
+    {safeServers.length ? <div className="mcp-server-list" aria-label={`MCP servers used: ${serverSummary}`}>{safeServers.map((server) => <span className="mcp-server-chip" key={server}>{server}</span>)}</div> : <p className="mcp-inventory-empty">{emptyMessage}</p>}
+  </div>
+}
+
 function EvidenceSelectionNotice({ selection, onClear, onPrevious, onNext }) {
   if (!selection) return null
   const matchCount = selection.eventIds.length
@@ -333,9 +347,11 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
     <div className="trace-summary">
       <div><span>Session</span><strong>{session.id || 'Selected session'}</strong><small>{viewModel.messageCount.toLocaleString()} messages · {viewModel.conversation.filter((event) => event.role === 'user').length.toLocaleString()} user turns</small></div>
       <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
+      <div><span>MCP</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()} calls</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
       <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
     <SkillInventory events={events} fileRecords={inventoryFiles} literalSkillInvocationCount={viewModel.skillInvocations?.length || 0} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
+    <McpInventory callCount={viewModel.mcpCallCount} servers={viewModel.mcpServers} />
     <InstructionInventory fileRecords={inventoryFiles} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <div className="context-inventory" aria-label="Prompt and context summary">
       <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>

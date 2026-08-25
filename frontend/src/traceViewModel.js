@@ -140,6 +140,12 @@ function summaryCount(summary, keys, fallback = 0) {
   return fallback
 }
 
+function summaryServerNames(summary) {
+  const value = summary?.mcp_servers ?? summary?.mcpServers
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.map(cleanString).filter(Boolean))]
+}
+
 function normalizeSkillInvocation(item = {}) {
   const record = rawRecord(item)
   return {
@@ -540,6 +546,8 @@ function apiTraceViewModel(trace) {
   const fileReadCount = fileOperationSource
     ? files.filter((file) => file.operation === 'read').length
     : summaryCount(summary, ['file_read_count', 'fileReadCount'])
+  const mcpCallCount = summaryCount(summary, ['mcp_call_count', 'mcpCallCount'])
+  const mcpServers = summaryServerNames(summary)
   const projectedSignals = projectApiSignals({ timelineEvents, toolEvents, skillInvocations, files })
   const partial = conversationEvents.some((event) => event.partial)
 
@@ -560,6 +568,8 @@ function apiTraceViewModel(trace) {
     semanticRecords: summaryCount(summary, ['event_count', 'eventCount'], timelineEvents.length),
     messageCount: conversationEvents.length,
     toolCount: summaryCount(summary, ['tool_call_count', 'toolCallCount'], toolEvents.length),
+    mcpCallCount,
+    mcpServers,
     skillInvocations,
     files,
     skillInvocationCount,
@@ -571,6 +581,8 @@ function apiTraceViewModel(trace) {
       skills: skillInvocationCount,
       files: fileOperationCount,
       fileReads: fileReadCount,
+      mcpCalls: mcpCallCount,
+      mcpServers: mcpServers.length,
     },
     startedAt: orderedEvents[0]?.time || 'Time not recorded',
     capturedAt: orderedEvents.at(-1)?.time || 'Time not recorded',
@@ -590,6 +602,8 @@ function legacyTraceViewModel(trace) {
     semanticRecords: Number(trace.events || events.length).toLocaleString(),
     messageCount: Number(trace.messages || conversation.length),
     toolCount: Number(trace.toolCalls || events.filter((event) => event.type === 'tool').length),
+    mcpCallCount: 0,
+    mcpServers: EMPTY_LIST,
     startedAt: trace.startedAt || 'Time not recorded',
     capturedAt: trace.capturedAt || 'Time not recorded',
   }

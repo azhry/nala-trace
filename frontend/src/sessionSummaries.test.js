@@ -83,6 +83,20 @@ describe('session summary adapter', () => {
     expect(numericSummary.skillInvocationCount).toBe(5)
   })
 
+  it('normalizes explicit MCP counts and unique server names without inferring from other fields', () => {
+    const summaries = normalizeSessionSummaries({
+      sessions: [
+        { session_id: 'mcp-session', mcp_call_count: 4, mcp_servers: ['github', 'github', ' linear ', '', 42], title: 'Uses GitHub MCP' },
+        { session_id: 'empty-mcp-session', title: 'No MCP data', tool_call_count: 2 },
+      ],
+    })
+
+    expect(summaries[0]).toMatchObject({ mcpCallCount: 4, mcpServers: ['github', 'linear'] })
+    expect(summaries[1]).toMatchObject({ mcpCallCount: 0, mcpServers: [] })
+    expect(filterSessionSummaries(summaries, 'linear').map(({ id }) => id)).toEqual(['mcp-session'])
+    expect(filterSessionSummaries(summaries, 'mcp 4').map(({ id }) => id)).toEqual(['mcp-session'])
+  })
+
   it('sorts by recency and keeps metric ties deterministic', () => {
     const summaries = normalizeSessionSummaries(payload)
 

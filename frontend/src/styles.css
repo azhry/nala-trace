@@ -64,6 +64,29 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--purple); ou
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
 
+/* MCP usage signals. */
+.workspace-stats { grid-template-columns: repeat(5, 1fr); }
+.workspace-stat-server-list { margin-top: 5px; overflow: hidden; color: var(--purple) !important; font-family: var(--mono); font-size: 9px !important; text-overflow: ellipsis; white-space: nowrap; }
+.session-mcp-servers { display: block; width: 100%; overflow: hidden; color: var(--purple); font-family: var(--mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.trace-summary { grid-template-columns: 1.3fr 1fr 1fr 1fr; }
+.mcp-inventory { padding: 14px 20px; border-bottom: 1px solid var(--line); background: rgba(23,28,35,.72); }
+.mcp-inventory-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.mcp-inventory-heading .section-label { margin-bottom: 4px; }
+.mcp-inventory-heading strong, .mcp-inventory-heading small { display: block; }
+.mcp-inventory-heading strong { color: var(--text); font-size: 14px; }
+.mcp-inventory-heading small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.mcp-server-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.mcp-server-chip { padding: 5px 8px; border: 1px solid rgba(131,198,245,.24); border-radius: 5px; background: rgba(131,198,245,.07); color: var(--blue); font-family: var(--mono); font-size: 10px; }
+.mcp-inventory-empty { margin: 10px 0 0; color: var(--faint); font-size: 11px; }
+@media (max-width: 720px) {
+  .workspace-stats { grid-template-columns: repeat(2, 1fr); }
+  .workspace-stats > div:nth-child(even) { border-right: 0; }
+  .workspace-stats > div:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
+  .trace-summary { grid-template-columns: 1fr; }
+  .mcp-inventory { padding: 13px 16px; }
+  .mcp-inventory-heading .record-count { display: none; }
+}
+
 /* The audit timeline is a conversation, not a single-column activity feed. */
 .conversation-message { display: flex; max-width: 86%; flex-direction: column; margin: 20px 0; padding: 13px 16px; border: 1px solid rgba(187,165,255,.18); border-left: 3px solid rgba(187,165,255,.72); border-radius: 10px 10px 10px 3px; background: rgba(34,42,52,.72); }
 .conversation-message.assistant { margin-right: auto; }

@@ -85,12 +85,14 @@ function Topbar({ route, session, apiState, onSignOut }) {
 
 function SessionStats({ sessions }) {
   const tools = sessions.reduce((total, session) => total + session.toolCallCount, 0)
+  const mcpCalls = sessions.reduce((total, session) => total + session.mcpCallCount, 0)
+  const mcpServers = [...new Set(sessions.flatMap((session) => Array.isArray(session.mcpServers) ? session.mcpServers : []))]
   const attention = sessions.filter((session) => session.status === 'attention').length
   const latest = sessions.reduce((current, session) => {
     if (!current || (session.lastEventTime || 0) > (current.lastEventTime || 0)) return session
     return current
   }, null)
-  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>available to this account</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>evaluation signal when available</small></div><div><span>Last captured</span><strong>{latest ? formatSessionDate(latest.lastEventAt) : '—'}</strong><small>most recent event</small></div></div>
+  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>available to this account</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div><div aria-label={`${mcpCalls} MCP calls across ${mcpServers.length} unique MCP servers`}><span>MCP calls</span><strong>{mcpCalls.toLocaleString()}</strong><small>{mcpServers.length ? `${mcpServers.length} unique servers` : 'No MCP servers recorded'}</small>{mcpServers.length > 0 && <span className="workspace-stat-server-list" title={mcpServers.join(', ')}>MCP: {mcpServers.join(' · ')}</span>}</div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>evaluation signal when available</small></div><div><span>Last captured</span><strong>{latest ? formatSessionDate(latest.lastEventAt) : '—'}</strong><small>most recent event</small></div></div>
 }
 
 function DataSourceNotice({ apiState }) {

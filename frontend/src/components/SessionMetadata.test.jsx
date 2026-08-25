@@ -12,6 +12,7 @@ describe('SessionMetadata', () => {
         context_window_tokens: 200000,
         client: 'Codex',
         client_version: '1.2.3',
+        permission_mode: 'workspace-write',
         source: 'hook',
         thread_source: 'desktop',
         recorded_from: 'SessionStart',
@@ -23,6 +24,7 @@ describe('SessionMetadata', () => {
     expect(screen.getByText('high')).toBeInTheDocument()
     expect(screen.getByText('200,000 tokens')).toBeInTheDocument()
     expect(screen.getByText('Codex · 1.2.3')).toBeInTheDocument()
+    expect(screen.getByText('workspace-write')).toBeInTheDocument()
     expect(screen.getByText('hook')).toBeInTheDocument()
     expect(screen.getByText('desktop')).toBeInTheDocument()
     expect(screen.getByText('SessionStart')).toBeInTheDocument()
@@ -37,6 +39,7 @@ describe('SessionMetadata', () => {
         contextWindowTokens: 128000,
         client: 'Codex Desktop',
         cliVersion: '2.0.0',
+        permissionMode: 'read-only',
         threadSource: 'desktop',
         recordedFrom: 'SessionStart',
       },
@@ -45,9 +48,10 @@ describe('SessionMetadata', () => {
     expect(screen.getByText('gpt-4.1')).toBeInTheDocument()
     expect(screen.getByText('Codex Desktop · 2.0.0')).toBeInTheDocument()
     expect(screen.getByText('128,000 tokens')).toBeInTheDocument()
+    expect(screen.getByText('read-only')).toBeInTheDocument()
 
     rerender(<SessionMetadata session={{ runtime_metadata: {} }} />)
 
-    expect(screen.getAllByText('Not recorded')).toHaveLength(8)
+    expect(screen.getAllByText('Not recorded')).toHaveLength(9)
   })
 })

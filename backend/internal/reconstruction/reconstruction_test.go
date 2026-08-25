@@ -296,6 +296,7 @@ func TestReconstructExtractsAllowlistedRuntimeMetadataAndFileReads(t *testing.T)
 				"client":                "Codex Desktop",
 				"client_version":        "0.148.0",
 				"source":                "vscode",
+				"permission_mode":       "workspace-write",
 				"thread_source":         "user",
 				"api_key":               "must-not-be-projected",
 			},
@@ -305,7 +306,7 @@ func TestReconstructExtractsAllowlistedRuntimeMetadataAndFileReads(t *testing.T)
 		}),
 	})
 
-	if result.RuntimeMetadata.Model != "gpt-5" || result.RuntimeMetadata.Provider != "openai" || result.RuntimeMetadata.ContextWindowTokens != 258400 {
+	if result.RuntimeMetadata.Model != "gpt-5" || result.RuntimeMetadata.Provider != "openai" || result.RuntimeMetadata.ContextWindowTokens != 258400 || result.RuntimeMetadata.PermissionMode != "workspace-write" {
 		t.Fatalf("runtime metadata = %#v", result.RuntimeMetadata)
 	}
 	if result.RuntimeMetadata.RecordedFrom != "SessionStart" {
@@ -334,6 +335,7 @@ func TestReconstructExtractsRuntimeMetadataFromNestedPayloadContexts(t *testing.
 					"contextWindowTokens": 258400,
 					"client":              "Codex Desktop",
 					"clientVersion":       "0.148.0",
+					"permissionMode":      "workspace-write",
 					"threadSource":        "user",
 				},
 			},
@@ -341,7 +343,7 @@ func TestReconstructExtractsRuntimeMetadataFromNestedPayloadContexts(t *testing.
 	})
 
 	metadata := result.RuntimeMetadata
-	if metadata.Provider != "openai" || metadata.ReasoningEffort != "xhigh" || metadata.ContextWindowTokens != 258400 || metadata.Client != "Codex Desktop" || metadata.ClientVersion != "0.148.0" || metadata.ThreadSource != "user" {
+	if metadata.Provider != "openai" || metadata.ReasoningEffort != "xhigh" || metadata.ContextWindowTokens != 258400 || metadata.Client != "Codex Desktop" || metadata.ClientVersion != "0.148.0" || metadata.PermissionMode != "workspace-write" || metadata.ThreadSource != "user" {
 		t.Fatalf("nested runtime metadata = %#v", metadata)
 	}
 
@@ -358,6 +360,24 @@ func TestReconstructExtractsRuntimeMetadataFromNestedPayloadContexts(t *testing.
 	})
 	if encodedResult.RuntimeMetadata.Provider != "openai" || encodedResult.RuntimeMetadata.ReasoningEffort != "high" {
 		t.Fatalf("JSON-encoded nested runtime metadata = %#v", encodedResult.RuntimeMetadata)
+	}
+}
+
+func TestReconstructPreservesOnlySettingsEmittedByCodexHookPayload(t *testing.T) {
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEvent("session-start", "SessionStart", "", time.Unix(75, 0).UTC(), map[string]any{
+			"model":           "gpt-5.6-luna",
+			"permission_mode": "workspace-write",
+			"source":          "startup",
+		}),
+	})
+
+	metadata := result.RuntimeMetadata
+	if metadata.Model != "gpt-5.6-luna" || metadata.PermissionMode != "workspace-write" || metadata.Source != "startup" {
+		t.Fatalf("Codex hook metadata = %#v", metadata)
+	}
+	if metadata.Provider != "" || metadata.ReasoningEffort != "" || metadata.ContextWindowTokens != 0 || metadata.Client != "" || metadata.ClientVersion != "" || metadata.ThreadSource != "" {
+		t.Fatalf("runtime metadata inferred fields that were not emitted: %#v", metadata)
 	}
 }
 

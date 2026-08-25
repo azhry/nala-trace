@@ -94,6 +94,7 @@ type RuntimeMetadata struct {
 	Client              string `json:"client,omitempty"`
 	ClientVersion       string `json:"client_version,omitempty"`
 	Source              string `json:"source,omitempty"`
+	PermissionMode      string `json:"permission_mode,omitempty"`
 	ThreadSource        string `json:"thread_source,omitempty"`
 	RecordedFrom        string `json:"recorded_from,omitempty"`
 }

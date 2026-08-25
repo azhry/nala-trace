@@ -717,6 +717,7 @@ func runtimeMetadataFromPayload(payload bson.Raw, eventName string) trace.Runtim
 		Client:          firstStringField(documents, "client", "originator"),
 		ClientVersion:   firstStringField(documents, "client_version", "clientVersion", "cli_version", "cliVersion"),
 		Source:          firstStringField(documents, "source"),
+		PermissionMode:  firstStringField(documents, "permission_mode", "permissionMode"),
 		ThreadSource:    firstStringField(documents, "thread_source", "threadSource"),
 	}
 	metadata.ContextWindowTokens = firstInt64Field(documents, "context_window_tokens", "contextWindowTokens", "model_context_window", "modelContextWindow")
@@ -818,7 +819,7 @@ func firstInt64Field(documents []map[string]any, keys ...string) int64 {
 }
 
 func hasRuntimeMetadata(metadata trace.RuntimeMetadata) bool {
-	return metadata.Model != "" || metadata.Provider != "" || metadata.ReasoningEffort != "" || metadata.ContextWindowTokens != 0 || metadata.Client != "" || metadata.ClientVersion != "" || metadata.Source != "" || metadata.ThreadSource != ""
+	return metadata.Model != "" || metadata.Provider != "" || metadata.ReasoningEffort != "" || metadata.ContextWindowTokens != 0 || metadata.Client != "" || metadata.ClientVersion != "" || metadata.Source != "" || metadata.PermissionMode != "" || metadata.ThreadSource != ""
 }
 
 func mergeRuntimeMetadata(current, incoming trace.RuntimeMetadata) trace.RuntimeMetadata {
@@ -842,6 +843,9 @@ func mergeRuntimeMetadata(current, incoming trace.RuntimeMetadata) trace.Runtime
 	}
 	if current.Source == "" {
 		current.Source = incoming.Source
+	}
+	if current.PermissionMode == "" {
+		current.PermissionMode = incoming.PermissionMode
 	}
 	if current.ThreadSource == "" {
 		current.ThreadSource = incoming.ThreadSource

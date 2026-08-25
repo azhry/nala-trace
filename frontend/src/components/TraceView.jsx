@@ -217,16 +217,20 @@ function EvidenceSelectionNotice({ selection, onClear, onPrevious, onNext }) {
   const unmatchedMessage = selection.unmatchedRecordCount
     ? ` ${selection.unmatchedRecordCount} captured record${selection.unmatchedRecordCount === 1 ? '' : 's'} ${selection.unmatchedRecordCount === 1 ? 'has' : 'have'} no matching timeline event; no event was invented.`
     : ''
-  return <div className="evidence-selection-notice" role="status" aria-live="polite">
-    <strong>{selection.label}</strong>
-    <span>{matchedMessage}{unmatchedMessage}</span>
-    {matchCount > 0 && <div className="evidence-match-navigation" role="group" aria-label="Evidence match navigation">
-      <span aria-live="polite">Match {activeMatchIndex + 1} of {matchCount}</span>
-      <button type="button" className="evidence-match-control" aria-label="Previous matching event" title="Previous matching event" disabled={activeMatchIndex <= 0} onClick={onPrevious}>Previous</button>
-      <button type="button" className="evidence-match-control" aria-label="Next matching event" title="Next matching event" disabled={activeMatchIndex >= matchCount - 1} onClick={onNext}>Next</button>
-    </div>}
-    <button type="button" className="evidence-clear" onClick={onClear}>Clear selection</button>
-  </div>
+  return <>
+    <div className="evidence-selection-notice" role="status" aria-live="polite">
+      <strong>{selection.label}</strong>
+      <span>{matchedMessage}{unmatchedMessage}</span>
+    </div>
+    <div className="evidence-match-dock" role="group" aria-label="Evidence match navigation">
+      {matchCount > 0 && <div className="evidence-match-navigation">
+        <span aria-live="polite">Match {activeMatchIndex + 1} of {matchCount}</span>
+        <button type="button" className="evidence-match-control" aria-label="Previous matching event" title="Previous matching event" disabled={activeMatchIndex <= 0} onClick={onPrevious}>Previous</button>
+        <button type="button" className="evidence-match-control" aria-label="Next matching event" title="Next matching event" disabled={activeMatchIndex >= matchCount - 1} onClick={onNext}>Next</button>
+      </div>}
+      <button type="button" className="evidence-clear" onClick={onClear}>Clear selection</button>
+    </div>
+  </>
 }
 
 function TraceStatePanel({ state, onRetry }) {

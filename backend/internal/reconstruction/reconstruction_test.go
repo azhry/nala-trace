@@ -190,6 +190,44 @@ func TestReconstructExtractsAllowlistedRuntimeMetadataAndFileReads(t *testing.T)
 	}
 }
 
+func TestReconstructExtractsRuntimeMetadataFromNestedPayloadContexts(t *testing.T) {
+	base := time.Unix(70, 0).UTC()
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEvent("settings", "SessionStart", "", base, map[string]any{
+			"payload": map[string]any{
+				"turn_context": map[string]any{
+					"provider":            "openai",
+					"reasoningEffort":     "xhigh",
+					"contextWindowTokens": 258400,
+					"client":              "Codex Desktop",
+					"clientVersion":       "0.148.0",
+					"threadSource":        "user",
+				},
+			},
+		}),
+	})
+
+	metadata := result.RuntimeMetadata
+	if metadata.Provider != "openai" || metadata.ReasoningEffort != "xhigh" || metadata.ContextWindowTokens != 258400 || metadata.Client != "Codex Desktop" || metadata.ClientVersion != "0.148.0" || metadata.ThreadSource != "user" {
+		t.Fatalf("nested runtime metadata = %#v", metadata)
+	}
+
+	encodedContext, err := json.Marshal(map[string]any{"provider": "openai", "reasoning_effort": "high"})
+	if err != nil {
+		t.Fatalf("marshal encoded runtime metadata: %v", err)
+	}
+	encodedResult := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEvent("encoded-settings", "SessionStart", "", base, map[string]any{
+			"payload": map[string]any{
+				"execution_settings": string(encodedContext),
+			},
+		}),
+	})
+	if encodedResult.RuntimeMetadata.Provider != "openai" || encodedResult.RuntimeMetadata.ReasoningEffort != "high" {
+		t.Fatalf("JSON-encoded nested runtime metadata = %#v", encodedResult.RuntimeMetadata)
+	}
+}
+
 func TestReconstructBoundsMalformedAndOversizedPayloads(t *testing.T) {
 	oversized, err := bson.Marshal(map[string]any{"content": strings.Repeat("x", maxReconstructionPayloadBytes)})
 	if err != nil {

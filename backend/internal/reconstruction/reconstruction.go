@@ -532,13 +532,51 @@ func runtimeMetadataFromPayload(payload bson.Raw, eventName string) trace.Runtim
 }
 
 func runtimeMetadataDocuments(document map[string]any) []map[string]any {
-	documents := []map[string]any{document}
-	for _, key := range []string{"metadata", "runtime", "runtime_metadata", "execution_settings", "session_meta", "turn_context", "task_started", "payload"} {
-		if nested, ok := mapField(document, key); ok {
-			documents = append(documents, nested)
+	const maxDepth = 4
+	containerKeys := []string{"metadata", "runtime", "runtime_metadata", "execution_settings", "session_meta", "turn_context", "task_started", "payload"}
+	documents := make([]map[string]any, 0, 1)
+	var visit func(map[string]any, int)
+	visit = func(current map[string]any, depth int) {
+		if current == nil || depth > maxDepth {
+			return
+		}
+		documents = append(documents, current)
+		for _, key := range containerKeys {
+			raw, ok := mapValue(current, key)
+			if !ok {
+				continue
+			}
+			if nested, ok := runtimeMetadataDocumentValue(raw); ok {
+				visit(nested, depth+1)
+			}
 		}
 	}
+	visit(document, 0)
 	return documents
+}
+
+func mapValue(document map[string]any, key string) (any, bool) {
+	for actual, value := range document {
+		if strings.EqualFold(actual, key) {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func runtimeMetadataDocumentValue(raw any) (map[string]any, bool) {
+	switch value := raw.(type) {
+	case map[string]any:
+		return value, true
+	case bson.M:
+		return map[string]any(value), true
+	case string:
+		var document map[string]any
+		if err := json.Unmarshal([]byte(value), &document); err == nil && document != nil {
+			return document, true
+		}
+	}
+	return nil, false
 }
 
 func firstStringField(documents []map[string]any, keys ...string) string {
@@ -582,21 +620,6 @@ func firstInt64Field(documents []map[string]any, keys ...string) int64 {
 		}
 	}
 	return 0
-}
-
-func mapField(document map[string]any, key string) (map[string]any, bool) {
-	for actual, raw := range document {
-		if !strings.EqualFold(actual, key) {
-			continue
-		}
-		switch nested := raw.(type) {
-		case map[string]any:
-			return nested, true
-		case bson.M:
-			return map[string]any(nested), true
-		}
-	}
-	return nil, false
 }
 
 func hasRuntimeMetadata(metadata trace.RuntimeMetadata) bool {

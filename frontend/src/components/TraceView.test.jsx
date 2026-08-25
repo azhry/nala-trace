@@ -36,7 +36,90 @@ const apiTrace = {
   summary: { event_count: 3, message_count: 3, tool_call_count: 0 },
 }
 
+function createLargeTrace(size = 125) {
+  const timeline = Array.from({ length: size }, (_, index) => ({
+    id: `pre-read-${index}`,
+    hook_event_name: 'PreToolUse',
+    occurred_at: `2026-08-19T08:00:${String(index % 60).padStart(2, '0')}Z`,
+    tool_call_index: index,
+  }))
+  const tool_calls = Array.from({ length: size }, (_, index) => ({
+    tool_use_id: `tool-use-${index}`,
+    tool_name: 'shell_command',
+    input: { command: `read trace fixture ${index}` },
+    output: `completed ${index}`,
+    started_at: `2026-08-19T08:00:${String(index % 60).padStart(2, '0')}Z`,
+    completed_at: `2026-08-19T08:00:${String(index % 60).padStart(2, '0')}Z`,
+    status: 'completed',
+  }))
+  return {
+    schema_version: '1',
+    session_id: `large-session-${size}`,
+    timeline,
+    conversation: [],
+    tool_calls,
+    skill_invocations: [],
+    files: [{ path: '.agents/workflows/deep.md', operation: 'read', event_id: `pre-read-${size - 1}` }],
+    summary: { event_count: size * 2, message_count: 0, tool_call_count: size },
+  }
+}
+
 describe('TraceView API conversation', () => {
+  it('bounds the initially mounted stream and loads more rows on demand', () => {
+    const { container } = render(<TraceView session={createLargeTrace()} />)
+
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
+    expect(screen.getByText('Showing 60 of 125 rows')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Load more rows' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more rows' }))
+
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(120)
+    expect(screen.getByText('Showing 120 of 125 rows')).toBeInTheDocument()
+  })
+
+  it('renders and focuses a deep evidence match before scrolling to it', () => {
+    const { container } = render(<TraceView session={createLargeTrace()} />)
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+    const scrollIntoView = vi.fn()
+    HTMLElement.prototype.scrollIntoView = scrollIntoView
+
+    try {
+      expect(container.querySelector('[data-trace-event-id="tool-124"]')).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Locate captured instruction source .agents/workflows/deep.md in the trace' }))
+
+      const deepEvent = container.querySelector('[data-trace-event-id="tool-124"]')
+      expect(deepEvent).toBeInTheDocument()
+      expect(deepEvent).toHaveAttribute('data-trace-event-selected', 'true')
+      expect(deepEvent).toHaveAttribute('data-trace-event-active', 'true')
+      expect(document.activeElement).toBe(deepEvent)
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+      expect(screen.getByText('Showing 125 of 125 rows')).toBeInTheDocument()
+    } finally {
+      if (originalScrollIntoView) HTMLElement.prototype.scrollIntoView = originalScrollIntoView
+      else delete HTMLElement.prototype.scrollIntoView
+    }
+  })
+
+  it('resets the mounted window when the filter and selected session change', () => {
+    const firstTrace = createLargeTrace()
+    const secondTrace = { ...createLargeTrace(), session_id: 'large-session-2' }
+    const { container, rerender } = render(<TraceView session={firstTrace} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more rows' }))
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(120)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }))
+    expect(screen.getByText('Showing 0 of 0 rows')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Everything' }))
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
+
+    rerender(<TraceView session={secondTrace} />)
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
+  })
+
   it('renders the Everything stream in API timeline order across messages and tool calls', () => {
     const trace = {
       schema_version: '1',

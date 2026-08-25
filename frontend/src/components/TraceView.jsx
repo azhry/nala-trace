@@ -10,6 +10,8 @@ const filters = [
   ['context', 'Prompts & context'],
 ]
 const EMPTY_EVENTS = []
+const INITIAL_RENDER_COUNT = 60
+const RENDER_BATCH_SIZE = 60
 
 function evidencePath(file) {
   return normalizePath(file ?? '').toLowerCase()
@@ -229,8 +231,10 @@ function PartialNotice({ message }) {
 export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {} }) {
   const [filter, setFilter] = useState('all')
   const [selection, setSelection] = useState(null)
+  const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_COUNT)
   const viewModel = useMemo(() => normalizeTraceViewModel(session), [session])
   const events = viewModel.events || EMPTY_EVENTS
+  const sessionKey = session.id || session.session_id || viewModel.sessionId || 'selected-session'
   const contextRows = useMemo(() => {
     const rows = []
     events.forEach((event) => {
@@ -261,17 +265,23 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       return event.type === 'system'
     })
   }, [contextRows, events, filter])
+  const renderedEvents = useMemo(() => visibleEvents.slice(0, renderLimit), [visibleEvents, renderLimit])
+  const hasMoreEvents = renderedEvents.length < visibleEvents.length
   const semanticRecords = String(viewModel.semanticRecords ?? 0)
   const isApiTrace = viewModel.source === 'api'
   const emptyConversation = isApiTrace && viewModel.conversation.length === 0
   const contextCounts = contextRows.reduce((counts, event) => ({ ...counts, [event.contextType]: (counts[event.contextType] || 0) + 1 }), {})
   const inventoryFiles = viewModel.source === 'api' ? viewModel.files : events.flatMap(getFileOperations)
+  const changeFilter = (nextFilter) => {
+    setFilter(nextFilter)
+    setRenderLimit(INITIAL_RENDER_COUNT)
+  }
   const selectEvidence = ({ key, label, records = EMPTY_EVENTS }) => {
     const matchingEvents = events.filter((event) => records.some((record) => eventMatchesEvidence(event, record)))
     const eventIds = [...new Set(matchingEvents.map((event) => event.id).filter(Boolean))]
     const matchedRecordCount = records.filter((record) => matchingEvents.some((event) => eventMatchesEvidence(event, record))).length
     setSelection({ key, label, eventIds, activeMatchIndex: 0, unmatchedRecordCount: records.length - matchedRecordCount })
-    setFilter('all')
+    changeFilter('all')
   }
   const selectFile = (file) => selectEvidence({
     key: `file:${evidencePath(file)}`,
@@ -285,16 +295,31 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       const activeMatchIndex = Math.max(0, Math.min(currentIndex + offset, current.eventIds.length - 1))
       return { ...current, activeMatchIndex }
     })
-    setFilter('all')
+    changeFilter('all')
   }
+
+  useEffect(() => {
+    setSelection(null)
+    setRenderLimit(INITIAL_RENDER_COUNT)
+  }, [sessionKey])
 
   useEffect(() => {
     if (!selection?.eventIds.length) return
     const activeMatchIndex = Math.min(selection.activeMatchIndex ?? 0, selection.eventIds.length - 1)
+    const activeEventId = selection.eventIds[activeMatchIndex]
+    const activeEventIndex = visibleEvents.findIndex((event) => event.id === activeEventId)
+    if (activeEventIndex >= renderLimit) {
+      setRenderLimit(Math.min(visibleEvents.length, activeEventIndex + 1))
+      return
+    }
     const target = document.getElementById(eventAnchorId(selection.eventIds[activeMatchIndex]))
     if (target?.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     target?.focus?.({ preventScroll: true })
-  }, [selection])
+  }, [selection, visibleEvents, renderLimit])
+
+  const loadMoreEvents = () => {
+    setRenderLimit((current) => Math.min(current + RENDER_BATCH_SIZE, visibleEvents.length))
+  }
 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
     <div className="panel-header trace-panel-header">
@@ -319,7 +344,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
     <EvidenceSelectionNotice selection={selection} onClear={() => setSelection(null)} onPrevious={() => moveToMatch(-1)} onNext={() => moveToMatch(1)} />
     <div className="trace-controls" role="group" aria-label="Filter session detail">
       <span>Show</span>
-      {filters.map(([id, label]) => <button key={id} type="button" className={filter === id ? 'is-active' : ''} aria-pressed={filter === id} onClick={() => setFilter(id)}>{label}</button>)}
+      {filters.map(([id, label]) => <button key={id} type="button" className={filter === id ? 'is-active' : ''} aria-pressed={filter === id} onClick={() => changeFilter(id)}>{label}</button>)}
       <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} rows · {semanticRecords} semantic records</span>
     </div>
     <div className="trace-stream">
@@ -327,7 +352,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
         {viewModel.partial && <PartialNotice message={viewModel.partialMessage} />}
         {emptyConversation && <TraceStatePanel state="empty" />}
         {(visibleEvents.length > 0 || !emptyConversation) && <div className="stream-intro"><span className="stream-line" /><span>Trace started · {viewModel.startedAt}</span></div>}
-        {visibleEvents.map((event) => {
+        {renderedEvents.map((event) => {
           const selected = selection?.eventIds.includes(event.id) || false
           const active = selected && selection?.eventIds[selection.activeMatchIndex ?? 0] === event.id
           if (event.type === 'context') return <ContextRow key={event.id} event={event} selected={selected} active={active} onFileSelect={selectFile} />
@@ -335,7 +360,11 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
           if (event.type === 'system') return <SystemEvent key={event.id} event={event} selected={selected} active={active} />
           return <ConversationMessage key={event.id} event={event} selected={selected} active={active} />
         })}
-        {visibleEvents.length > 0 && <div className="stream-end"><span>End of captured session · {viewModel.capturedAt}</span><span className="stream-line" /></div>}
+        <div className="trace-stream-pagination">
+          <span role="status" aria-live="polite">Showing {renderedEvents.length.toLocaleString()} of {visibleEvents.length.toLocaleString()} rows</span>
+          {hasMoreEvents && <button type="button" className="load-more-events" onClick={loadMoreEvents}>Load more rows</button>}
+        </div>
+        {!hasMoreEvents && visibleEvents.length > 0 && <div className="stream-end"><span>End of captured session · {viewModel.capturedAt}</span><span className="stream-line" /></div>}
       </>}
     </div>
   </section>

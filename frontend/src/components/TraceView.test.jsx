@@ -303,4 +303,62 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText('PreToolUse')).toBeInTheDocument()
     expect(screen.getByText('PostToolUse')).toBeInTheDocument()
   })
+
+  it('counts normalized API file reads, including only actual SKILL.md reads', () => {
+    const trace = {
+      schema_version: '1',
+      timeline: [
+        { id: 'pre-read', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:00Z', tool_call_index: 0 },
+      ],
+      tool_calls: [
+        { tool_name: 'shell_command', input: { command: 'read files' } },
+      ],
+      skill_invocations: [],
+      files: [
+        { path: '.agents/skills/frontend-design/SKILL.md', operation: 'read', event_id: 'pre-read' },
+        { path: '.agents/skills/other/SKILL.md', operation: 'write', event_id: 'pre-read' },
+        { path: '.agents/workflows/frontend.md', action: 'read', event_id: 'pre-read' },
+      ],
+    }
+
+    render(<TraceView session={trace} />)
+
+    expect(screen.getByText(/1 SKILL\.md read across 1 unique skill document · 1 inferred tag occurrence across 1 inferred label/)).toBeInTheDocument()
+    expect(screen.getByText(/2 read records · 3 unique instruction sources · 2 global · 1 local project/)).toBeInTheDocument()
+    expect(screen.getByText('No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
+  })
+
+  it('infers a skill label from a read of any file inside a skill directory', () => {
+    const trace = {
+      schema_version: '1',
+      timeline: [
+        { id: 'pre-read', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:00Z', tool_call_index: 0 },
+      ],
+      tool_calls: [{ tool_name: 'shell_command', input: { command: 'read script' } }],
+      skill_invocations: [],
+      files: [
+        { path: '.agents/skills/github/scripts/gh_preflight.ps1', operation: 'read', event_id: 'pre-read' },
+      ],
+    }
+
+    render(<TraceView session={trace} />)
+
+    expect(screen.getByText(/1 inferred tag occurrence across 1 inferred label/)).toBeInTheDocument()
+    expect(screen.getByText('inferred / github')).toBeInTheDocument()
+    expect(screen.getByText('No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
+  })
+
+  it('keeps literal skill-invocation records separate from inferred file labels', () => {
+    const trace = {
+      schema_version: '1',
+      timeline: [],
+      tool_calls: [],
+      skill_invocations: [{ name: 'frontend-design', confidence: 'explicit', event_id: 'pre-skill' }],
+      files: [],
+    }
+
+    render(<TraceView session={trace} />)
+
+    expect(screen.getByText('1 literal skill-invocation event was recorded; inferred tags are shown separately from document reads.')).toBeInTheDocument()
+  })
 })

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
-import { normalizeTraceViewModel } from '../traceViewModel'
+import { getFileOperations, isReadFileOperation, normalizeTraceViewModel, skillNameFromFilePath } from '../traceViewModel'
 
 const filters = [
   ['all', 'Everything'],
@@ -64,24 +64,47 @@ function ContextRow({ event, inline = false }) {
   </article>
 }
 
-function SkillInventory({ events }) {
+function SkillInventory({ events, literalSkillInvocationCount = 0 }) {
   const skillCounts = useMemo(() => {
     const counts = new Map()
-    events.forEach((event) => (event.skills || []).forEach((skill) => counts.set(skill, (counts.get(skill) || 0) + 1)))
-    return [...counts.entries()].sort(([, left], [, right]) => right - left)
+    const addSkill = (skill) => {
+      const name = String(skill || '').trim()
+      if (!name) return
+      const key = name.toLowerCase()
+      const current = counts.get(key) || { name, count: 0 }
+      current.count += 1
+      counts.set(key, current)
+    }
+
+    events.forEach((event) => {
+      const skillRecords = Array.isArray(event.skillRecords) && event.skillRecords.length
+        ? event.skillRecords.filter((record) => record.confidence !== 'explicit')
+        : (event.skills || []).map((name) => ({ name }))
+      skillRecords.forEach((record) => addSkill(record.name))
+      getFileOperations(event).forEach((record) => {
+        if (isReadFileOperation(record)) addSkill(skillNameFromFilePath(record.path))
+      })
+    })
+
+    return [...counts.entries()].sort(([, left], [, right]) => right.count - left.count)
   }, [events])
   const skillReadCounts = useMemo(() => {
     const counts = new Map()
-    events.forEach((event) => (event.files || []).forEach((file) => {
-      const normalized = normalizePath(file)
+    events.forEach((event) => getFileOperations(event).forEach((record) => {
+      if (!isReadFileOperation(record)) return
+      const normalized = normalizePath(record.path)
       const match = normalized.match(/\.agents\/skills\/([^/]+)\/SKILL\.md$/i)
       if (match) counts.set(match[1], (counts.get(match[1]) || 0) + 1)
     }))
     return [...counts.entries()].sort(([, left], [, right]) => right - left)
   }, [events])
-  const inferredTagCount = skillCounts.reduce((total, [, count]) => total + count, 0)
+  const inferredTagCount = skillCounts.reduce((total, [, value]) => total + value.count, 0)
   const skillReadCount = skillReadCounts.reduce((total, [, count]) => total + count, 0)
   const formatCount = (count, singular, plural = `${singular}s`) => `${count.toLocaleString()} ${count === 1 ? singular : plural}`
+  const recordedLiteralSkillInvocationCount = literalSkillInvocationCount || events.reduce((total, event) => total + (event.skillRecords?.length || 0), 0)
+  const skillInventoryNote = recordedLiteralSkillInvocationCount
+    ? `${formatCount(recordedLiteralSkillInvocationCount, 'literal skill-invocation event')} ${recordedLiteralSkillInvocationCount === 1 ? 'was' : 'were'} recorded; inferred tags are shown separately from document reads.`
+    : 'No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.'
 
   return <div className="skill-inventory" aria-label="Skill evidence summary">
     <div className="skill-inventory-heading">
@@ -89,20 +112,20 @@ function SkillInventory({ events }) {
       <span className="record-count">from tool trace</span>
     </div>
     <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Skill documents actually read</span><strong>{formatCount(skillReadCount, 'read')} · {formatCount(skillReadCounts.length, 'unique skill doc')}</strong></div>{skillReadCounts.length ? <div className="skill-inventory-list">{skillReadCounts.map(([skill, count]) => <span className="skill-inventory-item" key={`read-${skill}`}><span>skill / {skill}</span><strong>{count.toLocaleString()}</strong></span>)}</div> : <p className="skill-inventory-empty">No SKILL.md file read was recorded.</p>}</div>
-    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Inferred tags attached to operations</span><strong>{formatCount(inferredTagCount, 'tag occurrence')} · {formatCount(skillCounts.length, 'label')}</strong></div>{skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, count]) => <span className="skill-inventory-item inferred" key={`tag-${skill}`}><span>inferred / {skill}</span><strong>{count.toLocaleString()}</strong></span>)}</div> : null}</div>
-    <p className="skill-inventory-note">No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.</p>
+    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Inferred tags attached to operations</span><strong>{formatCount(inferredTagCount, 'tag occurrence')} · {formatCount(skillCounts.length, 'label')}</strong></div>{skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, value]) => <span className="skill-inventory-item inferred" key={`tag-${skill}`}><span>inferred / {value.name}</span><strong>{value.count.toLocaleString()}</strong></span>)}</div> : null}</div>
+    <p className="skill-inventory-note">{skillInventoryNote}</p>
   </div>
 }
 
 function InstructionInventory({ events }) {
   const sources = useMemo(() => {
     const counts = new Map()
-    events.forEach((event) => (event.files || []).forEach((file) => {
-      if (!instructionFilePattern.test(file)) return
-      const path = normalizePath(file)
+    events.forEach((event) => getFileOperations(event).forEach((record) => {
+      if (!instructionFilePattern.test(record.path)) return
+      const path = normalizePath(record.path)
       const current = counts.get(path) || { references: 0, reads: 0 }
       current.references += 1
-      if (event.action === 'read') current.reads += 1
+      if (isReadFileOperation(record)) current.reads += 1
       counts.set(path, current)
     }))
     return [...counts.entries()].sort(([, left], [, right]) => right.reads - left.reads || right.references - left.references)
@@ -187,7 +210,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
       <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
-    <SkillInventory events={events} />
+    <SkillInventory events={events} literalSkillInvocationCount={viewModel.skillInvocations?.length || 0} />
     <InstructionInventory events={events} />
     <div className="context-inventory" aria-label="Prompt and context summary">
       <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>

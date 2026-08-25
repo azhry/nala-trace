@@ -167,6 +167,25 @@ function normalizeFileOperation(item = {}) {
   }
 }
 
+export function getFileOperations(event = {}) {
+  if (Array.isArray(event.fileRecords) && event.fileRecords.length) return event.fileRecords
+
+  return (Array.isArray(event.files) ? event.files : []).map((path) => ({
+    path,
+    operation: cleanString(event.action).toLowerCase() || 'ambiguous',
+  }))
+}
+
+export function isReadFileOperation(record = {}) {
+  return cleanString(record.operation ?? record.action).toLowerCase() === 'read'
+}
+
+export function skillNameFromFilePath(file) {
+  const path = cleanString(file).replaceAll('\\', '/')
+  const match = path.match(/(?:^|\/)\.agents\/skills\/([^/]+)(?:\/|$)/i)
+  return match ? match[1] : ''
+}
+
 function normalizeProvenance(item, raw) {
   const sources = [item, raw]
   const eventName = firstString(sources, ['hook_event_name', 'hookEventName', 'kind'])

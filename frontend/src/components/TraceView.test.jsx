@@ -372,6 +372,85 @@ describe('TraceView API conversation', () => {
     expect(container.querySelector('[data-trace-event-id="tool-0"]')).toHaveClass('is-evidence-selected')
   })
 
+  it('keeps four matching evidence events highlighted and navigates the active match', () => {
+    const trace = {
+      schema_version: '1',
+      timeline: [
+        { id: 'pre-read-1', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:00Z', tool_call_index: 0 },
+        { id: 'pre-read-2', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:01Z', tool_call_index: 1 },
+        { id: 'pre-read-3', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:02Z', tool_call_index: 2 },
+        { id: 'pre-read-4', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:03Z', tool_call_index: 3 },
+      ],
+      tool_calls: [
+        { tool_name: 'shell_command', input: { command: 'read frontend workflow once' } },
+        { tool_name: 'shell_command', input: { command: 'read frontend workflow twice' } },
+        { tool_name: 'shell_command', input: { command: 'read frontend workflow three times' } },
+        { tool_name: 'shell_command', input: { command: 'read frontend workflow four times' } },
+      ],
+      files: [
+        { path: '.agents/workflows/frontend.md', operation: 'read', event_id: 'pre-read-1' },
+        { path: '.agents/workflows/frontend.md', operation: 'read', event_id: 'pre-read-2' },
+        { path: '.agents/workflows/frontend.md', operation: 'read', event_id: 'pre-read-3' },
+        { path: '.agents/workflows/frontend.md', operation: 'read', event_id: 'pre-read-4' },
+      ],
+    }
+    const { container } = render(<TraceView session={trace} />)
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+    const scrollIntoView = vi.fn()
+    HTMLElement.prototype.scrollIntoView = scrollIntoView
+
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Locate captured instruction source .agents/workflows/frontend.md in the trace' }))
+
+      expect(screen.getByText('Match 1 of 4')).toBeInTheDocument()
+      expect(container.querySelectorAll('[data-trace-event-selected="true"]')).toHaveLength(4)
+      const firstMatch = container.querySelector('[data-trace-event-id="tool-0"]')
+      const secondMatch = container.querySelector('[data-trace-event-id="tool-1"]')
+      const thirdMatch = container.querySelector('[data-trace-event-id="tool-2"]')
+      const fourthMatch = container.querySelector('[data-trace-event-id="tool-3"]')
+      expect(firstMatch).toHaveAttribute('data-trace-event-active', 'true')
+      expect(secondMatch).toHaveAttribute('data-trace-event-selected', 'true')
+      expect(thirdMatch).toHaveAttribute('data-trace-event-selected', 'true')
+      expect(fourthMatch).toHaveAttribute('data-trace-event-selected', 'true')
+      expect(document.activeElement).toBe(firstMatch)
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+      expect(screen.getByRole('button', { name: 'Previous matching event' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Next matching event' })).toBeEnabled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next matching event' }))
+
+      expect(screen.getByText('Match 2 of 4')).toBeInTheDocument()
+      expect(firstMatch).toHaveAttribute('data-trace-event-selected', 'true')
+      expect(firstMatch).toHaveAttribute('data-trace-event-active', 'false')
+      expect(secondMatch).toHaveAttribute('data-trace-event-active', 'true')
+      expect(document.activeElement).toBe(secondMatch)
+      expect(scrollIntoView).toHaveBeenCalledTimes(2)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next matching event' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Next matching event' }))
+
+      expect(screen.getByText('Match 4 of 4')).toBeInTheDocument()
+      expect(thirdMatch).toHaveAttribute('data-trace-event-selected', 'true')
+      expect(thirdMatch).toHaveAttribute('data-trace-event-active', 'false')
+      expect(fourthMatch).toHaveAttribute('data-trace-event-active', 'true')
+      expect(document.activeElement).toBe(fourthMatch)
+      expect(scrollIntoView).toHaveBeenCalledTimes(4)
+      expect(screen.getByRole('button', { name: 'Next matching event' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Previous matching event' })).toBeEnabled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Previous matching event' }))
+
+      expect(screen.getByText('Match 3 of 4')).toBeInTheDocument()
+      expect(thirdMatch).toHaveAttribute('data-trace-event-active', 'true')
+      expect(fourthMatch).toHaveAttribute('data-trace-event-selected', 'true')
+      expect(document.activeElement).toBe(thirdMatch)
+      expect(scrollIntoView).toHaveBeenCalledTimes(5)
+    } finally {
+      if (originalScrollIntoView) HTMLElement.prototype.scrollIntoView = originalScrollIntoView
+      else delete HTMLElement.prototype.scrollIntoView
+    }
+  })
+
   it('infers a skill label from a read of any file inside a skill directory', () => {
     const trace = {
       schema_version: '1',

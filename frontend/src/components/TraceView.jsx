@@ -51,12 +51,12 @@ function SkillTags({ skills = [] }) {
   return <span className="message-tags">{skills.map((skill) => <span className="message-tag" key={skill}>inferred / {skill}</span>)}</span>
 }
 
-function ConversationMessage({ event, selected = false }) {
+function ConversationMessage({ event, selected = false, active = false }) {
   const isUser = event.role === 'user'
   const body = event.hasContent === false ? 'Content not recorded' : event.body
   return <>
     {event.turnBoundary && <div className="turn-boundary" role="separator" aria-label={event.turnLabel}><span>Turn boundary</span><strong>{event.turnLabel}</strong></div>}
-    <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`conversation-message ${isUser ? 'user' : 'assistant'} ${selected ? 'is-evidence-selected' : ''}`}>
+    <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`conversation-message ${isUser ? 'user' : 'assistant'} ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}>
       <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}</div>
       {event.contentIsCode ? <pre className="message-content-code">{body}</pre> : <p>{body}</p>}
       {event.partial && <span className="message-partial">partial evidence</span>}
@@ -65,8 +65,8 @@ function ConversationMessage({ event, selected = false }) {
   </>
 }
 
-function SystemEvent({ event, selected = false }) {
-  return <div id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`system-event ${selected ? 'is-evidence-selected' : ''}`}><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body}</small></span><span className="system-event-line" /></div>
+function SystemEvent({ event, selected = false, active = false }) {
+  return <div id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`system-event ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body}</small></span><span className="system-event-line" /></div>
 }
 
 function InstructionScopeBadge({ scope, compact = false }) {
@@ -80,13 +80,13 @@ function FileTag({ file, onSelect }) {
   return <button type="button" className="context-tag file" aria-label={`Locate captured file ${file} in the trace`} title={`Locate captured file ${file} in the trace`} onClick={() => onSelect(file)}>{content}</button>
 }
 
-function ContextRow({ event, inline = false, selected = false, onFileSelect }) {
+function ContextRow({ event, inline = false, selected = false, active = false, onFileSelect }) {
   const isPrompt = event.contextType !== 'instruction-read'
   const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'agent-reply' ? 'Agent reply' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
   const agentLabel = [event.provenance?.agentType, event.provenance?.agentId].filter(Boolean).join(' · ')
   const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'agent-prompt' || event.contextType === 'agent-reply' ? `Agent${agentLabel ? ` · ${agentLabel}` : ''}` : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label || event.provenance?.eventName || 'Lifecycle event' : event.tool || 'Captured context'
   const recordLabel = event.record || event.provenance?.eventName || 'not recorded'
-  return <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`context-row ${event.contextType} ${inline ? 'inline-context' : ''} ${selected ? 'is-evidence-selected' : ''}`}>
+  return <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`context-row ${event.contextType} ${inline ? 'inline-context' : ''} ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}>
     <div className="context-row-header">
       <div><span className="context-row-kind">{title}</span><strong>{source}</strong><small>record {recordLabel} · {event.time}</small></div>
       <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} inferred tags</span>
@@ -191,15 +191,26 @@ function InstructionInventory({ fileRecords = EMPTY_EVENTS, onEvidenceSelect, se
   </div>
 }
 
-function EvidenceSelectionNotice({ selection, onClear }) {
+function EvidenceSelectionNotice({ selection, onClear, onPrevious, onNext }) {
   if (!selection) return null
-  const matchedMessage = selection.eventIds.length
+  const matchCount = selection.eventIds.length
+  const activeMatchIndex = matchCount ? Math.min(selection.activeMatchIndex ?? 0, matchCount - 1) : -1
+  const matchedMessage = matchCount
     ? `${selection.eventIds.length} matching timeline event${selection.eventIds.length === 1 ? '' : 's'} selected.`
     : 'No matching timeline event was found.'
   const unmatchedMessage = selection.unmatchedRecordCount
     ? ` ${selection.unmatchedRecordCount} captured record${selection.unmatchedRecordCount === 1 ? '' : 's'} ${selection.unmatchedRecordCount === 1 ? 'has' : 'have'} no matching timeline event; no event was invented.`
     : ''
-  return <div className="evidence-selection-notice" role="status" aria-live="polite"><strong>{selection.label}</strong><span>{matchedMessage}{unmatchedMessage}</span><button type="button" onClick={onClear}>Clear selection</button></div>
+  return <div className="evidence-selection-notice" role="status" aria-live="polite">
+    <strong>{selection.label}</strong>
+    <span>{matchedMessage}{unmatchedMessage}</span>
+    {matchCount > 0 && <div className="evidence-match-navigation" role="group" aria-label="Evidence match navigation">
+      <span aria-live="polite">Match {activeMatchIndex + 1} of {matchCount}</span>
+      <button type="button" className="evidence-match-control" aria-label="Previous matching event" title="Previous matching event" disabled={activeMatchIndex <= 0} onClick={onPrevious}>Previous</button>
+      <button type="button" className="evidence-match-control" aria-label="Next matching event" title="Next matching event" disabled={activeMatchIndex >= matchCount - 1} onClick={onNext}>Next</button>
+    </div>}
+    <button type="button" className="evidence-clear" onClick={onClear}>Clear selection</button>
+  </div>
 }
 
 function TraceStatePanel({ state, onRetry }) {
@@ -259,7 +270,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
     const matchingEvents = events.filter((event) => records.some((record) => eventMatchesEvidence(event, record)))
     const eventIds = [...new Set(matchingEvents.map((event) => event.id).filter(Boolean))]
     const matchedRecordCount = records.filter((record) => matchingEvents.some((event) => eventMatchesEvidence(event, record))).length
-    setSelection({ key, label, eventIds, unmatchedRecordCount: records.length - matchedRecordCount })
+    setSelection({ key, label, eventIds, activeMatchIndex: 0, unmatchedRecordCount: records.length - matchedRecordCount })
     setFilter('all')
   }
   const selectFile = (file) => selectEvidence({
@@ -267,10 +278,20 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
     label: `file / ${file}`,
     records: inventoryFiles.filter((record) => evidencePath(record.path) === evidencePath(file)),
   })
+  const moveToMatch = (offset) => {
+    setSelection((current) => {
+      if (!current?.eventIds.length) return current
+      const currentIndex = current.activeMatchIndex ?? 0
+      const activeMatchIndex = Math.max(0, Math.min(currentIndex + offset, current.eventIds.length - 1))
+      return { ...current, activeMatchIndex }
+    })
+    setFilter('all')
+  }
 
   useEffect(() => {
     if (!selection?.eventIds.length) return
-    const target = document.getElementById(eventAnchorId(selection.eventIds[0]))
+    const activeMatchIndex = Math.min(selection.activeMatchIndex ?? 0, selection.eventIds.length - 1)
+    const target = document.getElementById(eventAnchorId(selection.eventIds[activeMatchIndex]))
     if (target?.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     target?.focus?.({ preventScroll: true })
   }, [selection])
@@ -295,7 +316,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
       <span className="context-inventory-note">Use “Prompts & context” below</span>
     </div>
-    <EvidenceSelectionNotice selection={selection} onClear={() => setSelection(null)} />
+    <EvidenceSelectionNotice selection={selection} onClear={() => setSelection(null)} onPrevious={() => moveToMatch(-1)} onNext={() => moveToMatch(1)} />
     <div className="trace-controls" role="group" aria-label="Filter session detail">
       <span>Show</span>
       {filters.map(([id, label]) => <button key={id} type="button" className={filter === id ? 'is-active' : ''} aria-pressed={filter === id} onClick={() => setFilter(id)}>{label}</button>)}
@@ -306,13 +327,14 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
         {viewModel.partial && <PartialNotice message={viewModel.partialMessage} />}
         {emptyConversation && <TraceStatePanel state="empty" />}
         {(visibleEvents.length > 0 || !emptyConversation) && <div className="stream-intro"><span className="stream-line" /><span>Trace started · {viewModel.startedAt}</span></div>}
-        {visibleEvents.map((event) => event.type === 'context'
-          ? <ContextRow key={event.id} event={event} selected={selection?.eventIds.includes(event.id)} onFileSelect={selectFile} />
-          : event.type === 'tool'
-          ? <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} selected={selection?.eventIds.includes(event.id)} />
-          : event.type === 'system'
-            ? <SystemEvent key={event.id} event={event} selected={selection?.eventIds.includes(event.id)} />
-            : <ConversationMessage key={event.id} event={event} selected={selection?.eventIds.includes(event.id)} />)}
+        {visibleEvents.map((event) => {
+          const selected = selection?.eventIds.includes(event.id) || false
+          const active = selected && selection?.eventIds[selection.activeMatchIndex ?? 0] === event.id
+          if (event.type === 'context') return <ContextRow key={event.id} event={event} selected={selected} active={active} onFileSelect={selectFile} />
+          if (event.type === 'tool') return <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} selected={selected} active={active} />
+          if (event.type === 'system') return <SystemEvent key={event.id} event={event} selected={selected} active={active} />
+          return <ConversationMessage key={event.id} event={event} selected={selected} active={active} />
+        })}
         {visibleEvents.length > 0 && <div className="stream-end"><span>End of captured session · {viewModel.capturedAt}</span><span className="stream-line" /></div>}
       </>}
     </div>

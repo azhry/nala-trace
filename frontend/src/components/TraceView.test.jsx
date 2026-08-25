@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import TraceView from './TraceView'
+
+const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8')
 
 const apiTrace = {
   schema_version: '1',
@@ -467,6 +471,28 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText(/1 matching timeline event selected/)).toBeInTheDocument()
     expect(container.querySelector('[data-trace-event-id="tool-0"]')).toHaveAttribute('data-trace-event-selected', 'true')
     expect(container.querySelector('[data-trace-event-id="tool-0"]')).toHaveClass('is-evidence-selected')
+  })
+
+  it('gives instruction file tags a dark surface instead of a native white button background', () => {
+    const trace = {
+      schema_version: '1',
+      timeline: [
+        { id: 'pre-read', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:00Z', tool_call_index: 0 },
+      ],
+      tool_calls: [
+        { tool_name: 'shell_command', input: { command: 'read frontend workflow' }, output: 'instruction content' },
+      ],
+      files: [
+        { path: '.agents/workflows/frontend.md', operation: 'read', event_id: 'pre-read' },
+      ],
+    }
+
+    render(<TraceView session={trace} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
+
+    const fileTag = screen.getAllByRole('button', { name: 'Locate captured file .agents/workflows/frontend.md in the trace' })[0]
+    expect(fileTag).toHaveClass('context-tag', 'file')
+    expect(styles).toMatch(/button\.context-tag\.file\s*\{[^}]*background:\s*rgba\(34,\s*42,\s*52,\s*\.52\);[^}]*\}/)
   })
 
   it('keeps four matching evidence events highlighted and navigates the active match', () => {

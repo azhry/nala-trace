@@ -254,7 +254,7 @@ func (r *HookEventRepository) ListSessionEventsForUser(ctx context.Context, user
 }
 
 func hookEventFromDocument(document hookEventDocument) HookEvent {
-	return HookEvent{
+	event := HookEvent{
 		ID:            documentID(document.ID),
 		UserID:        document.UserID,
 		SessionID:     document.SessionID,
@@ -265,6 +265,35 @@ func hookEventFromDocument(document hookEventDocument) HookEvent {
 		Payload:       document.Payload,
 		ReceivedAt:    document.ReceivedAt,
 	}
+	if event.HookEventName == "" {
+		event.HookEventName = payloadStringField(document.Payload, "hook_event_name")
+	}
+	if event.ToolName == nil {
+		if toolName := payloadStringField(document.Payload, "tool_name"); toolName != "" {
+			event.ToolName = &toolName
+		}
+	}
+	if event.ToolUseID == nil {
+		if toolUseID := payloadStringField(document.Payload, "tool_use_id"); toolUseID != "" {
+			event.ToolUseID = &toolUseID
+		}
+	}
+	return event
+}
+
+func payloadStringField(payload bson.Raw, field string) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var document bson.M
+	if err := bson.Unmarshal(payload, &document); err != nil {
+		return ""
+	}
+	value, ok := document[field].(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
 }
 
 func documentID(value any) string {

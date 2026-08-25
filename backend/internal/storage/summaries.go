@@ -75,7 +75,10 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 }
 
 func preToolUseExpression() bson.D {
-	return bson.D{{Key: "$eq", Value: bson.A{"$hook_event_name", "PreToolUse"}}}
+	return bson.D{{Key: "$or", Value: bson.A{
+		fieldEqualsExpression("$hook_event_name", "PreToolUse"),
+		fieldEqualsExpression("$payload.hook_event_name", "PreToolUse"),
+	}}}
 }
 
 func andExpression(expressions ...bson.D) bson.D {
@@ -89,6 +92,7 @@ func andExpression(expressions ...bson.D) bson.D {
 func skillSignalExpression() bson.D {
 	return bson.D{{Key: "$or", Value: bson.A{
 		regexFieldExpression("$tool_name", "skill"),
+		regexFieldExpression("$payload.tool_name", "skill"),
 		nonEmptyStringExpression("$payload.skill"),
 		nonEmptyStringExpression("$payload.skill_name"),
 		nonEmptyStringExpression("$payload.tool_input.skill"),

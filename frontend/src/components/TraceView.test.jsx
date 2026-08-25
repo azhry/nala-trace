@@ -361,4 +361,25 @@ describe('TraceView API conversation', () => {
 
     expect(screen.getByText('1 literal skill-invocation event was recorded; inferred tags are shown separately from document reads.')).toBeInTheDocument()
   })
+
+  it('counts session-level file evidence when its event ID is not projected onto the timeline', () => {
+    const trace = {
+      schema_version: '1',
+      timeline: [
+        { id: 'different-event', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:00Z', tool_call_index: 0 },
+      ],
+      tool_calls: [{ tool_name: 'shell_command', input: { command: 'unmatched event' } }],
+      skill_invocations: [],
+      files: [
+        { path: '.agents/skills/frontend-design/SKILL.md', operation: 'read', event_id: 'missing-event' },
+        { path: '.agents/workflows/frontend.md', operation: 'read', event_id: 'missing-event' },
+      ],
+    }
+
+    render(<TraceView session={trace} />)
+
+    expect(screen.getByText(/1 SKILL\.md read across 1 unique skill document · 1 inferred tag occurrence across 1 inferred label/)).toBeInTheDocument()
+    expect(screen.getByText(/2 read records · 2 unique instruction sources/)).toBeInTheDocument()
+    expect(screen.getByText('inferred / frontend-design')).toBeInTheDocument()
+  })
 })

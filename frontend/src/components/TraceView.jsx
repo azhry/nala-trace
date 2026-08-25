@@ -64,7 +64,7 @@ function ContextRow({ event, inline = false }) {
   </article>
 }
 
-function SkillInventory({ events, literalSkillInvocationCount = 0 }) {
+function SkillInventory({ events, fileRecords = EMPTY_EVENTS, literalSkillInvocationCount = 0 }) {
   const skillCounts = useMemo(() => {
     const counts = new Map()
     const addSkill = (skill) => {
@@ -81,23 +81,23 @@ function SkillInventory({ events, literalSkillInvocationCount = 0 }) {
         ? event.skillRecords.filter((record) => record.confidence !== 'explicit')
         : (event.skills || []).map((name) => ({ name }))
       skillRecords.forEach((record) => addSkill(record.name))
-      getFileOperations(event).forEach((record) => {
-        if (isReadFileOperation(record)) addSkill(skillNameFromFilePath(record.path))
-      })
+    })
+    fileRecords.forEach((record) => {
+      if (isReadFileOperation(record)) addSkill(skillNameFromFilePath(record.path))
     })
 
     return [...counts.entries()].sort(([, left], [, right]) => right.count - left.count)
-  }, [events])
+  }, [events, fileRecords])
   const skillReadCounts = useMemo(() => {
     const counts = new Map()
-    events.forEach((event) => getFileOperations(event).forEach((record) => {
+    fileRecords.forEach((record) => {
       if (!isReadFileOperation(record)) return
       const normalized = normalizePath(record.path)
       const match = normalized.match(/\.agents\/skills\/([^/]+)\/SKILL\.md$/i)
       if (match) counts.set(match[1], (counts.get(match[1]) || 0) + 1)
-    }))
+    })
     return [...counts.entries()].sort(([, left], [, right]) => right - left)
-  }, [events])
+  }, [fileRecords])
   const inferredTagCount = skillCounts.reduce((total, [, value]) => total + value.count, 0)
   const skillReadCount = skillReadCounts.reduce((total, [, count]) => total + count, 0)
   const formatCount = (count, singular, plural = `${singular}s`) => `${count.toLocaleString()} ${count === 1 ? singular : plural}`
@@ -117,19 +117,19 @@ function SkillInventory({ events, literalSkillInvocationCount = 0 }) {
   </div>
 }
 
-function InstructionInventory({ events }) {
+function InstructionInventory({ fileRecords = EMPTY_EVENTS }) {
   const sources = useMemo(() => {
     const counts = new Map()
-    events.forEach((event) => getFileOperations(event).forEach((record) => {
+    fileRecords.forEach((record) => {
       if (!instructionFilePattern.test(record.path)) return
       const path = normalizePath(record.path)
       const current = counts.get(path) || { references: 0, reads: 0 }
       current.references += 1
       if (isReadFileOperation(record)) current.reads += 1
       counts.set(path, current)
-    }))
+    })
     return [...counts.entries()].sort(([, left], [, right]) => right.reads - left.reads || right.references - left.references)
-  }, [events])
+  }, [fileRecords])
   const readRecords = sources.reduce((total, [, count]) => total + count.reads, 0)
   const scopeCounts = sources.reduce((counts, [path]) => {
     const scope = getInstructionScope(path)
@@ -195,6 +195,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   const isApiTrace = viewModel.source === 'api'
   const emptyConversation = isApiTrace && viewModel.conversation.length === 0
   const contextCounts = contextRows.reduce((counts, event) => ({ ...counts, [event.contextType]: (counts[event.contextType] || 0) + 1 }), {})
+  const inventoryFiles = viewModel.source === 'api' ? viewModel.files : events.flatMap(getFileOperations)
 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
     <div className="panel-header trace-panel-header">
@@ -210,8 +211,8 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
       <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
-    <SkillInventory events={events} literalSkillInvocationCount={viewModel.skillInvocations?.length || 0} />
-    <InstructionInventory events={events} />
+    <SkillInventory events={events} fileRecords={inventoryFiles} literalSkillInvocationCount={viewModel.skillInvocations?.length || 0} />
+    <InstructionInventory fileRecords={inventoryFiles} />
     <div className="context-inventory" aria-label="Prompt and context summary">
       <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
       <span className="context-inventory-note">Use “Prompts & context” below</span>

@@ -289,11 +289,33 @@ func payloadStringField(payload bson.Raw, field string) string {
 	if err := bson.Unmarshal(payload, &document); err != nil {
 		return ""
 	}
-	value, ok := document[field].(string)
-	if !ok {
+	return nestedPayloadStringField(document, field, 0)
+}
+
+func nestedPayloadStringField(document bson.M, field string, depth int) string {
+	if value, ok := document[field].(string); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	if depth >= 3 {
 		return ""
 	}
-	return strings.TrimSpace(value)
+	for _, key := range []string{"payload", "raw", "data", "event"} {
+		nested, ok := document[key]
+		if !ok {
+			continue
+		}
+		switch value := nested.(type) {
+		case bson.M:
+			if result := nestedPayloadStringField(value, field, depth+1); result != "" {
+				return result
+			}
+		case map[string]any:
+			if result := nestedPayloadStringField(bson.M(value), field, depth+1); result != "" {
+				return result
+			}
+		}
+	}
+	return ""
 }
 
 func documentID(value any) string {

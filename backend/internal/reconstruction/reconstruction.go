@@ -398,11 +398,11 @@ func payloadDocument(payload bson.Raw) map[string]any {
 	if len(payload) == 0 {
 		return nil
 	}
-	var document map[string]any
+	var document bson.M
 	if err := bson.Unmarshal(payload, &document); err != nil {
 		return nil
 	}
-	return document
+	return map[string]any(document)
 }
 
 func documentValue(raw json.RawMessage) map[string]any {
@@ -424,6 +424,10 @@ func documentValue(raw json.RawMessage) map[string]any {
 }
 
 func stringField(document map[string]any, keys ...string) (string, bool) {
+	return nestedStringField(document, keys, 0)
+}
+
+func nestedStringField(document map[string]any, keys []string, depth int) (string, bool) {
 	for actual, raw := range document {
 		for _, key := range keys {
 			if !strings.EqualFold(actual, key) {
@@ -436,7 +440,34 @@ func stringField(document map[string]any, keys ...string) (string, bool) {
 			}
 		}
 	}
+	if depth >= 3 {
+		return "", false
+	}
+	for _, key := range []string{"payload", "raw", "data", "event"} {
+		nested, ok := nestedDocument(document[key])
+		if !ok {
+			continue
+		}
+		if value, ok := nestedStringField(nested, keys, depth+1); ok {
+			return value, true
+		}
+	}
 	return "", false
+}
+
+func nestedDocument(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, true
+	case bson.M:
+		return map[string]any(typed), true
+	case string:
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(typed), &decoded); err == nil && decoded != nil {
+			return decoded, true
+		}
+	}
+	return nil, false
 }
 
 func eventID(event storage.HookEvent, originalIndex int) string {
@@ -505,7 +536,7 @@ func payloadField(payload bson.Raw, field string) json.RawMessage {
 	if err := bson.Unmarshal(payload, &document); err != nil {
 		return nil
 	}
-	value, ok := document[field]
+	value, ok := nestedPayloadField(document, field, 0)
 	if !ok {
 		return nil
 	}
@@ -514,6 +545,39 @@ func payloadField(payload bson.Raw, field string) json.RawMessage {
 		return nil
 	}
 	return json.RawMessage(encoded)
+}
+
+func nestedPayloadField(document bson.M, field string, depth int) (any, bool) {
+	if value, ok := document[field]; ok {
+		return value, true
+	}
+	if depth >= 3 {
+		return nil, false
+	}
+	for _, key := range []string{"payload", "raw", "data", "event"} {
+		nested, ok := document[key]
+		if !ok {
+			continue
+		}
+		switch value := nested.(type) {
+		case bson.M:
+			if result, ok := nestedPayloadField(value, field, depth+1); ok {
+				return result, true
+			}
+		case map[string]any:
+			if result, ok := nestedPayloadField(bson.M(value), field, depth+1); ok {
+				return result, true
+			}
+		case string:
+			var decoded map[string]any
+			if json.Unmarshal([]byte(value), &decoded) == nil && decoded != nil {
+				if result, ok := nestedPayloadField(bson.M(decoded), field, depth+1); ok {
+					return result, true
+				}
+			}
+		}
+	}
+	return nil, false
 }
 
 func value(pointer *string) string {

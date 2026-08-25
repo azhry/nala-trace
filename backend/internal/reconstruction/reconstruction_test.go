@@ -177,6 +177,40 @@ func TestReconstructDetectsMultipleShellReadPaths(t *testing.T) {
 	}
 }
 
+func TestReconstructDetectsSignalsInsideNestedRawPayload(t *testing.T) {
+	payload, err := bson.Marshal(bson.M{
+		"payload": bson.M{
+			"hook_event_name": "PreToolUse",
+			"tool_name":       "skill",
+			"tool_use_id":     "skill-1",
+			"tool_input": bson.M{
+				"skill_name": "frontend-design",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal nested payload: %v", err)
+	}
+
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{{
+		ID:            "nested-skill",
+		UserID:        "user-1",
+		SessionID:     "session-1",
+		HookEventName: "PreToolUse",
+		ToolName:      stringPointer("skill"),
+		ToolUseID:     stringPointer("skill-1"),
+		Payload:       bson.Raw(payload),
+		ReceivedAt:    time.Unix(80, 0).UTC(),
+	}})
+
+	if len(result.SkillInvocations) != 1 || result.SkillInvocations[0].Name != "frontend-design" {
+		t.Fatalf("nested skill invocations = %#v", result.SkillInvocations)
+	}
+	if result.Summary.SkillInvocationCount != 1 {
+		t.Fatalf("nested summary = %#v", result.Summary)
+	}
+}
+
 func TestReconstructExtractsAllowlistedRuntimeMetadataAndFileReads(t *testing.T) {
 	base := time.Unix(60, 0).UTC()
 	result := Reconstruct("session-1", "user-1", []storage.HookEvent{

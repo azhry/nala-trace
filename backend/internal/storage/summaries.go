@@ -75,10 +75,7 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 }
 
 func preToolUseExpression() bson.D {
-	return bson.D{{Key: "$or", Value: bson.A{
-		fieldEqualsExpression("$hook_event_name", "PreToolUse"),
-		fieldEqualsExpression("$payload.hook_event_name", "PreToolUse"),
-	}}}
+	return anyFieldEqualsExpression(append([]string{"$hook_event_name"}, payloadFieldPaths("hook_event_name")...), "PreToolUse")
 }
 
 func andExpression(expressions ...bson.D) bson.D {
@@ -91,36 +88,69 @@ func andExpression(expressions ...bson.D) bson.D {
 
 func skillSignalExpression() bson.D {
 	return bson.D{{Key: "$or", Value: bson.A{
-		regexFieldExpression("$tool_name", "skill"),
-		regexFieldExpression("$payload.tool_name", "skill"),
-		nonEmptyStringExpression("$payload.skill"),
-		nonEmptyStringExpression("$payload.skill_name"),
-		nonEmptyStringExpression("$payload.tool_input.skill"),
-		nonEmptyStringExpression("$payload.tool_input.skill_name"),
+		anyRegexFieldExpression(append([]string{"$tool_name"}, payloadFieldPaths("tool_name")...), "skill"),
+		anyNonEmptyStringExpression(payloadFieldPaths("skill")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("skill_name")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.skill")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.skill_name")...),
 	}}}
 }
 
 func fileSignalExpression() bson.D {
 	return bson.D{{Key: "$or", Value: bson.A{
-		nonEmptyStringExpression("$payload.tool_input.file_path"),
-		nonEmptyStringExpression("$payload.tool_input.path"),
-		nonEmptyStringExpression("$payload.tool_input.target_file"),
-		nonEmptyStringExpression("$payload.tool_input.filename"),
-		nonEmptyStringExpression("$payload.tool_input.file"),
-		nonEmptyStringExpression("$payload.tool_input.old_path"),
-		nonEmptyStringExpression("$payload.tool_input.new_path"),
-		regexFieldExpression("$payload.tool_input", `\*\*\* (Add|Update|Delete|Move to) File:`),
-		regexFieldExpression("$payload.tool_input.command", `(^|\s)(cat|head|tail|type|get-content|read|set-content|out-file|tee|remove-item|rm|del|delete)(\s|$)`),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.file_path")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.path")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.target_file")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.filename")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.file")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.old_path")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.new_path")...),
+		anyRegexFieldExpression(payloadFieldPaths("tool_input"), `\*\*\* (Add|Update|Delete|Move to) File:`),
+		anyRegexFieldExpression(payloadFieldPaths("tool_input.command"), `(^|\s)(cat|head|tail|type|get-content|read|set-content|out-file|tee|remove-item|rm|del|delete)(\s|$)`),
 	}}}
 }
 
 func fileReadSignalExpression() bson.D {
 	return bson.D{{Key: "$or", Value: bson.A{
-		fieldEqualsExpression("$payload.tool_input.operation", "read"),
-		fieldEqualsExpression("$payload.tool_input.action", "read"),
-		regexFieldExpression("$tool_name", `(read|cat|get-content|open)`),
-		regexFieldExpression("$payload.tool_input.command", `(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`),
+		anyFieldEqualsExpression(payloadFieldPaths("tool_input.operation"), "read"),
+		anyFieldEqualsExpression(payloadFieldPaths("tool_input.action"), "read"),
+		anyRegexFieldExpression(append([]string{"$tool_name"}, payloadFieldPaths("tool_name")...), `(read|cat|get-content|open)`),
+		anyRegexFieldExpression(payloadFieldPaths("tool_input.command"), `(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`),
 	}}}
+}
+
+func payloadFieldPaths(field string) []string {
+	return []string{
+		"$payload." + field,
+		"$payload.payload." + field,
+		"$payload.raw." + field,
+		"$payload.data." + field,
+		"$payload.event." + field,
+	}
+}
+
+func anyNonEmptyStringExpression(paths ...string) bson.D {
+	values := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		values = append(values, nonEmptyStringExpression(path))
+	}
+	return bson.D{{Key: "$or", Value: values}}
+}
+
+func anyFieldEqualsExpression(paths []string, want string) bson.D {
+	values := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		values = append(values, fieldEqualsExpression(path, want))
+	}
+	return bson.D{{Key: "$or", Value: values}}
+}
+
+func anyRegexFieldExpression(paths []string, regex string) bson.D {
+	values := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		values = append(values, regexFieldExpression(path, regex))
+	}
+	return bson.D{{Key: "$or", Value: values}}
 }
 
 func nonEmptyStringExpression(path string) bson.D {

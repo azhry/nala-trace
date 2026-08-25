@@ -71,6 +71,18 @@ describe('session summary adapter', () => {
     expect(summaries.map(({ title }) => title)).toEqual(['blank-title', 'non-string-title'])
   })
 
+  it('keeps captured skill signals when a legacy summary omits the canonical counter', () => {
+    const [arraySummary, numericSummary] = normalizeSessionSummaries({
+      sessions: [
+        { session_id: 'array-skills', skill_invocations: [{ name: 'linear' }, { name: 'diagnose' }] },
+        { session_id: 'numeric-skills', skill_invocation_count: 0, skills: 5 },
+      ],
+    })
+
+    expect(arraySummary.skillInvocationCount).toBe(2)
+    expect(numericSummary.skillInvocationCount).toBe(5)
+  })
+
   it('sorts by recency and keeps metric ties deterministic', () => {
     const summaries = normalizeSessionSummaries(payload)
 

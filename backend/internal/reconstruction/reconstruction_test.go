@@ -151,6 +151,32 @@ func TestReconstructDetectsApplyPatchShellFileSkillAndAmbiguousPayloads(t *testi
 	}
 }
 
+func TestReconstructDetectsMultipleShellReadPaths(t *testing.T) {
+	base := time.Unix(25, 0).UTC()
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEventWithTool("multi-read", "PreToolUse", "turn-1", "shell_command", base, map[string]any{
+			"tool_input": map[string]any{
+				"command": "Get-Content -LiteralPath '.agents/skills/linear/SKILL.md'; Get-Content -LiteralPath 'C:\\Users\\Lyrid\\.agents\\skills\\diagnose\\SKILL.md'",
+			},
+		}),
+	})
+
+	if len(result.Files) != 2 {
+		t.Fatalf("file operation count = %d, want 2: %#v", len(result.Files), result.Files)
+	}
+	for index, want := range []string{
+		".agents/skills/linear/SKILL.md",
+		"C:\\Users\\Lyrid\\.agents\\skills\\diagnose\\SKILL.md",
+	} {
+		if result.Files[index].Path != want || result.Files[index].Operation != "read" || result.Files[index].Confidence != confidenceInferred {
+			t.Errorf("file operation[%d] = %#v, want read %q", index, result.Files[index], want)
+		}
+	}
+	if result.Summary.FileReadCount != 2 {
+		t.Fatalf("file read count = %d, want 2", result.Summary.FileReadCount)
+	}
+}
+
 func TestReconstructExtractsAllowlistedRuntimeMetadataAndFileReads(t *testing.T) {
 	base := time.Unix(60, 0).UTC()
 	result := Reconstruct("session-1", "user-1", []storage.HookEvent{

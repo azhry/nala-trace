@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
-import { getFileOperations, isReadFileOperation, normalizeTraceViewModel, skillNameFromFilePath } from '../traceViewModel'
+import { getFileOperations, isReadFileOperation, isSkillDocumentPath, normalizeTraceViewModel, skillNameFromFilePath } from '../traceViewModel'
 
 const filters = [
   ['all', 'Everything'],
@@ -24,7 +24,7 @@ function sameFileOperation(left, right) {
 }
 
 function isSkillDocumentRead(record) {
-  return isReadFileOperation(record) && /\.agents\/skills\/[^/]+\/SKILL\.md$/i.test(normalizePath(record.path))
+  return isReadFileOperation(record) && isSkillDocumentPath(record.path)
 }
 
 function skillDocumentRecords(fileRecords, skill) {
@@ -129,9 +129,9 @@ function SkillInventory({ events, fileRecords = EMPTY_EVENTS, literalSkillInvoca
     const counts = new Map()
     fileRecords.forEach((record) => {
       if (!isReadFileOperation(record)) return
-      const normalized = normalizePath(record.path)
-      const match = normalized.match(/\.agents\/skills\/([^/]+)\/SKILL\.md$/i)
-      if (match) counts.set(match[1], (counts.get(match[1]) || 0) + 1)
+      if (!isSkillDocumentPath(record.path)) return
+      const skill = skillNameFromFilePath(record.path)
+      if (skill) counts.set(skill, (counts.get(skill) || 0) + 1)
     })
     return [...counts.entries()].sort(([, left], [, right]) => right - left)
   }, [fileRecords])

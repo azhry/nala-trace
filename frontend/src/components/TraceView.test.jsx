@@ -328,6 +328,28 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText('No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
   })
 
+  it('counts skill documents across normalized, user-level, and plugin skill paths', () => {
+    const trace = {
+      schema_version: '1',
+      timeline: [],
+      tool_calls: [],
+      skill_invocations: [],
+      files: [
+        { path: '.agents//skills//linear//SKILL.md', operation: 'read' },
+        { path: 'C:\\Users\\Lyrid\\.agents\\skills\\diagnose\\SKILL.md', operation: 'read' },
+        { path: '.codex/plugins/cache/browser/skills/control-in-app-browser/SKILL.md', operation: 'read' },
+        { path: '.agents/skills/other/SKILL.md', operation: 'write' },
+      ],
+    }
+
+    render(<TraceView session={trace} />)
+
+    expect(screen.getByText(/3 SKILL\.md reads across 3 unique skill documents · 3 inferred tag occurrences across 3 inferred labels/)).toBeInTheDocument()
+    expect(screen.getByText('skill / linear')).toBeInTheDocument()
+    expect(screen.getByText('skill / diagnose')).toBeInTheDocument()
+    expect(screen.getByText('skill / control-in-app-browser')).toBeInTheDocument()
+  })
+
   it('locates a referenced instruction source in its captured timeline event', () => {
     const trace = {
       schema_version: '1',

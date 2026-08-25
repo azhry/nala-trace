@@ -216,7 +216,7 @@ var (
 	shellReadPattern      = regexp.MustCompile(`(?i)(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`)
 	shellWritePattern     = regexp.MustCompile(`(?i)(set-content|out-file|tee\b|>>?\s*)`)
 	shellDeletePattern    = regexp.MustCompile(`(?i)(remove-item|\brm\b|\bdel\b|\bdelete\b)`)
-	commandPathPattern    = regexp.MustCompile(`(?i)(?:-literalpath|-filepath|-path|>\s*|>>\s*)\s*["']?([^"'\s]+)|^\s*(?:cat|head|tail|type|get-content|read)\s+["']?([^"'\s]+)`)
+	commandPathPattern    = regexp.MustCompile(`(?i)(?:-literalpath|-filepath|-path|>\s*|>>\s*)\s*(?:"([^"]+)"|'([^']+)'|([^"'\s;&|]+))|(?:^|[;&|])\s*(?:cat|head|tail|type|get-content|read)\s+(?:"([^"]+)"|'([^']+)'|([^"'\s;&|-][^"'\s;&|]*))`)
 )
 
 func detectSkillInvocation(event storage.HookEvent, eventID string, raw json.RawMessage) (trace.SkillInvocation, bool) {
@@ -292,11 +292,25 @@ func detectFileOperations(event storage.HookEvent, eventID string, raw json.RawM
 	paths := filePaths(input)
 	command, hasCommand := stringField(input, "command", "cmd", "script")
 	if len(paths) == 0 && hasCommand {
-		if match := commandPathPattern.FindStringSubmatch(command); match != nil {
-			path := match[1]
-			if path == "" {
-				path = match[2]
+		seen := make(map[string]struct{}, len(paths))
+		for _, path := range paths {
+			seen[path] = struct{}{}
+		}
+		for _, match := range commandPathPattern.FindAllStringSubmatch(command, -1) {
+			path := ""
+			for _, candidate := range match[1:] {
+				if candidate != "" {
+					path = candidate
+					break
+				}
 			}
+			if path == "" {
+				continue
+			}
+			if _, exists := seen[path]; exists {
+				continue
+			}
+			seen[path] = struct{}{}
 			paths = append(paths, path)
 		}
 	}

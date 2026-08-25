@@ -181,9 +181,14 @@ export function isReadFileOperation(record = {}) {
 }
 
 export function skillNameFromFilePath(file) {
-  const path = cleanString(file).replaceAll('\\', '/')
-  const match = path.match(/(?:^|\/)\.agents\/skills\/([^/]+)(?:\/|$)/i)
+  const path = cleanString(file).replaceAll('\\', '/').replace(/\/+/g, '/')
+  const match = path.match(/(?:^|\/)skills\/(?:\.system\/)?([^/]+)(?:\/|$)/i)
   return match ? match[1] : ''
+}
+
+export function isSkillDocumentPath(file) {
+  const path = cleanString(file).replaceAll('\\', '/').replace(/\/+/g, '/')
+  return /(?:^|\/)skills\/(?:\.system\/)?[^/]+\/SKILL\.md$/i.test(path)
 }
 
 function normalizeProvenance(item, raw) {

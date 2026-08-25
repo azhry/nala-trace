@@ -140,10 +140,9 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 			}
 		}
 		if event.HookEventName == "PreToolUse" && payloadSafe {
-			if invocation, ok := detectSkillInvocation(event, timelineID, raw); ok {
-				result.SkillInvocations = append(result.SkillInvocations, invocation)
-			}
-			result.Files = append(result.Files, detectFileOperations(event, timelineID, raw)...)
+			files := detectFileOperations(event, timelineID, raw)
+			result.Files = append(result.Files, files...)
+			result.SkillInvocations = append(result.SkillInvocations, detectSkillInvocations(event, timelineID, raw, files)...)
 		}
 		if reason != "" {
 			kind = "partial"
@@ -236,31 +235,125 @@ const (
 )
 
 var (
-	applyPatchFilePattern = regexp.MustCompile(`(?mi)^\*\*\* (Add|Update|Delete|Move to) File:\s*(.+?)\s*$`)
-	shellReadPattern      = regexp.MustCompile(`(?i)(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`)
-	shellWritePattern     = regexp.MustCompile(`(?i)(set-content|out-file|tee\b|>>?\s*)`)
-	shellDeletePattern    = regexp.MustCompile(`(?i)(remove-item|\brm\b|\bdel\b|\bdelete\b)`)
-	commandPathPattern    = regexp.MustCompile(`(?i)(?:-literalpath|-filepath|-path|>\s*|>>\s*)\s*(?:"([^"]+)"|'([^']+)'|([^"'\s;&|]+))|(?:^|[;&|])\s*(?:cat|head|tail|type|get-content|read)\s+(?:"([^"]+)"|'([^']+)'|([^"'\s;&|-][^"'\s;&|]*))`)
+	applyPatchFilePattern    = regexp.MustCompile(`(?mi)^\*\*\* (Add|Update|Delete|Move to) File:\s*(.+?)\s*$`)
+	shellReadPattern         = regexp.MustCompile(`(?i)(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`)
+	shellWritePattern        = regexp.MustCompile(`(?i)(set-content|out-file|tee\b|>>?\s*)`)
+	shellDeletePattern       = regexp.MustCompile(`(?i)(remove-item|\brm\b|\bdel\b|\bdelete\b)`)
+	commandPathPattern       = regexp.MustCompile(`(?i)(?:-literalpath|-filepath|-path|>\s*|>>\s*)\s*(?:"([^"]+)"|'([^']+)'|([^"'\s;&|]+))|(?:^|[;&|])\s*(?:cat|head|tail|type|get-content|read)\s+(?:"([^"]+)"|'([^']+)'|([^"'\s;&|-][^"'\s;&|]*))`)
+	skillDocumentPathPattern = regexp.MustCompile(`(?i)(?:^|/)skills/(?:\.system/)?([^/]+)/SKILL\.md$`)
 )
 
-func detectSkillInvocation(event storage.HookEvent, eventID string, raw json.RawMessage) (trace.SkillInvocation, bool) {
+func detectSkillInvocations(event storage.HookEvent, eventID string, raw json.RawMessage, files []trace.FileOperation) []trace.SkillInvocation {
 	input := toolInputDocument(event.Payload)
 	payload := payloadDocument(event.Payload)
 	toolName := toolNameForEvent(event, raw)
 	if name, ok := stringField(input, "skill_name", "skill"); ok {
-		return newSkillInvocation(name, event, eventID, raw, confidenceExplicit), true
+		return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceExplicit)}
 	}
 	if name, ok := stringField(payload, "skill_name", "skill"); ok {
-		return newSkillInvocation(name, event, eventID, raw, confidenceExplicit), true
+		return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceExplicit)}
 	}
-	if !strings.Contains(strings.ToLower(toolName), "skill") {
-		return trace.SkillInvocation{}, false
+	if names := skillNames(input, payload); len(names) > 0 {
+		invocations := make([]trace.SkillInvocation, 0, len(names))
+		for _, name := range names {
+			invocations = append(invocations, newSkillInvocation(name, event, eventID, raw, confidenceExplicit))
+		}
+		return invocations
 	}
-	if name, ok := stringField(input, "name"); ok {
-		return newSkillInvocation(name, event, eventID, raw, confidenceInferred), true
+	if strings.Contains(strings.ToLower(toolName), "skill") {
+		if name, ok := stringField(input, "name"); ok {
+			return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceInferred)}
+		}
+		name := skillNameFromToolName(toolName)
+		return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceAmbiguous)}
 	}
-	name := skillNameFromToolName(toolName)
-	return newSkillInvocation(name, event, eventID, raw, confidenceAmbiguous), true
+
+	invocations := make([]trace.SkillInvocation, 0)
+	for _, file := range files {
+		if file.Operation != "read" {
+			continue
+		}
+		if name, ok := skillNameFromFilePath(file.Path); ok {
+			invocations = append(invocations, newSkillInvocation(name, event, eventID, raw, confidenceInferred))
+		}
+	}
+	return invocations
+}
+
+func skillNames(documents ...map[string]any) []string {
+	names := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, document := range documents {
+		for _, name := range stringSliceField(document, "skills") {
+			key := strings.ToLower(name)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func stringSliceField(document map[string]any, keys ...string) []string {
+	return stringSliceFieldAtDepth(document, keys, 0)
+}
+
+func stringSliceFieldAtDepth(document map[string]any, keys []string, depth int) []string {
+	values := make([]string, 0)
+	if document == nil || depth >= 4 {
+		return values
+	}
+	for actual, raw := range document {
+		matched := false
+		for _, key := range keys {
+			if strings.EqualFold(actual, key) {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			switch typed := raw.(type) {
+			case []any:
+				for _, item := range typed {
+					if name, ok := item.(string); ok && strings.TrimSpace(name) != "" {
+						values = append(values, strings.TrimSpace(name))
+					}
+				}
+			case bson.A:
+				for _, item := range typed {
+					if name, ok := item.(string); ok && strings.TrimSpace(name) != "" {
+						values = append(values, strings.TrimSpace(name))
+					}
+				}
+			case []string:
+				for _, name := range typed {
+					if strings.TrimSpace(name) != "" {
+						values = append(values, strings.TrimSpace(name))
+					}
+				}
+			}
+		}
+	}
+	for _, key := range []string{"payload", "raw", "data", "event"} {
+		if nested, ok := nestedDocument(document[key]); ok {
+			values = append(values, stringSliceFieldAtDepth(nested, keys, depth+1)...)
+		}
+	}
+	return values
+}
+
+func skillNameFromFilePath(path string) (string, bool) {
+	normalized := strings.ReplaceAll(strings.TrimSpace(path), "\\", "/")
+	for strings.Contains(normalized, "//") {
+		normalized = strings.ReplaceAll(normalized, "//", "/")
+	}
+	match := skillDocumentPathPattern.FindStringSubmatch(normalized)
+	if len(match) != 2 || strings.TrimSpace(match[1]) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(match[1]), true
 }
 
 func newSkillInvocation(name string, event storage.HookEvent, eventID string, raw json.RawMessage, confidence string) trace.SkillInvocation {

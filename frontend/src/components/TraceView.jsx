@@ -103,7 +103,7 @@ function ContextRow({ event, inline = false, selected = false, active = false, o
   </article>
 }
 
-function SkillInventory({ events, fileRecords = EMPTY_EVENTS, literalSkillInvocationCount = 0, onEvidenceSelect, selectedEvidenceKey = '' }) {
+function SkillInventory({ events, fileRecords = EMPTY_EVENTS, capturedSkillEvidenceCount = 0, onEvidenceSelect, selectedEvidenceKey = '' }) {
   const skillCounts = useMemo(() => {
     const counts = new Map()
     const addSkill = (skill) => {
@@ -140,10 +140,10 @@ function SkillInventory({ events, fileRecords = EMPTY_EVENTS, literalSkillInvoca
   const inferredTagCount = skillCounts.reduce((total, [, value]) => total + value.count, 0)
   const skillReadCount = skillReadCounts.reduce((total, [, count]) => total + count, 0)
   const formatCount = (count, singular, plural = `${singular}s`) => `${count.toLocaleString()} ${count === 1 ? singular : plural}`
-  const recordedLiteralSkillInvocationCount = literalSkillInvocationCount || events.reduce((total, event) => total + (event.skillRecords?.length || 0), 0)
-  const skillInventoryNote = recordedLiteralSkillInvocationCount
-    ? `${formatCount(recordedLiteralSkillInvocationCount, 'literal skill-invocation event')} ${recordedLiteralSkillInvocationCount === 1 ? 'was' : 'were'} recorded; inferred tags are shown separately from document reads.`
-    : 'No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.'
+  const recordedSkillEvidenceCount = capturedSkillEvidenceCount || events.reduce((total, event) => total + (event.skillRecords?.length || 0), 0)
+  const skillInventoryNote = recordedSkillEvidenceCount
+    ? `${formatCount(recordedSkillEvidenceCount, 'captured skill evidence record')} ${recordedSkillEvidenceCount === 1 ? 'was' : 'were'} recorded as ${recordedSkillEvidenceCount === 1 ? 'a skill invocation' : 'skill invocations'}; inferred tags are shown separately from document reads.`
+    : 'No captured skill evidence or skill invocation was recorded in the source audit; inferred tags are shown separately from document reads.'
   const selectSkill = (skill, documentsOnly = false) => onEvidenceSelect?.({
     key: `skill:${skill.toLowerCase()}`,
     label: `skill ${skill}`,
@@ -350,7 +350,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div><span>MCP</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()} calls</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
       <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
-    <SkillInventory events={events} fileRecords={inventoryFiles} literalSkillInvocationCount={viewModel.skillInvocations?.length || 0} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
+    <SkillInventory events={events} fileRecords={inventoryFiles} capturedSkillEvidenceCount={viewModel.skillInvocations?.length || 0} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <McpInventory callCount={viewModel.mcpCallCount} servers={viewModel.mcpServers} />
     <InstructionInventory fileRecords={inventoryFiles} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <div className="context-inventory" aria-label="Prompt and context summary">

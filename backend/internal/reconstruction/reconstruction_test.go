@@ -177,6 +177,45 @@ func TestReconstructDetectsMultipleShellReadPaths(t *testing.T) {
 	}
 }
 
+func TestReconstructCountsSkillDocumentReadsAsInvocations(t *testing.T) {
+	base := time.Unix(26, 0).UTC()
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEventWithTool("multi-skill-read", "PreToolUse", "turn-1", "shell_command", base, map[string]any{
+			"tool_input": map[string]any{
+				"command": "Get-Content -LiteralPath '.agents/skills/linear/SKILL.md'; Get-Content -LiteralPath 'C:\\Users\\Lyrid\\.agents\\skills\\diagnose\\SKILL.md'",
+			},
+		}),
+	})
+
+	if len(result.SkillInvocations) != 2 {
+		t.Fatalf("skill invocation count = %d, want 2: %#v", len(result.SkillInvocations), result.SkillInvocations)
+	}
+	for index, want := range []string{"linear", "diagnose"} {
+		if result.SkillInvocations[index].Name != want || result.SkillInvocations[index].Confidence != confidenceInferred {
+			t.Fatalf("skill invocation[%d] = %#v, want inferred %q", index, result.SkillInvocations[index], want)
+		}
+	}
+	if result.Summary.SkillInvocationCount != 2 {
+		t.Fatalf("summary skill invocation count = %d, want 2", result.Summary.SkillInvocationCount)
+	}
+}
+
+func TestReconstructCountsSkillMetadataArray(t *testing.T) {
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEventWithTool("skill-metadata", "PreToolUse", "turn-1", "shell_command", time.Unix(27, 0).UTC(), map[string]any{
+			"skills":     []any{"linear", "diagnose"},
+			"tool_input": map[string]any{"command": "go test ./..."},
+		}),
+	})
+
+	if len(result.SkillInvocations) != 2 || result.Summary.SkillInvocationCount != 2 {
+		t.Fatalf("skill metadata = %#v, want two invocations", result.SkillInvocations)
+	}
+	if result.SkillInvocations[0].Name != "linear" || result.SkillInvocations[1].Name != "diagnose" {
+		t.Fatalf("skill metadata names = %#v", result.SkillInvocations)
+	}
+}
+
 func TestReconstructSeparatesMCPCallsAndServersFromToolCalls(t *testing.T) {
 	base := time.Unix(90, 0).UTC()
 	result := Reconstruct("session-1", "user-1", []storage.HookEvent{

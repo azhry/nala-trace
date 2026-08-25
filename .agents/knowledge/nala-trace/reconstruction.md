@@ -23,11 +23,15 @@ timestamp are retained on emitted items.
 ## Skill evidence
 
 A skill invocation is explicit when the payload contains a non-empty `skill`
-or `skill_name` field, either at the event root or inside `tool_input`. A tool
-whose name contains `skill` is also recognized: a `tool_input.name` value is
-treated as inferred evidence, and a tool name without a usable skill name is
-reported as ambiguous. The detector does not infer a skill from arbitrary
-prose or from a path that merely contains the word `skill`.
+or `skill_name` field, either at the event root or inside `tool_input`. Captured
+`skills` arrays are also explicit evidence, with one record per non-empty skill
+name. A tool whose name contains `skill` is recognized: a `tool_input.name`
+value is treated as inferred evidence, and a tool name without a usable skill
+name is reported as ambiguous. A read of a canonical
+`.../skills/<name>/SKILL.md` document is inferred skill evidence, including
+project, user-level, plugin, Windows, and duplicate-separator paths. The
+detector does not infer a skill from arbitrary prose or from a path that merely
+contains the word `skill`.
 
 ## File-operation evidence
 

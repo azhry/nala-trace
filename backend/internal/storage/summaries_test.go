@@ -74,7 +74,7 @@ func TestSessionSummaryPipelineDerivesAndProjectsTitle(t *testing.T) {
 		t.Fatalf("title expression = %T, want bson.D", title)
 	}
 	serialized := fmt.Sprintf("%#v", pipeline)
-	for _, expected := range []string{"$payload.tool_input", "$payload.hook_event_name", "$payload.tool_name", "$payload.payload.tool_input", "$payload.payload.hook_event_name", "$payload.payload.tool_name", "file_read_count", "mcp_call_count", "mcp_servers", "^mcp__.+__.+$", "PreToolUse"} {
+	for _, expected := range []string{"$payload.tool_input", "$payload.hook_event_name", "$payload.tool_name", "$payload.payload.tool_input", "$payload.payload.hook_event_name", "$payload.payload.tool_name", "$payload.skills", "$payload.tool_input.skills", "$isArray", "SKILL\\\\.md", "file_read_count", "mcp_call_count", "mcp_servers", "^mcp__.+__.+$", "PreToolUse"} {
 		if !strings.Contains(serialized, expected) {
 			t.Fatalf("pipeline missing %q: %s", expected, serialized)
 		}

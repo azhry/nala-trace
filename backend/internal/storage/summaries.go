@@ -104,7 +104,20 @@ func skillSignalExpression() bson.D {
 		anyNonEmptyStringExpression(payloadFieldPaths("skill_name")...),
 		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.skill")...),
 		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.skill_name")...),
+		anyArrayNonEmptyExpression(payloadFieldPaths("skills")...),
+		anyArrayNonEmptyExpression(payloadFieldPaths("tool_input.skills")...),
+		skillDocumentSignalExpression(),
 	}}}
+}
+
+func skillDocumentSignalExpression() bson.D {
+	paths := append([]string{}, payloadFieldPaths("tool_input.command")...)
+	paths = append(paths, payloadFieldPaths("tool_input.file_path")...)
+	paths = append(paths, payloadFieldPaths("tool_input.path")...)
+	paths = append(paths, payloadFieldPaths("tool_input.target_file")...)
+	paths = append(paths, payloadFieldPaths("tool_input.filename")...)
+	paths = append(paths, payloadFieldPaths("tool_input.file")...)
+	return anyRegexFieldExpression(paths, `(?:^|[\\/])skills[\\/]+(?:\.system[\\/]+)?[^\\/\s]+[\\/]+SKILL\.md`)
 }
 
 func fileSignalExpression() bson.D {
@@ -188,6 +201,20 @@ func anyNonEmptyStringExpression(paths ...string) bson.D {
 	values := make(bson.A, 0, len(paths))
 	for _, path := range paths {
 		values = append(values, nonEmptyStringExpression(path))
+	}
+	return bson.D{{Key: "$or", Value: values}}
+}
+
+func anyArrayNonEmptyExpression(paths ...string) bson.D {
+	values := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		values = append(values, bson.D{{Key: "$and", Value: bson.A{
+			bson.D{{Key: "$isArray", Value: path}},
+			bson.D{{Key: "$gt", Value: bson.A{
+				bson.D{{Key: "$size", Value: path}},
+				0,
+			}}},
+		}}})
 	}
 	return bson.D{{Key: "$or", Value: values}}
 }

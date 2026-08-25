@@ -422,7 +422,7 @@ describe('TraceView API conversation', () => {
 
     expect(screen.getByText(/1 SKILL\.md read across 1 unique skill document · 1 inferred tag occurrence across 1 inferred label/)).toBeInTheDocument()
     expect(screen.getByText(/2 read records · 3 unique instruction sources · 2 global · 1 local project/)).toBeInTheDocument()
-    expect(screen.getByText('No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
+    expect(screen.getByText('No captured skill evidence or skill invocation was recorded in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
   })
 
   it('counts skill documents across normalized, user-level, and plugin skill paths', () => {
@@ -565,21 +565,25 @@ describe('TraceView API conversation', () => {
 
     expect(screen.getByText(/1 inferred tag occurrence across 1 inferred label/)).toBeInTheDocument()
     expect(screen.getByText('inferred / github')).toBeInTheDocument()
-    expect(screen.getByText('No literal skill-invocation event was emitted in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
+    expect(screen.getByText('No captured skill evidence or skill invocation was recorded in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
   })
 
-  it('keeps literal skill-invocation records separate from inferred file labels', () => {
+  it('describes explicit and inferred skill invocations as captured skill evidence', () => {
     const trace = {
       schema_version: '1',
       timeline: [],
       tool_calls: [],
-      skill_invocations: [{ name: 'frontend-design', confidence: 'explicit', event_id: 'pre-skill' }],
+      skill_invocations: [
+        { name: 'frontend-design', confidence: 'explicit', event_id: 'pre-skill' },
+        { name: 'frontend-design', confidence: 'inferred', event_id: 'pre-read', raw: { path: '.agents/skills/frontend-design/SKILL.md' } },
+      ],
       files: [],
     }
 
     render(<TraceView session={trace} />)
 
-    expect(screen.getByText('1 literal skill-invocation event was recorded; inferred tags are shown separately from document reads.')).toBeInTheDocument()
+    expect(screen.getByText('2 captured skill evidence records were recorded as skill invocations; inferred tags are shown separately from document reads.')).toBeInTheDocument()
+    expect(screen.queryByText(/literal skill-invocation/)).not.toBeInTheDocument()
   })
 
   it('counts session-level file evidence when its event ID is not projected onto the timeline', () => {

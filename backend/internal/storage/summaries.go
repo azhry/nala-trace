@@ -6,6 +6,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+const mcpToolNamePattern = `^mcp__(?!(?:codex_apps|node_repl)__).+__.+$`
+
 type SessionSummary struct {
 	SessionID            string    `bson:"session_id" json:"session_id"`
 	Title                string    `bson:"title" json:"title"`
@@ -144,7 +146,7 @@ func fileReadSignalExpression() bson.D {
 }
 
 func mcpSignalExpression() bson.D {
-	return anyRegexFieldExpression(append([]string{"$tool_name"}, payloadFieldPaths("tool_name")...), `^mcp__.+__.+$`)
+	return anyRegexFieldExpression(append([]string{"$tool_name"}, payloadFieldPaths("tool_name")...), mcpToolNamePattern)
 }
 
 func mcpToolNameExpression() bson.D {
@@ -155,7 +157,7 @@ func mcpToolNameExpression() bson.D {
 		stringFieldCandidate("$payload.raw.tool_name"),
 		stringFieldCandidate("$payload.data.tool_name"),
 		stringFieldCandidate("$payload.event.tool_name"),
-	}, `^mcp__.+__.+$`)
+	}, mcpToolNamePattern)
 }
 
 func mcpServerExpression() bson.D {

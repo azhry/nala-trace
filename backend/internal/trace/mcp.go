@@ -4,9 +4,14 @@ import "strings"
 
 const mcpToolPrefix = "mcp__"
 
+var nonMCPHostNamespaces = map[string]struct{}{
+	"codex_apps": {},
+	"node_repl":  {},
+}
+
 // MCPServerFromToolName returns the canonical server portion of an MCP tool
-// name. Only mcp__<server>__<tool> names are classified; arbitrary tool names
-// and incomplete prefixes remain ordinary tools.
+// name. Host namespaces used by the Codex runtime are not MCP servers, even
+// when their tool names use the mcp__ prefix.
 func MCPServerFromToolName(toolName string) (string, bool) {
 	name := strings.TrimSpace(toolName)
 	if len(name) <= len(mcpToolPrefix) || !strings.EqualFold(name[:len(mcpToolPrefix)], mcpToolPrefix) {
@@ -22,5 +27,9 @@ func MCPServerFromToolName(toolName string) (string, bool) {
 	if server == "" || tool == "" || strings.ContainsAny(server, "\r\n\t") || strings.ContainsAny(tool, "\r\n\t") {
 		return "", false
 	}
-	return strings.ToLower(server), true
+	server = strings.ToLower(server)
+	if _, reserved := nonMCPHostNamespaces[server]; reserved {
+		return "", false
+	}
+	return server, true
 }

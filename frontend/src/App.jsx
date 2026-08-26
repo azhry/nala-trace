@@ -4,7 +4,7 @@ import { AuthHandoffError, readNalaLabsAuthCode, redirectToNalaLabs, redeemNalaL
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
-import TraceView from './components/TraceView'
+import TraceView, { TraceLoadingPanel } from './components/TraceView'
 import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries'
 
 function parseRoute(hash = window.location.hash) {
@@ -16,6 +16,8 @@ function parseRoute(hash = window.location.hash) {
 function navigateTo(path) {
   window.location.hash = `/${path}`
 }
+
+export const TRACE_LOADING_MIN_DURATION_MS = 180
 
 function dataSourceCopy(apiState) {
   if (apiState === 'connected') return { label: 'Go API data', status: 'Go API connected', detail: 'Using live session records from the protected Go API' }
@@ -115,7 +117,7 @@ function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, fi
 function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry }) {
   const source = dataSourceCopy(apiState)
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} /><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards insights={session.insights || { metrics: [] }} /></div></section>
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} />{traceState === 'loading' && <TraceLoadingPanel />}<SessionMetadata session={session} />{traceState !== 'loading' && <div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards insights={session.insights || { metrics: [] }} /></div>}</section>
 }
 
 export default function App() {
@@ -179,18 +181,23 @@ export default function App() {
 
   const loadTrace = useCallback((sessionId, isActive = () => true) => {
     if (!sessionId) return Promise.resolve(null)
+    const loadingStartedAt = Date.now()
+    const settleAfterVisibleLoading = (settle) => {
+      const remaining = Math.max(0, TRACE_LOADING_MIN_DURATION_MS - (Date.now() - loadingStartedAt))
+      return new Promise((resolve) => window.setTimeout(resolve, remaining)).then(settle)
+    }
     setTraceRequestSessionId(sessionId)
     setRemoteTrace(null)
     setTraceSessionId(null)
     setTraceError(null)
     setTraceState('loading')
-    return getTrace(sessionId).then((payload) => {
+    return getTrace(sessionId).then((payload) => settleAfterVisibleLoading(() => {
       if (!isActive()) return payload
       setRemoteTrace(payload || {})
       setTraceSessionId(sessionId)
       setTraceState('ready')
       return payload
-    }).catch((error) => {
+    })).catch((error) => settleAfterVisibleLoading(() => {
       if (!isActive()) return null
       setTraceError(error)
       setTraceState(error instanceof ApiError && error.status === 404
@@ -199,7 +206,7 @@ export default function App() {
           ? 'unauthorized'
           : 'error')
       return null
-    })
+    }))
   }, [])
 
   useEffect(() => {

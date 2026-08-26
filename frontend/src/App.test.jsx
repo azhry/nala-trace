@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, clearAuthConfiguration, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
 import { redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
-import App from './App'
+import App, { TRACE_LOADING_MIN_DURATION_MS } from './App'
 
 vi.mock('./api', async (importOriginal) => {
   const actual = await importOriginal()
@@ -237,6 +237,70 @@ describe('authenticated sessions flow', () => {
 
     resolveTrace(apiTracePayload)
     expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
+  })
+
+  it('puts the detail loader before expensive detail sections', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    let resolveTrace
+    getTrace.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveTrace = resolve
+    }))
+
+    render(<App />)
+
+    await waitFor(() => expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session'))
+    const loadingStatus = screen.getByRole('status')
+    const metadataHeading = screen.getByRole('heading', { name: 'Recorded execution settings' })
+
+    expect(loadingStatus.compareDocumentPosition(metadataHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Session detail', level: 2 })).not.toBeInTheDocument()
+
+    resolveTrace(apiTracePayload)
+    expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
+  })
+
+  it('keeps a fast detail response loading for the minimum visible duration', async () => {
+    vi.useFakeTimers()
+    try {
+      window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+      getTrace.mockResolvedValueOnce(apiTracePayload)
+
+      render(<App />)
+
+      await act(async () => { await Promise.resolve() })
+      expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session')
+      expect(screen.getByText('Loading trace conversation…')).toBeInTheDocument()
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(TRACE_LOADING_MIN_DURATION_MS - 1) })
+      expect(screen.getByText('Loading trace conversation…')).toBeInTheDocument()
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+      expect(screen.getByText('Show the recorded conversation.')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ignores a delayed trace response after leaving the detail route', async () => {
+    vi.useFakeTimers()
+    try {
+      window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+      getTrace.mockResolvedValueOnce(apiTracePayload)
+
+      render(<App />)
+
+      await act(async () => { await Promise.resolve() })
+      expect(screen.getByText('Loading trace conversation…')).toBeInTheDocument()
+
+      window.history.replaceState({}, '', '/#/sessions')
+      fireEvent(window, new Event('hashchange'))
+      await act(async () => { await vi.advanceTimersByTimeAsync(TRACE_LOADING_MIN_DURATION_MS) })
+
+      expect(screen.getByRole('heading', { name: 'All captured sessions' })).toBeInTheDocument()
+      expect(screen.queryByText('Show the recorded conversation.')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps the detail surface visibly loading during a route transition', async () => {

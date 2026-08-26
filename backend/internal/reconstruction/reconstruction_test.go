@@ -363,17 +363,17 @@ func TestReconstructExtractsRuntimeMetadataFromNestedPayloadContexts(t *testing.
 	}
 }
 
-func TestReconstructExtractsReasoningEffortFromToolInput(t *testing.T) {
+func TestReconstructDoesNotTreatToolInputOptionsAsRuntimeMetadata(t *testing.T) {
 	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
-		hookEventWithTool("tool-input-settings", "PreToolUse", "turn-1", "shell_command", time.Unix(74, 0).UTC(), map[string]any{
+		hookEventWithTool("spawn-options", "PreToolUse", "turn-1", "spawn_agent", time.Unix(74, 0).UTC(), map[string]any{
 			"tool_input": map[string]any{
 				"reasoning_effort": "high",
 			},
 		}),
 	})
 
-	if result.RuntimeMetadata.ReasoningEffort != "high" {
-		t.Fatalf("tool-input runtime metadata = %#v, want reasoning_effort=high", result.RuntimeMetadata)
+	if result.RuntimeMetadata.ReasoningEffort != "" {
+		t.Fatalf("tool-input option was misclassified as runtime metadata: %#v", result.RuntimeMetadata)
 	}
 }
 

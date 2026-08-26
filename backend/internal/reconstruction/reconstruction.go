@@ -729,7 +729,7 @@ func runtimeMetadataFromPayload(payload bson.Raw, eventName string) trace.Runtim
 
 func runtimeMetadataDocuments(document map[string]any) []map[string]any {
 	const maxDepth = 4
-	containerKeys := []string{"metadata", "runtime", "runtime_metadata", "execution_settings", "session_meta", "turn_context", "task_started", "payload"}
+	containerKeys := []string{"metadata", "runtime", "runtime_metadata", "execution_settings", "session_meta", "turn_context", "task_started", "payload", "tool_input"}
 	documents := make([]map[string]any, 0, 1)
 	var visit func(map[string]any, int)
 	visit = func(current map[string]any, depth int) {

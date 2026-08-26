@@ -363,6 +363,20 @@ func TestReconstructExtractsRuntimeMetadataFromNestedPayloadContexts(t *testing.
 	}
 }
 
+func TestReconstructExtractsReasoningEffortFromToolInput(t *testing.T) {
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEventWithTool("tool-input-settings", "PreToolUse", "turn-1", "shell_command", time.Unix(74, 0).UTC(), map[string]any{
+			"tool_input": map[string]any{
+				"reasoning_effort": "high",
+			},
+		}),
+	})
+
+	if result.RuntimeMetadata.ReasoningEffort != "high" {
+		t.Fatalf("tool-input runtime metadata = %#v, want reasoning_effort=high", result.RuntimeMetadata)
+	}
+}
+
 func TestReconstructPreservesOnlySettingsEmittedByCodexHookPayload(t *testing.T) {
 	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
 		hookEvent("session-start", "SessionStart", "", time.Unix(75, 0).UTC(), map[string]any{

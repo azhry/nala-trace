@@ -6,7 +6,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-const mcpToolNamePattern = `^mcp__(?!(?:codex_apps|node_repl)__).+__.+$`
+const mcpToolNamePattern = `^mcp__(?:codex_apps__(?!(?:node_repl)_)[^_\s]+_.+|(?!(?:codex_apps|node_repl)__).+__.+)$`
+const codexAppsToolPrefix = "mcp__codex_apps__"
 
 type SessionSummary struct {
 	SessionID            string    `bson:"session_id" json:"session_id"`
@@ -162,11 +163,43 @@ func mcpToolNameExpression() bson.D {
 
 func mcpServerExpression() bson.D {
 	name := mcpToolNameExpression()
-	separator := bson.D{{Key: "$indexOfCP", Value: bson.A{name, "__", 5}}}
+	return bson.D{{Key: "$let", Value: bson.D{
+		{Key: "vars", Value: bson.D{{Key: "name", Value: name}}},
+		{Key: "in", Value: bson.D{{Key: "$cond", Value: bson.A{
+			bson.D{{Key: "$regexMatch", Value: bson.D{
+				{Key: "input", Value: "$$name"},
+				{Key: "regex", Value: "^mcp__codex_apps__"},
+				{Key: "options", Value: "i"},
+			}}},
+			mcpCodexAppsServerExpression(),
+			mcpDirectServerExpression(),
+		}}}},
+	}}}
+}
+
+func mcpDirectServerExpression() bson.D {
+	separator := bson.D{{Key: "$indexOfCP", Value: bson.A{"$$name", "__", 5}}}
 	return bson.D{{Key: "$toLower", Value: bson.D{{Key: "$substrCP", Value: bson.A{
-		name,
+		"$$name",
 		5,
 		bson.D{{Key: "$subtract", Value: bson.A{separator, 5}}},
+	}}}}}
+}
+
+func mcpCodexAppsServerExpression() bson.D {
+	connectorName := bson.D{{Key: "$substrCP", Value: bson.A{
+		"$$name",
+		len(codexAppsToolPrefix),
+		bson.D{{Key: "$subtract", Value: bson.A{
+			bson.D{{Key: "$strLenCP", Value: "$$name"}},
+			len(codexAppsToolPrefix),
+		}}},
+	}}}
+	separator := bson.D{{Key: "$indexOfCP", Value: bson.A{connectorName, "_"}}}
+	return bson.D{{Key: "$toLower", Value: bson.D{{Key: "$substrCP", Value: bson.A{
+		connectorName,
+		0,
+		separator,
 	}}}}}
 }
 

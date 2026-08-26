@@ -10,7 +10,7 @@ import (
 )
 
 func TestSessionSummaryJSONIncludesTitle(t *testing.T) {
-	encoded, err := json.Marshal(SessionSummary{SessionID: "session-1", Title: "Inspect the trace", FileReadCount: 2, MCPCallCount: 3, MCPServers: []string{"codex_apps", "github"}})
+	encoded, err := json.Marshal(SessionSummary{SessionID: "session-1", Title: "Inspect the trace", FileReadCount: 2, MCPCallCount: 3, MCPServers: []string{"linear", "github"}})
 	if err != nil {
 		t.Fatalf("marshal summary: %v", err)
 	}
@@ -28,8 +28,8 @@ func TestSessionSummaryJSONIncludesTitle(t *testing.T) {
 	if got, want := fields["mcp_call_count"], float64(3); got != want {
 		t.Fatalf("mcp_call_count = %#v, want %v", got, want)
 	}
-	if got, ok := fields["mcp_servers"].([]any); !ok || len(got) != 2 || got[0] != "codex_apps" || got[1] != "github" {
-		t.Fatalf("mcp_servers = %#v, want [codex_apps github]", fields["mcp_servers"])
+	if got, ok := fields["mcp_servers"].([]any); !ok || len(got) != 2 || got[0] != "linear" || got[1] != "github" {
+		t.Fatalf("mcp_servers = %#v, want [linear github]", fields["mcp_servers"])
 	}
 }
 
@@ -74,7 +74,7 @@ func TestSessionSummaryPipelineDerivesAndProjectsTitle(t *testing.T) {
 		t.Fatalf("title expression = %T, want bson.D", title)
 	}
 	serialized := fmt.Sprintf("%#v", pipeline)
-	for _, expected := range []string{"$payload.tool_input", "$payload.hook_event_name", "$payload.tool_name", "$payload.payload.tool_input", "$payload.payload.hook_event_name", "$payload.payload.tool_name", "$payload.skills", "$payload.tool_input.skills", "$isArray", "SKILL\\\\.md", "file_read_count", "mcp_call_count", "mcp_servers", "^mcp__(?!(?:codex_apps|node_repl)__).+__.+$", "PreToolUse"} {
+	for _, expected := range []string{"$payload.tool_input", "$payload.hook_event_name", "$payload.tool_name", "$payload.payload.tool_input", "$payload.payload.hook_event_name", "$payload.payload.tool_name", "$payload.skills", "$payload.tool_input.skills", "$isArray", "SKILL\\\\.md", "file_read_count", "mcp_call_count", "mcp_servers", "^mcp__(?:codex_apps__(?!(?:node_repl)_)[^_\\\\s]+_.+|(?!(?:codex_apps|node_repl)__).+__.+)$", "PreToolUse"} {
 		if !strings.Contains(serialized, expected) {
 			t.Fatalf("pipeline missing %q: %s", expected, serialized)
 		}

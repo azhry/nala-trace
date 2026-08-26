@@ -233,10 +233,10 @@ func TestReconstructSeparatesMCPCallsAndServersFromToolCalls(t *testing.T) {
 		}),
 	})
 
-	if result.Summary.ToolCallCount != 4 || result.Summary.MCPCallCount != 1 {
-		t.Fatalf("summary counts = %#v, want 4 total calls and 1 MCP call", result.Summary)
+	if result.Summary.ToolCallCount != 4 || result.Summary.MCPCallCount != 2 {
+		t.Fatalf("summary counts = %#v, want 4 total calls and 2 MCP calls", result.Summary)
 	}
-	wantServers := []string{"github"}
+	wantServers := []string{"github", "linear"}
 	if len(result.Summary.MCPServers) != len(wantServers) {
 		t.Fatalf("MCP servers = %#v, want %#v", result.Summary.MCPServers, wantServers)
 	}
@@ -245,7 +245,7 @@ func TestReconstructSeparatesMCPCallsAndServersFromToolCalls(t *testing.T) {
 			t.Fatalf("MCP server[%d] = %q, want %q", index, result.Summary.MCPServers[index], want)
 		}
 	}
-	if result.ToolCalls[0].MCPServer != "" || result.ToolCalls[1].MCPServer != "github" {
+	if result.ToolCalls[0].MCPServer != "linear" || result.ToolCalls[1].MCPServer != "github" {
 		t.Fatalf("tool MCP server projection = %#v", result.ToolCalls[:2])
 	}
 }

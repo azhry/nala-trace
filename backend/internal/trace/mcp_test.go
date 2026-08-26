@@ -11,7 +11,10 @@ func TestMCPServerFromToolName(t *testing.T) {
 	}{
 		{name: "server with underscore", tool: "mcp__my_server__get_issue", wantServer: "my_server", wantOK: true},
 		{name: "case normalized", tool: "MCP__GitHub__Create_Issue", wantServer: "github", wantOK: true},
-		{name: "codex apps host namespace", tool: "mcp__codex_apps__linear_get_issue", wantOK: false},
+		{name: "codex apps connector", tool: "mcp__codex_apps__linear_get_issue", wantServer: "linear", wantOK: true},
+		{name: "codex apps github connector", tool: "mcp__codex_apps__github_add_comment_to_issue", wantServer: "github", wantOK: true},
+		{name: "codex apps connector missing operation", tool: "mcp__codex_apps__linear", wantOK: false},
+		{name: "codex apps node repl connector", tool: "mcp__codex_apps__node_repl_js", wantOK: false},
 		{name: "node repl host namespace", tool: "mcp__node_repl__js", wantOK: false},
 		{name: "missing server", tool: "mcp____tool", wantOK: false},
 		{name: "missing tool", tool: "mcp__server__", wantOK: false},

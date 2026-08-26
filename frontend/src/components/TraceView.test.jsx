@@ -264,6 +264,13 @@ describe('TraceView API conversation', () => {
     render(<TraceView session={apiTrace} traceState={state} onRetry={vi.fn()} />)
 
     expect(screen.getByText(message)).toBeInTheDocument()
+    if (state === 'loading') {
+      const loadingStatus = screen.getByRole('status')
+      expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
+      expect(loadingStatus).toHaveClass('trace-loading-panel')
+      expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+      expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
+    }
   })
 
   it('keeps the missing-trace retry control actionable', () => {

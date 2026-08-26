@@ -127,6 +127,8 @@ export default function App() {
   const [apiState, setApiState] = useState('loading')
   const [handoffState, setHandoffState] = useState('idle')
   const [remoteTrace, setRemoteTrace] = useState(null)
+  const [traceSessionId, setTraceSessionId] = useState(null)
+  const [traceRequestSessionId, setTraceRequestSessionId] = useState(null)
   const [traceState, setTraceState] = useState('idle')
   const [traceError, setTraceError] = useState(null)
   const [redirectOnEntry] = useState(() => shouldRedirectOnEntry())
@@ -177,12 +179,15 @@ export default function App() {
 
   const loadTrace = useCallback((sessionId, isActive = () => true) => {
     if (!sessionId) return Promise.resolve(null)
+    setTraceRequestSessionId(sessionId)
     setRemoteTrace(null)
+    setTraceSessionId(null)
     setTraceError(null)
     setTraceState('loading')
     return getTrace(sessionId).then((payload) => {
       if (!isActive()) return payload
       setRemoteTrace(payload || {})
+      setTraceSessionId(sessionId)
       setTraceState('ready')
       return payload
     }).catch((error) => {
@@ -201,6 +206,8 @@ export default function App() {
     let mounted = true
     if (apiState !== 'connected' || route.view !== 'detail' || !route.sessionId) {
       setRemoteTrace(null)
+      setTraceSessionId(null)
+      setTraceRequestSessionId(null)
       setTraceError(null)
       setTraceState('idle')
       return () => { mounted = false }
@@ -209,7 +216,9 @@ export default function App() {
     return () => { mounted = false }
   }, [apiState, loadTrace, route.sessionId, route.view])
 
-  const detailSession = remoteTrace
+  const hasCurrentTrace = Boolean(remoteTrace && traceSessionId === route.sessionId)
+  const detailTraceState = traceRequestSessionId !== route.sessionId ? 'loading' : traceState
+  const detailSession = hasCurrentTrace
     ? { ...(selectedSession || { id: route.sessionId, title: route.sessionId, status: 'captured' }), ...remoteTrace }
     : selectedSession || (route.view === 'detail' && route.sessionId ? { id: route.sessionId, title: route.sessionId, status: 'captured' } : null)
 
@@ -221,5 +230,5 @@ export default function App() {
   if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} traceState={traceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

@@ -220,6 +220,67 @@ describe('authenticated sessions flow', () => {
     expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session')
   })
 
+  it('shows an accessible stable loader during the initial detail request', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    let resolveTrace
+    getTrace.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveTrace = resolve
+    }))
+
+    render(<App />)
+
+    await waitFor(() => expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session'))
+    const loadingStatus = screen.getByRole('status')
+    expect(loadingStatus).toHaveTextContent('Loading trace conversation…')
+    expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
+    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+
+    resolveTrace(apiTracePayload)
+    expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
+  })
+
+  it('keeps the detail surface visibly loading during a route transition', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    const secondSession = {
+      session_id: 'second-session',
+      first_event_at: '2026-08-19T09:00:00Z',
+      last_event_at: '2026-08-19T09:05:00Z',
+      event_count: 2,
+      tool_call_count: 1,
+      skill_invocation_count: 0,
+      file_operation_count: 0,
+    }
+    const secondTrace = {
+      ...apiTracePayload,
+      session_id: 'second-session',
+      conversation: [{
+        role: 'user',
+        content: 'Second session content.',
+        occurred_at: '2026-08-19T09:00:00Z',
+        turn_id: 'turn-2',
+        raw: {},
+      }],
+    }
+    let resolveSecondTrace
+    getSessions.mockResolvedValueOnce({ ...sessionPayload, sessions: [...sessionPayload.sessions, secondSession] })
+    getTrace.mockResolvedValueOnce(apiTracePayload)
+    getTrace.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSecondTrace = resolve
+    }))
+
+    render(<App />)
+
+    expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
+    window.history.replaceState({}, '', '/#/sessions/second-session')
+    fireEvent(window, new Event('hashchange'))
+
+    expect(screen.getByText('Loading trace conversation…')).toBeInTheDocument()
+    expect(screen.queryByText('Show the recorded conversation.')).not.toBeInTheDocument()
+
+    resolveSecondTrace(secondTrace)
+    expect(await screen.findByText('Second session content.')).toBeInTheDocument()
+  })
+
   it('shows a missing trace state and retries the selected session request', async () => {
     window.history.replaceState({}, '', '/#/sessions/authenticated-session')
     getTrace.mockRejectedValueOnce(new ApiError('trace not found', 404, { code: 'trace_not_found' }))

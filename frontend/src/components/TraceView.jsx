@@ -234,7 +234,7 @@ function EvidenceSelectionNotice({ selection, onClear, onPrevious, onNext }) {
 }
 
 function TraceStatePanel({ state, onRetry }) {
-  if (state === 'loading') return <div className="trace-state-panel" role="status" aria-live="polite"><strong>Loading trace conversation…</strong><span>Reading the selected session from the protected Go API.</span></div>
+  if (state === 'loading') return <div className="trace-state-panel trace-loading-panel" role="status" aria-live="polite" aria-busy="true"><div className="trace-loader-mark" aria-hidden="true"><span /><span /><span /></div><div className="trace-loading-content"><strong>Loading trace conversation…</strong><span>Reading the selected session from the protected Go API.</span></div><div className="trace-loading-skeletons" aria-hidden="true"><span /><span /><span /></div></div>
   if (state === 'missing') return <div className="trace-state-panel" role="alert"><strong>Session trace not found.</strong><span>No stored events were returned for this session.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
   if (state === 'unauthorized') return <div className="trace-state-panel" role="alert"><strong>Trace access needs authentication.</strong><span>The trace request was rejected. Refresh the application session, then retry.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
   if (state === 'error') return <div className="trace-state-panel" role="alert"><strong>Trace conversation could not be loaded.</strong><span>The protected trace request failed before conversation data was available.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>

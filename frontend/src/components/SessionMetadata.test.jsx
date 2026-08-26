@@ -20,14 +20,15 @@ describe('SessionMetadata', () => {
     }} />)
 
     expect(screen.getByText('gpt-5')).toBeInTheDocument()
-    expect(screen.getByText('OpenAI')).toBeInTheDocument()
-    expect(screen.getByText('high')).toBeInTheDocument()
-    expect(screen.getByText('200,000 tokens')).toBeInTheDocument()
-    expect(screen.getByText('Codex · 1.2.3')).toBeInTheDocument()
     expect(screen.getByText('workspace-write')).toBeInTheDocument()
-    expect(screen.getByText('hook')).toBeInTheDocument()
-    expect(screen.getByText('desktop')).toBeInTheDocument()
-    expect(screen.getByText('SessionStart')).toBeInTheDocument()
+    expect(screen.getByText('high')).toBeInTheDocument()
+    expect(document.querySelectorAll('.session-metadata-field')).toHaveLength(3)
+    expect(screen.queryByText('Provider')).not.toBeInTheDocument()
+    expect(screen.queryByText('Context window')).not.toBeInTheDocument()
+    expect(screen.queryByText('Client')).not.toBeInTheDocument()
+    expect(screen.queryByText('Host source')).not.toBeInTheDocument()
+    expect(screen.queryByText('Thread source')).not.toBeInTheDocument()
+    expect(screen.queryByText('Recorded source')).not.toBeInTheDocument()
   })
 
   it('supports compatible camelCase metadata and preserves Not recorded values', () => {
@@ -46,12 +47,11 @@ describe('SessionMetadata', () => {
     }} />)
 
     expect(screen.getByText('gpt-4.1')).toBeInTheDocument()
-    expect(screen.getByText('Codex Desktop · 2.0.0')).toBeInTheDocument()
-    expect(screen.getByText('128,000 tokens')).toBeInTheDocument()
     expect(screen.getByText('read-only')).toBeInTheDocument()
 
     rerender(<SessionMetadata session={{ runtime_metadata: {} }} />)
 
-    expect(screen.getAllByText('Not recorded')).toHaveLength(9)
+    expect(screen.getAllByText('Not recorded')).toHaveLength(3)
+    expect(document.querySelectorAll('.session-metadata-field')).toHaveLength(3)
   })
 })

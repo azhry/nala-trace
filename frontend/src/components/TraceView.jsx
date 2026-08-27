@@ -84,12 +84,12 @@ function TokenUsageSummary({ usage }) {
   const safeUsage = usage || EMPTY_TOKEN_USAGE
   const recorded = hasRecordedTokenUsage(safeUsage)
   const metrics = [
-    ['Input tokens', safeUsage.inputTokens, 'prompt tokens'],
-    ['Cached input', safeUsage.cachedInputTokens, 'cached prompt tokens'],
-    ['Output tokens', safeUsage.outputTokens, 'completion tokens'],
-    ['Reasoning', safeUsage.reasoningTokens, 'reasoning tokens'],
-    ['Total tokens', safeUsage.totalTokens, 'all token types'],
-    ['Recorded cost', tokenUsageCost(safeUsage), 'producer-reported cost'],
+    ['Input tokens', recorded ? safeUsage.inputTokens : 'Not recorded', 'prompt tokens'],
+    ['Cached input', recorded ? safeUsage.cachedInputTokens : 'Not recorded', 'cached prompt tokens'],
+    ['Output tokens', recorded ? safeUsage.outputTokens : 'Not recorded', 'completion tokens'],
+    ['Reasoning', recorded ? safeUsage.reasoningTokens : 'Not recorded', 'reasoning tokens'],
+    ['Total tokens', recorded ? safeUsage.totalTokens : 'Not recorded', 'all token types'],
+    ['Recorded cost', recorded ? tokenUsageCost(safeUsage) : 'Not recorded', 'producer-reported cost'],
   ]
 
   return <div className="token-usage" role="region" aria-label="Token usage summary">

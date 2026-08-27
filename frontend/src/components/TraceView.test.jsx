@@ -218,10 +218,18 @@ describe('TraceView API conversation', () => {
   })
 
   it('explains when a session has no recorded token usage', () => {
-    render(<TraceView session={apiTrace} />)
+    const { container } = render(<TraceView session={apiTrace} />)
 
     expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
     expect(screen.getByText('No token usage was recorded for this session.')).toBeInTheDocument()
+    expect([...container.querySelectorAll('.token-usage-metric strong')].map((metric) => metric.textContent)).toEqual([
+      'Not recorded',
+      'Not recorded',
+      'Not recorded',
+      'Not recorded',
+      'Not recorded',
+      'Not recorded',
+    ])
   })
 
   it('bounds the initially mounted stream and loads more rows on demand', () => {

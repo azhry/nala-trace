@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import TraceView from './TraceView'
 
@@ -69,6 +69,31 @@ function createLargeTrace(size = 125) {
 }
 
 describe('TraceView API conversation', () => {
+  it('uses the normalized skill invocation count in the first summary tile', () => {
+    const trace = {
+      ...apiTrace,
+      skill_invocations: [
+        { name: 'frontend-design' },
+        { name: 'diagnose' },
+      ],
+      summary: { ...apiTrace.summary, skill_invocation_count: 99 },
+    }
+
+    const { container } = render(<TraceView session={trace} />)
+    const tiles = [...container.querySelectorAll('.trace-summary > div')]
+
+    expect(tiles).toHaveLength(4)
+    expect(tiles.map((tile) => tile.querySelector('span')?.textContent)).toEqual([
+      'Skill invocations',
+      'Tools',
+      'MCP',
+      'Capture',
+    ])
+    expect(within(tiles[0]).getByText('2')).toBeInTheDocument()
+    expect(within(tiles[0]).getByText('captured invocation records')).toBeInTheDocument()
+    expect(within(tiles[0]).queryByText('session-api-shaped')).not.toBeInTheDocument()
+  })
+
   it('renders MCP usage and an explicit empty state from the API summary', () => {
     const { rerender } = render(<TraceView session={{ ...apiTrace, summary: { ...apiTrace.summary, mcp_call_count: 4, mcp_servers: ['github', 'linear'] } }} />)
 

@@ -353,7 +353,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <span className="record-count">{semanticRecords} records</span>
     </div>
     <div className="trace-summary">
-      <div><span>Session</span><strong>{session.id || 'Selected session'}</strong><small>{viewModel.messageCount.toLocaleString()} messages · {viewModel.conversation.filter((event) => event.role === 'user').length.toLocaleString()} user turns</small></div>
+      <div><span>Skill invocations</span><strong>{Number(viewModel.skillInvocationCount ?? 0).toLocaleString()}</strong><small>captured invocation records</small></div>
       <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
       <div><span>MCP</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()} calls</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
       <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>

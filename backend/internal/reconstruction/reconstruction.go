@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,10 +43,13 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 	result := trace.New(sessionID, userID)
 	ordered := Order(events)
 	pending := make(map[string]int)
+	mcpServers := make(map[string]struct{})
 	for _, item := range ordered {
 		event := item.Event
 		raw := payloadJSON(event.Payload)
+		toolName := toolNameForEvent(event, raw)
 		timelineID := eventID(event, item.OriginalIndex)
+		result.RuntimeMetadata = mergeRuntimeMetadata(result.RuntimeMetadata, runtimeMetadataFromPayload(event.Payload, event.HookEventName))
 		reason := partialReason(event)
 		payloadSafe := payloadIssue(event.Payload) == ""
 		kind := "lifecycle"
@@ -68,15 +72,22 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 			kind = "tool"
 		}
 		if event.HookEventName == "PreToolUse" {
+			if server, ok := trace.MCPServerFromToolName(toolName); ok {
+				result.Summary.MCPCallCount++
+				mcpServers[server] = struct{}{}
+			}
 			index := len(result.ToolCalls)
 			toolCallIndex = &index
 			toolID := value(event.ToolUseID)
 			call := trace.ToolCall{
 				ToolUseID: event.ToolUseID,
-				ToolName:  value(event.ToolName),
+				ToolName:  toolName,
 				Input:     nil,
 				Status:    trace.ToolCallPending,
 				Raw:       raw,
+			}
+			if server, ok := trace.MCPServerFromToolName(call.ToolName); ok {
+				call.MCPServer = server
 			}
 			if payloadSafe {
 				call.Input = payloadField(event.Payload, "tool_input")
@@ -117,7 +128,7 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 				toolCallIndex = &index
 				result.ToolCalls = append(result.ToolCalls, trace.ToolCall{
 					ToolUseID: event.ToolUseID,
-					ToolName:  value(event.ToolName),
+					ToolName:  toolName,
 					Output:    nil,
 					Status:    trace.ToolCallUnmatched,
 					Raw:       raw,
@@ -129,10 +140,9 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 			}
 		}
 		if event.HookEventName == "PreToolUse" && payloadSafe {
-			if invocation, ok := detectSkillInvocation(event, timelineID, raw); ok {
-				result.SkillInvocations = append(result.SkillInvocations, invocation)
-			}
-			result.Files = append(result.Files, detectFileOperations(event, timelineID, raw)...)
+			files := detectFileOperations(event, timelineID, raw)
+			result.Files = append(result.Files, files...)
+			result.SkillInvocations = append(result.SkillInvocations, detectSkillInvocations(event, timelineID, raw, files)...)
 		}
 		if reason != "" {
 			kind = "partial"
@@ -156,8 +166,18 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 	result.Summary.EventCount = len(result.Timeline)
 	result.Summary.MessageCount = len(result.Conversation)
 	result.Summary.ToolCallCount = len(result.ToolCalls)
+	result.Summary.MCPServers = make([]string, 0, len(mcpServers))
+	for server := range mcpServers {
+		result.Summary.MCPServers = append(result.Summary.MCPServers, server)
+	}
+	sort.Strings(result.Summary.MCPServers)
 	result.Summary.SkillInvocationCount = len(result.SkillInvocations)
 	result.Summary.FileOperationCount = len(result.Files)
+	for _, file := range result.Files {
+		if file.Operation == "read" {
+			result.Summary.FileReadCount++
+		}
+	}
 	return result
 }
 
@@ -170,6 +190,16 @@ func conversationRole(eventName string) string {
 	default:
 		return ""
 	}
+}
+
+func toolNameForEvent(event storage.HookEvent, raw json.RawMessage) string {
+	if name := value(event.ToolName); name != "" {
+		return name
+	}
+	if name, ok := stringField(documentValue(raw), "tool_name"); ok {
+		return name
+	}
+	return ""
 }
 
 func messageContent(payload bson.Raw, eventName string) json.RawMessage {
@@ -205,31 +235,125 @@ const (
 )
 
 var (
-	applyPatchFilePattern = regexp.MustCompile(`(?mi)^\*\*\* (Add|Update|Delete|Move to) File:\s*(.+?)\s*$`)
-	shellReadPattern      = regexp.MustCompile(`(?i)(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`)
-	shellWritePattern     = regexp.MustCompile(`(?i)(set-content|out-file|tee\b|>>?\s*)`)
-	shellDeletePattern    = regexp.MustCompile(`(?i)(remove-item|\brm\b|\bdel\b|\bdelete\b)`)
-	commandPathPattern    = regexp.MustCompile(`(?i)(?:-literalpath|-filepath|-path|>\s*|>>\s*)\s*["']?([^"'\s]+)|^\s*(?:cat|head|tail|type|get-content|read)\s+["']?([^"'\s]+)`)
+	applyPatchFilePattern    = regexp.MustCompile(`(?mi)^\*\*\* (Add|Update|Delete|Move to) File:\s*(.+?)\s*$`)
+	shellReadPattern         = regexp.MustCompile(`(?i)(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`)
+	shellWritePattern        = regexp.MustCompile(`(?i)(set-content|out-file|tee\b|>>?\s*)`)
+	shellDeletePattern       = regexp.MustCompile(`(?i)(remove-item|\brm\b|\bdel\b|\bdelete\b)`)
+	commandPathPattern       = regexp.MustCompile(`(?i)(?:-literalpath|-filepath|-path|>\s*|>>\s*)\s*(?:"([^"]+)"|'([^']+)'|([^"'\s;&|]+))|(?:^|[;&|])\s*(?:cat|head|tail|type|get-content|read)\s+(?:"([^"]+)"|'([^']+)'|([^"'\s;&|-][^"'\s;&|]*))`)
+	skillDocumentPathPattern = regexp.MustCompile(`(?i)(?:^|/)skills/(?:\.system/)?([^/]+)/SKILL\.md$`)
 )
 
-func detectSkillInvocation(event storage.HookEvent, eventID string, raw json.RawMessage) (trace.SkillInvocation, bool) {
+func detectSkillInvocations(event storage.HookEvent, eventID string, raw json.RawMessage, files []trace.FileOperation) []trace.SkillInvocation {
 	input := toolInputDocument(event.Payload)
 	payload := payloadDocument(event.Payload)
-	toolName := value(event.ToolName)
+	toolName := toolNameForEvent(event, raw)
 	if name, ok := stringField(input, "skill_name", "skill"); ok {
-		return newSkillInvocation(name, event, eventID, raw, confidenceExplicit), true
+		return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceExplicit)}
 	}
 	if name, ok := stringField(payload, "skill_name", "skill"); ok {
-		return newSkillInvocation(name, event, eventID, raw, confidenceExplicit), true
+		return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceExplicit)}
 	}
-	if !strings.Contains(strings.ToLower(toolName), "skill") {
-		return trace.SkillInvocation{}, false
+	if names := skillNames(input, payload); len(names) > 0 {
+		invocations := make([]trace.SkillInvocation, 0, len(names))
+		for _, name := range names {
+			invocations = append(invocations, newSkillInvocation(name, event, eventID, raw, confidenceExplicit))
+		}
+		return invocations
 	}
-	if name, ok := stringField(input, "name"); ok {
-		return newSkillInvocation(name, event, eventID, raw, confidenceInferred), true
+	if strings.Contains(strings.ToLower(toolName), "skill") {
+		if name, ok := stringField(input, "name"); ok {
+			return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceInferred)}
+		}
+		name := skillNameFromToolName(toolName)
+		return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceAmbiguous)}
 	}
-	name := skillNameFromToolName(toolName)
-	return newSkillInvocation(name, event, eventID, raw, confidenceAmbiguous), true
+
+	invocations := make([]trace.SkillInvocation, 0)
+	for _, file := range files {
+		if file.Operation != "read" {
+			continue
+		}
+		if name, ok := skillNameFromFilePath(file.Path); ok {
+			invocations = append(invocations, newSkillInvocation(name, event, eventID, raw, confidenceInferred))
+		}
+	}
+	return invocations
+}
+
+func skillNames(documents ...map[string]any) []string {
+	names := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, document := range documents {
+		for _, name := range stringSliceField(document, "skills") {
+			key := strings.ToLower(name)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func stringSliceField(document map[string]any, keys ...string) []string {
+	return stringSliceFieldAtDepth(document, keys, 0)
+}
+
+func stringSliceFieldAtDepth(document map[string]any, keys []string, depth int) []string {
+	values := make([]string, 0)
+	if document == nil || depth >= 4 {
+		return values
+	}
+	for actual, raw := range document {
+		matched := false
+		for _, key := range keys {
+			if strings.EqualFold(actual, key) {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			switch typed := raw.(type) {
+			case []any:
+				for _, item := range typed {
+					if name, ok := item.(string); ok && strings.TrimSpace(name) != "" {
+						values = append(values, strings.TrimSpace(name))
+					}
+				}
+			case bson.A:
+				for _, item := range typed {
+					if name, ok := item.(string); ok && strings.TrimSpace(name) != "" {
+						values = append(values, strings.TrimSpace(name))
+					}
+				}
+			case []string:
+				for _, name := range typed {
+					if strings.TrimSpace(name) != "" {
+						values = append(values, strings.TrimSpace(name))
+					}
+				}
+			}
+		}
+	}
+	for _, key := range []string{"payload", "raw", "data", "event"} {
+		if nested, ok := nestedDocument(document[key]); ok {
+			values = append(values, stringSliceFieldAtDepth(nested, keys, depth+1)...)
+		}
+	}
+	return values
+}
+
+func skillNameFromFilePath(path string) (string, bool) {
+	normalized := strings.ReplaceAll(strings.TrimSpace(path), "\\", "/")
+	for strings.Contains(normalized, "//") {
+		normalized = strings.ReplaceAll(normalized, "//", "/")
+	}
+	match := skillDocumentPathPattern.FindStringSubmatch(normalized)
+	if len(match) != 2 || strings.TrimSpace(match[1]) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(match[1]), true
 }
 
 func newSkillInvocation(name string, event storage.HookEvent, eventID string, raw json.RawMessage, confidence string) trace.SkillInvocation {
@@ -237,7 +361,7 @@ func newSkillInvocation(name string, event storage.HookEvent, eventID string, ra
 		Name:       name,
 		EventID:    eventID,
 		ToolUseID:  event.ToolUseID,
-		ToolName:   value(event.ToolName),
+		ToolName:   toolNameForEvent(event, raw),
 		Confidence: confidence,
 		OccurredAt: event.ReceivedAt.UTC(),
 		Raw:        raw,
@@ -258,7 +382,7 @@ func skillNameFromToolName(toolName string) string {
 
 func detectFileOperations(event storage.HookEvent, eventID string, raw json.RawMessage) []trace.FileOperation {
 	input := toolInputDocument(event.Payload)
-	toolName := value(event.ToolName)
+	toolName := toolNameForEvent(event, raw)
 	toolNameLower := strings.ToLower(toolName)
 	toolInputText := toolInputText(event.Payload)
 	patchText := toolInputText
@@ -285,11 +409,25 @@ func detectFileOperations(event storage.HookEvent, eventID string, raw json.RawM
 	paths := filePaths(input)
 	command, hasCommand := stringField(input, "command", "cmd", "script")
 	if len(paths) == 0 && hasCommand {
-		if match := commandPathPattern.FindStringSubmatch(command); match != nil {
-			path := match[1]
-			if path == "" {
-				path = match[2]
+		seen := make(map[string]struct{}, len(paths))
+		for _, path := range paths {
+			seen[path] = struct{}{}
+		}
+		for _, match := range commandPathPattern.FindAllStringSubmatch(command, -1) {
+			path := ""
+			for _, candidate := range match[1:] {
+				if candidate != "" {
+					path = candidate
+					break
+				}
 			}
+			if path == "" {
+				continue
+			}
+			if _, exists := seen[path]; exists {
+				continue
+			}
+			seen[path] = struct{}{}
 			paths = append(paths, path)
 		}
 	}
@@ -310,7 +448,7 @@ func newFileOperation(path, operation, confidence string, event storage.HookEven
 		Operation:  operation,
 		EventID:    eventID,
 		ToolUseID:  event.ToolUseID,
-		ToolName:   value(event.ToolName),
+		ToolName:   toolNameForEvent(event, raw),
 		Confidence: confidence,
 		OccurredAt: event.ReceivedAt.UTC(),
 		Raw:        raw,
@@ -377,11 +515,11 @@ func payloadDocument(payload bson.Raw) map[string]any {
 	if len(payload) == 0 {
 		return nil
 	}
-	var document map[string]any
+	var document bson.M
 	if err := bson.Unmarshal(payload, &document); err != nil {
 		return nil
 	}
-	return document
+	return map[string]any(document)
 }
 
 func documentValue(raw json.RawMessage) map[string]any {
@@ -403,6 +541,10 @@ func documentValue(raw json.RawMessage) map[string]any {
 }
 
 func stringField(document map[string]any, keys ...string) (string, bool) {
+	return nestedStringField(document, keys, 0)
+}
+
+func nestedStringField(document map[string]any, keys []string, depth int) (string, bool) {
 	for actual, raw := range document {
 		for _, key := range keys {
 			if !strings.EqualFold(actual, key) {
@@ -415,7 +557,34 @@ func stringField(document map[string]any, keys ...string) (string, bool) {
 			}
 		}
 	}
+	if depth >= 3 {
+		return "", false
+	}
+	for _, key := range []string{"payload", "raw", "data", "event"} {
+		nested, ok := nestedDocument(document[key])
+		if !ok {
+			continue
+		}
+		if value, ok := nestedStringField(nested, keys, depth+1); ok {
+			return value, true
+		}
+	}
 	return "", false
+}
+
+func nestedDocument(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, true
+	case bson.M:
+		return map[string]any(typed), true
+	case string:
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(typed), &decoded); err == nil && decoded != nil {
+			return decoded, true
+		}
+	}
+	return nil, false
 }
 
 func eventID(event storage.HookEvent, originalIndex int) string {
@@ -484,7 +653,7 @@ func payloadField(payload bson.Raw, field string) json.RawMessage {
 	if err := bson.Unmarshal(payload, &document); err != nil {
 		return nil
 	}
-	value, ok := document[field]
+	value, ok := nestedPayloadField(document, field, 0)
 	if !ok {
 		return nil
 	}
@@ -495,11 +664,200 @@ func payloadField(payload bson.Raw, field string) json.RawMessage {
 	return json.RawMessage(encoded)
 }
 
+func nestedPayloadField(document bson.M, field string, depth int) (any, bool) {
+	if value, ok := document[field]; ok {
+		return value, true
+	}
+	if depth >= 3 {
+		return nil, false
+	}
+	for _, key := range []string{"payload", "raw", "data", "event"} {
+		nested, ok := document[key]
+		if !ok {
+			continue
+		}
+		switch value := nested.(type) {
+		case bson.M:
+			if result, ok := nestedPayloadField(value, field, depth+1); ok {
+				return result, true
+			}
+		case map[string]any:
+			if result, ok := nestedPayloadField(bson.M(value), field, depth+1); ok {
+				return result, true
+			}
+		case string:
+			var decoded map[string]any
+			if json.Unmarshal([]byte(value), &decoded) == nil && decoded != nil {
+				if result, ok := nestedPayloadField(bson.M(decoded), field, depth+1); ok {
+					return result, true
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
 func value(pointer *string) string {
 	if pointer == nil {
 		return ""
 	}
 	return *pointer
+}
+
+func runtimeMetadataFromPayload(payload bson.Raw, eventName string) trace.RuntimeMetadata {
+	document := payloadDocument(payload)
+	if document == nil {
+		return trace.RuntimeMetadata{}
+	}
+	documents := runtimeMetadataDocuments(document)
+	metadata := trace.RuntimeMetadata{
+		Model:           firstStringField(documents, "model", "model_name", "modelName"),
+		Provider:        firstStringField(documents, "provider", "model_provider", "modelProvider"),
+		ReasoningEffort: firstStringField(documents, "reasoning_effort", "reasoningEffort", "effort"),
+		Client:          firstStringField(documents, "client", "originator"),
+		ClientVersion:   firstStringField(documents, "client_version", "clientVersion", "cli_version", "cliVersion"),
+		Source:          firstStringField(documents, "source"),
+		PermissionMode:  firstStringField(documents, "permission_mode", "permissionMode"),
+		ThreadSource:    firstStringField(documents, "thread_source", "threadSource"),
+	}
+	metadata.ContextWindowTokens = firstInt64Field(documents, "context_window_tokens", "contextWindowTokens", "model_context_window", "modelContextWindow")
+	if hasRuntimeMetadata(metadata) {
+		metadata.RecordedFrom = eventName
+	}
+	return metadata
+}
+
+func runtimeMetadataDocuments(document map[string]any) []map[string]any {
+	const maxDepth = 4
+	containerKeys := []string{"metadata", "runtime", "runtime_metadata", "execution_settings", "session_meta", "turn_context", "task_started", "payload"}
+	documents := make([]map[string]any, 0, 1)
+	var visit func(map[string]any, int)
+	visit = func(current map[string]any, depth int) {
+		if current == nil || depth > maxDepth {
+			return
+		}
+		documents = append(documents, current)
+		for _, key := range containerKeys {
+			raw, ok := mapValue(current, key)
+			if !ok {
+				continue
+			}
+			if nested, ok := runtimeMetadataDocumentValue(raw); ok {
+				visit(nested, depth+1)
+			}
+		}
+	}
+	visit(document, 0)
+	return documents
+}
+
+func mapValue(document map[string]any, key string) (any, bool) {
+	for actual, value := range document {
+		if strings.EqualFold(actual, key) {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func runtimeMetadataDocumentValue(raw any) (map[string]any, bool) {
+	switch value := raw.(type) {
+	case map[string]any:
+		return value, true
+	case bson.M:
+		return map[string]any(value), true
+	case string:
+		var document map[string]any
+		if err := json.Unmarshal([]byte(value), &document); err == nil && document != nil {
+			return document, true
+		}
+	}
+	return nil, false
+}
+
+func firstStringField(documents []map[string]any, keys ...string) string {
+	for _, document := range documents {
+		if value, ok := stringField(document, keys...); ok {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstInt64Field(documents []map[string]any, keys ...string) int64 {
+	for _, document := range documents {
+		for actual, raw := range document {
+			matched := false
+			for _, key := range keys {
+				if strings.EqualFold(actual, key) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+			switch value := raw.(type) {
+			case int:
+				return int64(value)
+			case int32:
+				return int64(value)
+			case int64:
+				return value
+			case float32:
+				return int64(value)
+			case float64:
+				return int64(value)
+			case string:
+				if parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err == nil {
+					return parsed
+				}
+			}
+		}
+	}
+	return 0
+}
+
+func hasRuntimeMetadata(metadata trace.RuntimeMetadata) bool {
+	return metadata.Model != "" || metadata.Provider != "" || metadata.ReasoningEffort != "" || metadata.ContextWindowTokens != 0 || metadata.Client != "" || metadata.ClientVersion != "" || metadata.Source != "" || metadata.PermissionMode != "" || metadata.ThreadSource != ""
+}
+
+func mergeRuntimeMetadata(current, incoming trace.RuntimeMetadata) trace.RuntimeMetadata {
+	if current.Model == "" {
+		current.Model = incoming.Model
+	}
+	if current.Provider == "" {
+		current.Provider = incoming.Provider
+	}
+	if current.ReasoningEffort == "" {
+		current.ReasoningEffort = incoming.ReasoningEffort
+	}
+	if current.ContextWindowTokens == 0 {
+		current.ContextWindowTokens = incoming.ContextWindowTokens
+	}
+	if current.Client == "" {
+		current.Client = incoming.Client
+	}
+	if current.ClientVersion == "" {
+		current.ClientVersion = incoming.ClientVersion
+	}
+	if current.Source == "" {
+		current.Source = incoming.Source
+	}
+	if current.PermissionMode == "" {
+		current.PermissionMode = incoming.PermissionMode
+	}
+	if current.ThreadSource == "" {
+		current.ThreadSource = incoming.ThreadSource
+	}
+	if incoming.RecordedFrom != "" && !strings.Contains(current.RecordedFrom, incoming.RecordedFrom) {
+		if current.RecordedFrom == "" {
+			current.RecordedFrom = incoming.RecordedFrom
+		} else {
+			current.RecordedFrom += " + " + incoming.RecordedFrom
+		}
+	}
+	return current
 }
 
 func joinReasons(left, right string) string {

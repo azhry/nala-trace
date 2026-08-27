@@ -11,7 +11,7 @@ function FileTag({ file }) {
   return <Tag tone="green"><span>file / {file}</span>{scope && <span className={`instruction-scope-badge ${scope.kind}`}>{scope.shortLabel}</span>}</Tag>
 }
 
-export default function ToolCallCard({ event, defaultOpen = false }) {
+export default function ToolCallCard({ event, defaultOpen = false, selected = false, active = false }) {
   const [open, setOpen] = useState(defaultOpen)
   const skills = event.skills || []
   const files = event.files || []
@@ -23,7 +23,7 @@ export default function ToolCallCard({ event, defaultOpen = false }) {
   const fullResponse = event.response == null || event.response === '' ? 'Response not recorded' : typeof event.response === 'string' ? event.response : JSON.stringify(event.response, null, 2)
 
   return (
-    <article className={`tool-card ${open ? 'is-open' : ''} ${event.status === 'attention' ? 'has-attention' : ''}`}>
+    <article id={`trace-event-${encodeURIComponent(String(event.id || 'unknown'))}`} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`tool-card ${open ? 'is-open' : ''} ${event.status === 'attention' ? 'has-attention' : ''} ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}>
       <button
         type="button"
         className="tool-card-toggle"

@@ -125,6 +125,78 @@ function firstString(sources, keys) {
   return ''
 }
 
+function firstArray(source, keys) {
+  for (const key of keys) {
+    if (Array.isArray(source?.[key])) return source[key]
+  }
+  return null
+}
+
+function summaryCount(summary, keys, fallback = 0) {
+  for (const key of keys) {
+    const value = Number(summary?.[key])
+    if (Number.isFinite(value)) return value
+  }
+  return fallback
+}
+
+function summaryServerNames(summary) {
+  const value = summary?.mcp_servers ?? summary?.mcpServers
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.map(cleanString).filter(Boolean))]
+}
+
+function normalizeSkillInvocation(item = {}) {
+  const record = rawRecord(item)
+  return {
+    name: firstString([record], ['name', 'skill_name', 'skillName']),
+    eventId: firstString([record], ['event_id', 'eventId']),
+    toolUseId: firstString([record], ['tool_use_id', 'toolUseId']) || null,
+    toolName: firstString([record], ['tool_name', 'toolName']) || null,
+    confidence: firstString([record], ['confidence']) || null,
+    occurredAt: record.occurred_at ?? record.occurredAt ?? null,
+    raw: record.raw ?? null,
+  }
+}
+
+function normalizeFileOperation(item = {}) {
+  const record = rawRecord(item)
+  return {
+    path: firstString([record], ['path', 'file_path', 'filePath']),
+    operation: firstString([record], ['operation', 'action']).toLowerCase() || 'ambiguous',
+    eventId: firstString([record], ['event_id', 'eventId']),
+    toolUseId: firstString([record], ['tool_use_id', 'toolUseId']) || null,
+    toolName: firstString([record], ['tool_name', 'toolName']) || null,
+    confidence: firstString([record], ['confidence']) || null,
+    occurredAt: record.occurred_at ?? record.occurredAt ?? null,
+    raw: record.raw ?? null,
+  }
+}
+
+export function getFileOperations(event = {}) {
+  if (Array.isArray(event.fileRecords) && event.fileRecords.length) return event.fileRecords
+
+  return (Array.isArray(event.files) ? event.files : []).map((path) => ({
+    path,
+    operation: cleanString(event.action).toLowerCase() || 'ambiguous',
+  }))
+}
+
+export function isReadFileOperation(record = {}) {
+  return cleanString(record.operation ?? record.action).toLowerCase() === 'read'
+}
+
+export function skillNameFromFilePath(file) {
+  const path = cleanString(file).replaceAll('\\', '/').replace(/\/+/g, '/')
+  const match = path.match(/(?:^|\/)skills\/(?:\.system\/)?([^/]+)(?:\/|$)/i)
+  return match ? match[1] : ''
+}
+
+export function isSkillDocumentPath(file) {
+  const path = cleanString(file).replaceAll('\\', '/').replace(/\/+/g, '/')
+  return /(?:^|\/)skills\/(?:\.system\/)?[^/]+\/SKILL\.md$/i.test(path)
+}
+
 function normalizeProvenance(item, raw) {
   const sources = [item, raw]
   const eventName = firstString(sources, ['hook_event_name', 'hookEventName', 'kind'])
@@ -247,6 +319,8 @@ function normalizeToolCall(call = {}, index) {
     responseLabel: 'JSON',
     skills: EMPTY_LIST,
     files: EMPTY_LIST,
+    skillRecords: EMPTY_LIST,
+    fileRecords: EMPTY_LIST,
     raw: call.raw ?? null,
     occurredAt,
     turnId: cleanString(call.turn_id ?? call.turnId) || null,
@@ -275,6 +349,10 @@ function normalizeTimelineEvent(event = {}, index) {
     turnId: cleanString(event.turn_id ?? event.turnId) || null,
     toolCallIndex,
     record: null,
+    skills: EMPTY_LIST,
+    files: EMPTY_LIST,
+    skillRecords: EMPTY_LIST,
+    fileRecords: EMPTY_LIST,
     raw: event.raw ?? null,
     provenance,
     lifecycleEvent: provenance.eventName,
@@ -312,6 +390,51 @@ function sortStreamEvents(events) {
 
 function sortTimelineStreamEvents(events) {
   return [...events].sort((left, right) => (left.streamOrder ?? Number.POSITIVE_INFINITY) - (right.streamOrder ?? Number.POSITIVE_INFINITY))
+}
+
+function withSignalRecords(event, skillRecords = EMPTY_LIST, fileRecords = EMPTY_LIST) {
+  return {
+    ...event,
+    skills: skillRecords.map((record) => record.name).filter(Boolean),
+    files: fileRecords.map((record) => record.path).filter(Boolean),
+    skillRecords,
+    fileRecords,
+  }
+}
+
+function projectApiSignals({ timelineEvents, toolEvents, skillInvocations, files }) {
+  const timelineById = new Map(timelineEvents.map((event) => [event.id, event]))
+  const signalsByTimelineId = new Map()
+  const toolSignals = toolEvents.map(() => ({ skills: [], files: [] }))
+
+  function addSignal(kind, record) {
+    const timeline = timelineById.get(record.eventId)
+    if (!timeline) return
+
+    const signal = signalsByTimelineId.get(record.eventId) || { skills: [], files: [] }
+    signal[kind].push(record)
+    signalsByTimelineId.set(record.eventId, signal)
+
+    if (Number.isInteger(timeline.toolCallIndex) && timeline.toolCallIndex >= 0 && toolSignals[timeline.toolCallIndex]) {
+      toolSignals[timeline.toolCallIndex][kind].push(record)
+    }
+  }
+
+  skillInvocations.forEach((record) => addSignal('skills', record))
+  files.forEach((record) => addSignal('files', record))
+
+  const projectedTimelineEvents = timelineEvents.map((event) => {
+    const signal = signalsByTimelineId.get(event.id)
+    return signal ? withSignalRecords(event, signal.skills, signal.files) : event
+  })
+  const projectedToolEvents = toolEvents.map((event, index) => {
+    const signal = toolSignals[index]
+    return signal.skills.length || signal.files.length
+      ? withSignalRecords(event, signal.skills, signal.files)
+      : event
+  })
+
+  return { timelineEvents: projectedTimelineEvents, toolEvents: projectedToolEvents }
 }
 
 function composeApiStream({ conversationEvents, contextEvents, toolEvents, timelineEvents }) {
@@ -410,9 +533,30 @@ function apiTraceViewModel(trace) {
     ? trace.timeline.map(normalizeTimelineEvent)
     : EMPTY_LIST
   const summary = trace.summary && typeof trace.summary === 'object' ? trace.summary : {}
+  const skillInvocationSource = firstArray(trace, ['skill_invocations', 'skillInvocations'])
+  const fileOperationSource = firstArray(trace, ['files', 'fileOperations'])
+  const skillInvocations = (skillInvocationSource || EMPTY_LIST).map(normalizeSkillInvocation)
+  const files = (fileOperationSource || EMPTY_LIST).map(normalizeFileOperation)
+  const skillInvocationCount = skillInvocationSource
+    ? skillInvocations.length
+    : summaryCount(summary, ['skill_invocation_count', 'skillInvocationCount'])
+  const fileOperationCount = fileOperationSource
+    ? files.length
+    : summaryCount(summary, ['file_operation_count', 'fileOperationCount'])
+  const fileReadCount = fileOperationSource
+    ? files.filter((file) => file.operation === 'read').length
+    : summaryCount(summary, ['file_read_count', 'fileReadCount'])
+  const mcpCallCount = summaryCount(summary, ['mcp_call_count', 'mcpCallCount'])
+  const mcpServers = summaryServerNames(summary)
+  const projectedSignals = projectApiSignals({ timelineEvents, toolEvents, skillInvocations, files })
   const partial = conversationEvents.some((event) => event.partial)
 
-  const orderedEvents = composeApiStream({ conversationEvents, contextEvents, toolEvents, timelineEvents })
+  const orderedEvents = composeApiStream({
+    conversationEvents,
+    contextEvents,
+    toolEvents: projectedSignals.toolEvents,
+    timelineEvents: projectedSignals.timelineEvents,
+  })
 
   return {
     source: 'api',
@@ -421,9 +565,25 @@ function apiTraceViewModel(trace) {
     contextEvents,
     partial,
     partialMessage: partial ? 'Some message content or turn metadata was not recorded.' : '',
-    semanticRecords: Number.isFinite(Number(summary.event_count)) ? Number(summary.event_count) : timelineEvents.length,
+    semanticRecords: summaryCount(summary, ['event_count', 'eventCount'], timelineEvents.length),
     messageCount: conversationEvents.length,
-    toolCount: Number.isFinite(Number(summary.tool_call_count)) ? Number(summary.tool_call_count) : toolEvents.length,
+    toolCount: summaryCount(summary, ['tool_call_count', 'toolCallCount'], toolEvents.length),
+    mcpCallCount,
+    mcpServers,
+    skillInvocations,
+    files,
+    skillInvocationCount,
+    fileOperationCount,
+    fileReadCount,
+    skillCount: skillInvocationCount,
+    fileCount: fileOperationCount,
+    signalCounts: {
+      skills: skillInvocationCount,
+      files: fileOperationCount,
+      fileReads: fileReadCount,
+      mcpCalls: mcpCallCount,
+      mcpServers: mcpServers.length,
+    },
     startedAt: orderedEvents[0]?.time || 'Time not recorded',
     capturedAt: orderedEvents.at(-1)?.time || 'Time not recorded',
   }
@@ -442,6 +602,8 @@ function legacyTraceViewModel(trace) {
     semanticRecords: Number(trace.events || events.length).toLocaleString(),
     messageCount: Number(trace.messages || conversation.length),
     toolCount: Number(trace.toolCalls || events.filter((event) => event.type === 'tool').length),
+    mcpCallCount: 0,
+    mcpServers: EMPTY_LIST,
     startedAt: trace.startedAt || 'Time not recorded',
     capturedAt: trace.capturedAt || 'Time not recorded',
   }

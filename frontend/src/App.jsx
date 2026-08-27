@@ -4,7 +4,8 @@ import { AuthHandoffError, readNalaLabsAuthCode, redirectToNalaLabs, redeemNalaL
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
-import TraceView from './components/TraceView'
+import ScrollToTopButton from './components/ScrollToTopButton'
+import TraceView, { TraceLoadingPanel } from './components/TraceView'
 import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries'
 
 function parseRoute(hash = window.location.hash) {
@@ -16,6 +17,8 @@ function parseRoute(hash = window.location.hash) {
 function navigateTo(path) {
   window.location.hash = `/${path}`
 }
+
+export const TRACE_LOADING_MIN_DURATION_MS = 180
 
 function dataSourceCopy(apiState) {
   if (apiState === 'connected') return { label: 'Go API data', status: 'Go API connected', detail: 'Using live session records from the protected Go API' }
@@ -85,12 +88,14 @@ function Topbar({ route, session, apiState, onSignOut }) {
 
 function SessionStats({ sessions }) {
   const tools = sessions.reduce((total, session) => total + session.toolCallCount, 0)
+  const mcpCalls = sessions.reduce((total, session) => total + session.mcpCallCount, 0)
+  const mcpServers = [...new Set(sessions.flatMap((session) => Array.isArray(session.mcpServers) ? session.mcpServers : []))]
   const attention = sessions.filter((session) => session.status === 'attention').length
   const latest = sessions.reduce((current, session) => {
     if (!current || (session.lastEventTime || 0) > (current.lastEventTime || 0)) return session
     return current
   }, null)
-  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>available to this account</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>evaluation signal when available</small></div><div><span>Last captured</span><strong>{latest ? formatSessionDate(latest.lastEventAt) : '—'}</strong><small>most recent event</small></div></div>
+  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>available to this account</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div><div aria-label={`${mcpCalls} MCP calls across ${mcpServers.length} unique MCP servers`}><span>MCP calls</span><strong>{mcpCalls.toLocaleString()}</strong><small>{mcpServers.length ? `${mcpServers.length} unique servers` : 'No MCP servers recorded'}</small>{mcpServers.length > 0 && <span className="workspace-stat-server-list" title={mcpServers.join(', ')}>MCP: {mcpServers.join(' · ')}</span>}</div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>evaluation signal when available</small></div><div><span>Last captured</span><strong>{latest ? formatSessionDate(latest.lastEventAt) : '—'}</strong><small>most recent event</small></div></div>
 }
 
 function DataSourceNotice({ apiState }) {
@@ -113,7 +118,7 @@ function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, fi
 function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry }) {
   const source = dataSourceCopy(apiState)
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} /><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards insights={session.insights || { metrics: [] }} /></div></section>
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} />{traceState === 'loading' && <TraceLoadingPanel />}<SessionMetadata session={session} />{traceState !== 'loading' && <div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards insights={session.insights || { metrics: [] }} /></div>}</section>
 }
 
 export default function App() {
@@ -125,6 +130,8 @@ export default function App() {
   const [apiState, setApiState] = useState('loading')
   const [handoffState, setHandoffState] = useState('idle')
   const [remoteTrace, setRemoteTrace] = useState(null)
+  const [traceSessionId, setTraceSessionId] = useState(null)
+  const [traceRequestSessionId, setTraceRequestSessionId] = useState(null)
   const [traceState, setTraceState] = useState('idle')
   const [traceError, setTraceError] = useState(null)
   const [redirectOnEntry] = useState(() => shouldRedirectOnEntry())
@@ -175,15 +182,23 @@ export default function App() {
 
   const loadTrace = useCallback((sessionId, isActive = () => true) => {
     if (!sessionId) return Promise.resolve(null)
+    const loadingStartedAt = Date.now()
+    const settleAfterVisibleLoading = (settle) => {
+      const remaining = Math.max(0, TRACE_LOADING_MIN_DURATION_MS - (Date.now() - loadingStartedAt))
+      return new Promise((resolve) => window.setTimeout(resolve, remaining)).then(settle)
+    }
+    setTraceRequestSessionId(sessionId)
     setRemoteTrace(null)
+    setTraceSessionId(null)
     setTraceError(null)
     setTraceState('loading')
-    return getTrace(sessionId).then((payload) => {
+    return getTrace(sessionId).then((payload) => settleAfterVisibleLoading(() => {
       if (!isActive()) return payload
       setRemoteTrace(payload || {})
+      setTraceSessionId(sessionId)
       setTraceState('ready')
       return payload
-    }).catch((error) => {
+    })).catch((error) => settleAfterVisibleLoading(() => {
       if (!isActive()) return null
       setTraceError(error)
       setTraceState(error instanceof ApiError && error.status === 404
@@ -192,13 +207,15 @@ export default function App() {
           ? 'unauthorized'
           : 'error')
       return null
-    })
+    }))
   }, [])
 
   useEffect(() => {
     let mounted = true
     if (apiState !== 'connected' || route.view !== 'detail' || !route.sessionId) {
       setRemoteTrace(null)
+      setTraceSessionId(null)
+      setTraceRequestSessionId(null)
       setTraceError(null)
       setTraceState('idle')
       return () => { mounted = false }
@@ -207,7 +224,9 @@ export default function App() {
     return () => { mounted = false }
   }, [apiState, loadTrace, route.sessionId, route.view])
 
-  const detailSession = remoteTrace
+  const hasCurrentTrace = Boolean(remoteTrace && traceSessionId === route.sessionId)
+  const detailTraceState = traceRequestSessionId !== route.sessionId ? 'loading' : traceState
+  const detailSession = hasCurrentTrace
     ? { ...(selectedSession || { id: route.sessionId, title: route.sessionId, status: 'captured' }), ...remoteTrace }
     : selectedSession || (route.view === 'detail' && route.sessionId ? { id: route.sessionId, title: route.sessionId, status: 'captured' } : null)
 
@@ -219,5 +238,5 @@ export default function App() {
   if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} traceState={traceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

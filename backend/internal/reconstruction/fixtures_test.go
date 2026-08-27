@@ -80,7 +80,7 @@ func TestReconstructCompleteFixtureAssertsFullTraceContract(t *testing.T) {
 		}
 	}
 
-	wantSummary := trace.Summary{EventCount: 14, MessageCount: 2, ToolCallCount: 4, SkillInvocationCount: 1, FileOperationCount: 2}
+	wantSummary := trace.Summary{EventCount: 14, MessageCount: 2, ToolCallCount: 4, MCPCallCount: 0, MCPServers: []string{}, SkillInvocationCount: 1, FileOperationCount: 2, FileReadCount: 1}
 	if !reflect.DeepEqual(result.Summary, wantSummary) {
 		t.Fatalf("summary = %#v, want %#v", result.Summary, wantSummary)
 	}
@@ -125,7 +125,7 @@ func TestReconstructPartialFixturePreservesBoundedMarkers(t *testing.T) {
 	if len(result.Files) != 1 || result.Files[0].Path != "TODO.md" || result.Files[0].Operation != "read" {
 		t.Fatalf("partial files = %#v", result.Files)
 	}
-	wantSummary := trace.Summary{EventCount: 7, MessageCount: 2, ToolCallCount: 4, SkillInvocationCount: 2, FileOperationCount: 1}
+	wantSummary := trace.Summary{EventCount: 7, MessageCount: 2, ToolCallCount: 4, MCPCallCount: 0, MCPServers: []string{}, SkillInvocationCount: 2, FileOperationCount: 1, FileReadCount: 1}
 	if !reflect.DeepEqual(result.Summary, wantSummary) {
 		t.Fatalf("partial summary = %#v, want %#v", result.Summary, wantSummary)
 	}

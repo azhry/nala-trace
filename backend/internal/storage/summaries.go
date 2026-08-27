@@ -6,6 +6,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+const mcpToolNamePattern = `^mcp__(?:codex_apps__(?!(?:node_repl)_)[^_\s]+_.+|(?!(?:codex_apps|node_repl)__).+__.+)$`
+const codexAppsToolPrefix = "mcp__codex_apps__"
+
 type SessionSummary struct {
 	SessionID            string    `bson:"session_id" json:"session_id"`
 	Title                string    `bson:"title" json:"title"`
@@ -14,8 +17,11 @@ type SessionSummary struct {
 	LastEventAt          time.Time `bson:"last_event_at" json:"last_event_at"`
 	EventCount           int64     `bson:"event_count" json:"event_count"`
 	ToolCallCount        int64     `bson:"tool_call_count" json:"tool_call_count"`
+	MCPCallCount         int64     `bson:"mcp_call_count" json:"mcp_call_count"`
+	MCPServers           []string  `bson:"mcp_servers" json:"mcp_servers"`
 	SkillInvocationCount int64     `bson:"skill_invocation_count" json:"skill_invocation_count"`
 	FileOperationCount   int64     `bson:"file_operation_count" json:"file_operation_count"`
+	FileReadCount        int64     `bson:"file_read_count" json:"file_read_count"`
 }
 
 func sessionSummaryPipeline() []bson.D {
@@ -23,16 +29,11 @@ func sessionSummaryPipeline() []bson.D {
 }
 
 func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
-	toolEvent := bson.D{{Key: "$in", Value: bson.A{"$hook_event_name", bson.A{"PreToolUse"}}}}
-	skillEvent := bson.D{{Key: "$regexMatch", Value: bson.D{
-		{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$tool_name", ""}}}},
-		{Key: "regex", Value: "skill"},
-		{Key: "options", Value: "i"},
-	}}}
-	fileEvent := bson.D{{Key: "$or", Value: bson.A{
-		bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$payload.file_path", nil}}}, nil}}},
-		bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$payload.path", nil}}}, nil}}},
-	}}}
+	toolEvent := preToolUseExpression()
+	skillEvent := andExpression(toolEvent, skillSignalExpression())
+	fileEvent := andExpression(toolEvent, fileSignalExpression())
+	fileReadEvent := andExpression(toolEvent, fileSignalExpression(), fileReadSignalExpression())
+	mcpEvent := andExpression(toolEvent, mcpSignalExpression())
 	explicitTitle := firstNonEmptyString(bson.A{
 		stringFieldCandidate("$payload.title"),
 		stringFieldCandidate("$payload.session_title"),
@@ -54,8 +55,11 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "last_event_at", Value: bson.D{{Key: "$max", Value: "$received_at"}}},
 			{Key: "event_count", Value: bson.D{{Key: "$sum", Value: 1}}},
 			{Key: "tool_call_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{toolEvent, 1, 0}}}}}},
+			{Key: "mcp_call_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{mcpEvent, 1, 0}}}}}},
+			{Key: "mcp_servers", Value: bson.D{{Key: "$addToSet", Value: bson.D{{Key: "$cond", Value: bson.A{mcpEvent, mcpServerExpression(), nil}}}}}},
 			{Key: "skill_invocation_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{skillEvent, 1, 0}}}}}},
 			{Key: "file_operation_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{fileEvent, 1, 0}}}}}},
+			{Key: "file_read_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{fileReadEvent, 1, 0}}}}}},
 		}}},
 		{{Key: "$project", Value: bson.D{
 			{Key: "_id", Value: 0},
@@ -66,8 +70,15 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "last_event_at", Value: 1},
 			{Key: "event_count", Value: 1},
 			{Key: "tool_call_count", Value: 1},
+			{Key: "mcp_call_count", Value: 1},
+			{Key: "mcp_servers", Value: bson.D{{Key: "$filter", Value: bson.D{
+				{Key: "input", Value: "$mcp_servers"},
+				{Key: "as", Value: "server"},
+				{Key: "cond", Value: bson.D{{Key: "$ne", Value: bson.A{"$$server", nil}}}},
+			}}}},
 			{Key: "skill_invocation_count", Value: 1},
 			{Key: "file_operation_count", Value: 1},
+			{Key: "file_read_count", Value: 1},
 		}}},
 		{{Key: "$sort", Value: bson.D{{Key: "last_event_at", Value: -1}, {Key: "session_id", Value: 1}}}},
 	}...)
@@ -75,6 +86,216 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 		pipeline = append(pipeline, bson.D{{Key: "$limit", Value: limit}})
 	}
 	return pipeline
+}
+
+func preToolUseExpression() bson.D {
+	return anyFieldEqualsExpression(append([]string{"$hook_event_name"}, payloadFieldPaths("hook_event_name")...), "PreToolUse")
+}
+
+func andExpression(expressions ...bson.D) bson.D {
+	values := make(bson.A, 0, len(expressions))
+	for _, expression := range expressions {
+		values = append(values, expression)
+	}
+	return bson.D{{Key: "$and", Value: values}}
+}
+
+func skillSignalExpression() bson.D {
+	return bson.D{{Key: "$or", Value: bson.A{
+		anyRegexFieldExpression(append([]string{"$tool_name"}, payloadFieldPaths("tool_name")...), "skill"),
+		anyNonEmptyStringExpression(payloadFieldPaths("skill")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("skill_name")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.skill")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.skill_name")...),
+		anyArrayNonEmptyExpression(payloadFieldPaths("skills")...),
+		anyArrayNonEmptyExpression(payloadFieldPaths("tool_input.skills")...),
+		skillDocumentSignalExpression(),
+	}}}
+}
+
+func skillDocumentSignalExpression() bson.D {
+	paths := append([]string{}, payloadFieldPaths("tool_input.command")...)
+	paths = append(paths, payloadFieldPaths("tool_input.file_path")...)
+	paths = append(paths, payloadFieldPaths("tool_input.path")...)
+	paths = append(paths, payloadFieldPaths("tool_input.target_file")...)
+	paths = append(paths, payloadFieldPaths("tool_input.filename")...)
+	paths = append(paths, payloadFieldPaths("tool_input.file")...)
+	return anyRegexFieldExpression(paths, `(?:^|[\\/])skills[\\/]+(?:\.system[\\/]+)?[^\\/\s]+[\\/]+SKILL\.md`)
+}
+
+func fileSignalExpression() bson.D {
+	return bson.D{{Key: "$or", Value: bson.A{
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.file_path")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.path")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.target_file")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.filename")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.file")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.old_path")...),
+		anyNonEmptyStringExpression(payloadFieldPaths("tool_input.new_path")...),
+		anyRegexFieldExpression(payloadFieldPaths("tool_input"), `\*\*\* (Add|Update|Delete|Move to) File:`),
+		anyRegexFieldExpression(payloadFieldPaths("tool_input.command"), `(^|\s)(cat|head|tail|type|get-content|read|set-content|out-file|tee|remove-item|rm|del|delete)(\s|$)`),
+	}}}
+}
+
+func fileReadSignalExpression() bson.D {
+	return bson.D{{Key: "$or", Value: bson.A{
+		anyFieldEqualsExpression(payloadFieldPaths("tool_input.operation"), "read"),
+		anyFieldEqualsExpression(payloadFieldPaths("tool_input.action"), "read"),
+		anyRegexFieldExpression(append([]string{"$tool_name"}, payloadFieldPaths("tool_name")...), `(read|cat|get-content|open)`),
+		anyRegexFieldExpression(payloadFieldPaths("tool_input.command"), `(^|\s)(cat|head|tail|type|get-content|read)(\s|$)`),
+	}}}
+}
+
+func mcpSignalExpression() bson.D {
+	return anyRegexFieldExpression(append([]string{"$tool_name"}, payloadFieldPaths("tool_name")...), mcpToolNamePattern)
+}
+
+func mcpToolNameExpression() bson.D {
+	return firstMatchingString(bson.A{
+		stringFieldCandidate("$tool_name"),
+		stringFieldCandidate("$payload.tool_name"),
+		stringFieldCandidate("$payload.payload.tool_name"),
+		stringFieldCandidate("$payload.raw.tool_name"),
+		stringFieldCandidate("$payload.data.tool_name"),
+		stringFieldCandidate("$payload.event.tool_name"),
+	}, mcpToolNamePattern)
+}
+
+func mcpServerExpression() bson.D {
+	name := mcpToolNameExpression()
+	return bson.D{{Key: "$let", Value: bson.D{
+		{Key: "vars", Value: bson.D{{Key: "name", Value: name}}},
+		{Key: "in", Value: bson.D{{Key: "$cond", Value: bson.A{
+			bson.D{{Key: "$regexMatch", Value: bson.D{
+				{Key: "input", Value: "$$name"},
+				{Key: "regex", Value: "^mcp__codex_apps__"},
+				{Key: "options", Value: "i"},
+			}}},
+			mcpCodexAppsServerExpression(),
+			mcpDirectServerExpression(),
+		}}}},
+	}}}
+}
+
+func mcpDirectServerExpression() bson.D {
+	separator := bson.D{{Key: "$indexOfCP", Value: bson.A{"$$name", "__", 5}}}
+	return bson.D{{Key: "$toLower", Value: bson.D{{Key: "$substrCP", Value: bson.A{
+		"$$name",
+		5,
+		bson.D{{Key: "$subtract", Value: bson.A{separator, 5}}},
+	}}}}}
+}
+
+func mcpCodexAppsServerExpression() bson.D {
+	connectorName := bson.D{{Key: "$substrCP", Value: bson.A{
+		"$$name",
+		len(codexAppsToolPrefix),
+		bson.D{{Key: "$subtract", Value: bson.A{
+			bson.D{{Key: "$strLenCP", Value: "$$name"}},
+			len(codexAppsToolPrefix),
+		}}},
+	}}}
+	separator := bson.D{{Key: "$indexOfCP", Value: bson.A{connectorName, "_"}}}
+	return bson.D{{Key: "$toLower", Value: bson.D{{Key: "$substrCP", Value: bson.A{
+		connectorName,
+		0,
+		separator,
+	}}}}}
+}
+
+func payloadFieldPaths(field string) []string {
+	return []string{
+		"$payload." + field,
+		"$payload.payload." + field,
+		"$payload.raw." + field,
+		"$payload.data." + field,
+		"$payload.event." + field,
+	}
+}
+
+func firstMatchingString(candidates bson.A, regex string) bson.D {
+	return bson.D{{Key: "$arrayElemAt", Value: bson.A{
+		bson.D{{Key: "$map", Value: bson.D{
+			{Key: "input", Value: bson.D{{Key: "$filter", Value: bson.D{
+				{Key: "input", Value: candidates},
+				{Key: "as", Value: "candidate"},
+				{Key: "cond", Value: bson.D{{Key: "$regexMatch", Value: bson.D{
+					{Key: "input", Value: "$$candidate"},
+					{Key: "regex", Value: regex},
+					{Key: "options", Value: "i"},
+				}}}},
+			}}}},
+			{Key: "as", Value: "candidate"},
+			{Key: "in", Value: "$$candidate"},
+		}}},
+		0,
+	}}}
+}
+
+func anyNonEmptyStringExpression(paths ...string) bson.D {
+	values := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		values = append(values, nonEmptyStringExpression(path))
+	}
+	return bson.D{{Key: "$or", Value: values}}
+}
+
+func anyArrayNonEmptyExpression(paths ...string) bson.D {
+	values := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		arrayValue := bson.D{{Key: "$cond", Value: bson.A{
+			bson.D{{Key: "$isArray", Value: path}},
+			path,
+			bson.A{},
+		}}}
+		values = append(values, bson.D{{Key: "$gt", Value: bson.A{
+			bson.D{{Key: "$size", Value: arrayValue}},
+			0,
+		}}})
+	}
+	return bson.D{{Key: "$or", Value: values}}
+}
+
+func anyFieldEqualsExpression(paths []string, want string) bson.D {
+	values := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		values = append(values, fieldEqualsExpression(path, want))
+	}
+	return bson.D{{Key: "$or", Value: values}}
+}
+
+func anyRegexFieldExpression(paths []string, regex string) bson.D {
+	values := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		values = append(values, regexFieldExpression(path, regex))
+	}
+	return bson.D{{Key: "$or", Value: values}}
+}
+
+func nonEmptyStringExpression(path string) bson.D {
+	converted := convertToStringExpression(path)
+	return bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$trim", Value: bson.D{{Key: "input", Value: converted}}}}, ""}}}
+}
+
+func fieldEqualsExpression(path, want string) bson.D {
+	return bson.D{{Key: "$eq", Value: bson.A{convertToStringExpression(path), want}}}
+}
+
+func regexFieldExpression(path, regex string) bson.D {
+	return bson.D{{Key: "$regexMatch", Value: bson.D{
+		{Key: "input", Value: convertToStringExpression(path)},
+		{Key: "regex", Value: regex},
+		{Key: "options", Value: "i"},
+	}}}
+}
+
+func convertToStringExpression(path string) bson.D {
+	return bson.D{{Key: "$convert", Value: bson.D{
+		{Key: "input", Value: path},
+		{Key: "to", Value: "string"},
+		{Key: "onError", Value: ""},
+		{Key: "onNull", Value: ""},
+	}}}
 }
 
 func stringFieldCandidate(path string) bson.D {

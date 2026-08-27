@@ -4,8 +4,31 @@ function numberOrZero(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0
 }
 
+function countValue(summary, scalarKeys, collectionKeys = []) {
+  let explicitCount = 0
+  let hasExplicitCount = false
+  for (const key of scalarKeys) {
+    if (summary?.[key] !== undefined && summary?.[key] !== null) {
+      hasExplicitCount = true
+      explicitCount = Math.max(explicitCount, numberOrZero(summary[key]))
+    }
+  }
+  let capturedCount = 0
+  for (const key of collectionKeys) {
+    const value = summary?.[key]
+    if (Array.isArray(value)) capturedCount = Math.max(capturedCount, value.length)
+    else if (value !== undefined && value !== null) capturedCount = Math.max(capturedCount, numberOrZero(value))
+  }
+  return Math.max(hasExplicitCount ? explicitCount : 0, capturedCount)
+}
+
 function cleanString(value) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function serverNamesValue(value) {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.map(cleanString).filter(Boolean))]
 }
 
 function statusValue(summary) {
@@ -39,7 +62,13 @@ export function normalizeSessionSummary(summary = {}) {
     lastEventTime: Number.isNaN(lastDate.getTime()) ? null : lastDate.getTime(),
     eventCount: numberOrZero(summary.event_count ?? summary.eventCount),
     toolCallCount: numberOrZero(summary.tool_call_count ?? summary.toolCallCount),
-    skillInvocationCount: numberOrZero(summary.skill_invocation_count ?? summary.skillInvocationCount),
+    mcpCallCount: numberOrZero(summary.mcp_call_count ?? summary.mcpCallCount),
+    mcpServers: serverNamesValue(summary.mcp_servers ?? summary.mcpServers),
+    skillInvocationCount: countValue(
+      summary,
+      ['skill_invocation_count', 'skillInvocationCount', 'skill_count', 'skillCount'],
+      ['skill_invocations', 'skillInvocations', 'skills'],
+    ),
     fileOperationCount: numberOrZero(summary.file_operation_count ?? summary.fileOperationCount),
     evaluationStatus,
     status: evaluationStatus || 'captured',
@@ -90,6 +119,9 @@ function searchableMetadata(summary) {
     formatSessionDate(summary.lastEventAt),
     `events ${summary.eventCount}`,
     `tools ${summary.toolCallCount}`,
+    `mcp ${summary.mcpCallCount}`,
+    `mcp calls ${summary.mcpCallCount}`,
+    `mcp servers ${summary.mcpServers.join(' ')}`,
     `skills ${summary.skillInvocationCount}`,
     `files ${summary.fileOperationCount}`,
     `status ${summary.evaluationStatus}`,

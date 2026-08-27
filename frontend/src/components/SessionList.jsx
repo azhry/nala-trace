@@ -6,8 +6,8 @@ const filters = [
   { id: 'passed', label: 'Passed' },
 ]
 
-function CountBadge({ value, label }) {
-  return <span className="count-badge" aria-label={`${value} ${label}`}><strong>{value}</strong><span>{label}</span></span>
+function CountBadge({ value, label, accessibleLabel = label }) {
+  return <span className="count-badge" aria-label={`${value} ${accessibleLabel}`}><strong>{value}</strong><span>{label}</span></span>
 }
 
 function StatusBadge({ status }) {
@@ -94,10 +94,14 @@ export default function SessionList({
               <span className="session-record-title"><strong>{sessionTitle(session)}</strong><StatusBadge status={session.status} /></span>
               <span className="session-record-id">{session.id}</span>
             </span>
-            <span className="session-counts" aria-label={`${session.toolCallCount} tool calls, ${session.skillInvocationCount} skills, ${session.fileOperationCount} files`}>
+            <span className="session-counts" aria-label={`${session.toolCallCount} tool calls, ${session.mcpCallCount} MCP calls, ${session.skillInvocationCount} skills, ${session.fileOperationCount} files`}>
               <CountBadge value={session.toolCallCount} label="tools" />
+              <CountBadge value={session.mcpCallCount} label="MCP" accessibleLabel="MCP calls" />
               <CountBadge value={session.skillInvocationCount} label="skills" />
               <CountBadge value={session.fileOperationCount} label="files" />
+              <span className="session-mcp-servers" aria-label={`MCP servers used: ${formatMcpServers(session)}`} title={`MCP servers used: ${formatMcpServers(session)}`}>
+                MCP servers: {formatMcpServers(session)}
+              </span>
             </span>
             <span className="session-last-event"><strong>{session.eventCount.toLocaleString()} events</strong><span>{formatDate(session.lastEventAt)}</span></span>
             <span className="session-captured">{formatDate(session.firstEventAt)}<span className="row-arrow" aria-hidden="true">↗</span></span>
@@ -126,4 +130,9 @@ function sessionTitle(session) {
 function sessionAccessibleLabel(session) {
   const title = sessionTitle(session)
   return title === session.id ? `Open session ${title}` : `Open session ${title} (${session.id})`
+}
+
+function formatMcpServers(session) {
+  const servers = Array.isArray(session.mcpServers) ? session.mcpServers.filter((server) => typeof server === 'string' && server.trim()) : []
+  return servers.length ? servers.join(' · ') : 'none recorded'
 }

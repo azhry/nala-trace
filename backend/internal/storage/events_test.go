@@ -4,7 +4,43 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
+
+func TestHookEventFromDocumentHydratesLegacyPayloadFields(t *testing.T) {
+	payload, err := bson.Marshal(bson.M{
+		"hook_event_name": "PreToolUse",
+		"tool_name":       "skill",
+		"tool_use_id":     "skill-1",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	event := hookEventFromDocument(hookEventDocument{Payload: payload})
+	if event.HookEventName != "PreToolUse" || event.ToolName == nil || *event.ToolName != "skill" || event.ToolUseID == nil || *event.ToolUseID != "skill-1" {
+		t.Fatalf("hydrated event = %#v", event)
+	}
+}
+
+func TestHookEventFromDocumentHydratesNestedRawPayloadFields(t *testing.T) {
+	payload, err := bson.Marshal(bson.M{
+		"payload": bson.M{
+			"hook_event_name": "PreToolUse",
+			"tool_name":       "skill",
+			"tool_use_id":     "skill-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	event := hookEventFromDocument(hookEventDocument{Payload: payload})
+	if event.HookEventName != "PreToolUse" || event.ToolName == nil || *event.ToolName != "skill" || event.ToolUseID == nil || *event.ToolUseID != "skill-1" {
+		t.Fatalf("hydrated nested event = %#v", event)
+	}
+}
 
 func TestListSessionEventsForUserPassesOwnerAndSessionScope(t *testing.T) {
 	calledUser, calledSession := "", ""

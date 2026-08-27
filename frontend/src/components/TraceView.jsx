@@ -233,8 +233,8 @@ function EvidenceSelectionNotice({ selection, onClear, onPrevious, onNext }) {
   </>
 }
 
-export function TraceLoadingPanel() {
-  return <div className="trace-state-panel trace-loading-panel" role="status" aria-live="polite" aria-busy="true"><div className="trace-loader-mark" aria-hidden="true"><span /><span /><span /></div><div className="trace-loading-content"><strong>Loading trace conversation…</strong><span>Reading the selected session from the protected Go API.</span></div><div className="trace-loading-skeletons" aria-hidden="true"><span /><span /><span /></div></div>
+export function TraceLoadingPanel({ title = 'Loading trace conversation…', detail = 'Reading the selected session from the protected Go API.' } = {}) {
+  return <div className="trace-state-panel trace-loading-panel" role="status" aria-live="polite" aria-busy="true"><div className="trace-loader-mark" aria-hidden="true"><span /><span /><span /></div><div className="trace-loading-content"><strong>{title}</strong><span>{detail}</span></div><div className="trace-loading-skeletons" aria-hidden="true"><span /><span /><span /></div></div>
 }
 
 function TraceStatePanel({ state, onRetry }) {

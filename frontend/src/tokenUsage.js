@@ -6,6 +6,8 @@ const USAGE_FIELDS = [
   ['total_tokens', 'totalTokens'],
   ['cost_usd', 'costUsd'],
 ]
+const COST_FIELDS = ['cost_usd', 'costUsd']
+const COST_MARKER_FIELDS = ['cost_recorded', 'costRecorded']
 
 export const EMPTY_TOKEN_USAGE = Object.freeze({
   inputTokens: 0,
@@ -14,6 +16,7 @@ export const EMPTY_TOKEN_USAGE = Object.freeze({
   reasoningTokens: 0,
   totalTokens: 0,
   costUsd: 0,
+  costRecorded: false,
 })
 
 function finiteNumber(value) {
@@ -26,25 +29,51 @@ function usageValue(source, snakeCaseKey, camelCaseKey) {
   return source[camelCaseKey]
 }
 
+function hasValue(source, keys) {
+  return keys.some((key) => source[key] !== undefined && source[key] !== null)
+}
+
+function booleanValue(value) {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  return Boolean(value)
+}
+
+export function hasRecordedCost(usage) {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return false
+  const marker = usageValue(usage, COST_MARKER_FIELDS[0], COST_MARKER_FIELDS[1])
+  if (marker !== undefined && marker !== null) return booleanValue(marker)
+  return hasValue(usage, COST_FIELDS)
+}
+
 export function normalizeTokenUsage(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const hasUsageField = USAGE_FIELDS.some(([snakeCaseKey, camelCaseKey]) => value[snakeCaseKey] !== undefined || value[camelCaseKey] !== undefined)
   if (!hasUsageField) return null
 
-  return Object.fromEntries(USAGE_FIELDS.map(([snakeCaseKey, camelCaseKey]) => [camelCaseKey, finiteNumber(usageValue(value, snakeCaseKey, camelCaseKey))]))
+  return {
+    ...Object.fromEntries(USAGE_FIELDS.map(([snakeCaseKey, camelCaseKey]) => [camelCaseKey, finiteNumber(usageValue(value, snakeCaseKey, camelCaseKey))])),
+    costRecorded: hasRecordedCost(value),
+  }
 }
 
 export function hasRecordedTokenUsage(usage) {
-  return Boolean(usage) && [
-    usage.inputTokens,
-    usage.cachedInputTokens,
-    usage.outputTokens,
-    usage.reasoningTokens,
-    usage.totalTokens,
-    usage.costUsd,
+  if (!usage) return false
+  const hasTokenCount = [
+    usageValue(usage, 'input_tokens', 'inputTokens'),
+    usageValue(usage, 'cached_input_tokens', 'cachedInputTokens'),
+    usageValue(usage, 'output_tokens', 'outputTokens'),
+    usageValue(usage, 'reasoning_tokens', 'reasoningTokens'),
+    usageValue(usage, 'total_tokens', 'totalTokens'),
   ].some((value) => finiteNumber(value) > 0)
+  return hasTokenCount || hasRecordedCost(usage) && finiteNumber(usageValue(usage, 'cost_usd', 'costUsd')) > 0
 }
 
 export function tokenUsageCost(usage) {
-  return `$${finiteNumber(usage?.costUsd).toFixed(4)}`
+  if (!hasRecordedCost(usage)) return null
+  return `$${finiteNumber(usageValue(usage, 'cost_usd', 'costUsd')).toFixed(4)}`
 }

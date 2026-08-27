@@ -60,11 +60,28 @@ describe('ToolCallCard', () => {
     expect(screen.getByText('recorded · record 42')).toBeInTheDocument()
   })
 
-  it('states when the tool row has no recorded token usage', () => {
+  it('does not render a usage label when the tool row has no recorded token usage', () => {
     render(<ToolCallCard event={shellEvent} />)
 
-    expect(screen.getByLabelText('Event token usage not recorded')).toHaveTextContent('Usage not recorded')
+    expect(screen.queryByLabelText('Event token usage not recorded')).not.toBeInTheDocument()
+    expect(screen.queryByText('Usage not recorded')).not.toBeInTheDocument()
     expect(screen.queryByText(/0 tokens/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\$0\.0000/)).not.toBeInTheDocument()
+  })
+
+  it('keeps token counts but omits cost when the producer did not record a cost', () => {
+    render(<ToolCallCard event={{
+      ...shellEvent,
+      tokenUsage: {
+        inputTokens: 100,
+        outputTokens: 40,
+        totalTokens: 140,
+        costUsd: 0,
+        costRecorded: false,
+      },
+    }} />)
+
+    expect(screen.getByLabelText('Event token usage: 140 total tokens')).toHaveTextContent('140 tokens')
     expect(screen.queryByText(/\$0\.0000/)).not.toBeInTheDocument()
   })
 })

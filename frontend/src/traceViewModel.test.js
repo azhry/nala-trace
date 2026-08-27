@@ -93,6 +93,7 @@ describe('normalizeTraceViewModel', () => {
       reasoningTokens: 5,
       totalTokens: 140,
       costUsd: 0.0012,
+      costRecorded: true,
     })
     expect(model.events[0].tokenUsage).toEqual(model.tokenUsage)
   })

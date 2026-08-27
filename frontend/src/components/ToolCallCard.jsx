@@ -13,12 +13,12 @@ function FileTag({ file }) {
 }
 
 function ToolUsageMeta({ usage }) {
-  if (!hasRecordedTokenUsage(usage)) {
-    return <span className="tool-card-usage is-unrecorded" aria-label="Event token usage not recorded">Usage not recorded</span>
-  }
+  if (!hasRecordedTokenUsage(usage)) return null
 
   const totalTokens = Number(usage.totalTokens ?? 0).toLocaleString()
-  return <span className="tool-card-usage" aria-label={`Event token usage: ${totalTokens} total tokens, ${tokenUsageCost(usage)}`}>{totalTokens} tokens · {tokenUsageCost(usage)}</span>
+  const cost = tokenUsageCost(usage)
+  const label = `Event token usage: ${totalTokens} total tokens${cost ? `, ${cost}` : ''}`
+  return <span className="tool-card-usage" aria-label={label}>{totalTokens} tokens{cost ? ` · ${cost}` : ''}</span>
 }
 
 export default function ToolCallCard({ event, defaultOpen = false, selected = false, active = false }) {

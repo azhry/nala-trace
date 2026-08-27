@@ -222,6 +222,8 @@ describe('TraceView API conversation', () => {
 
     expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
     expect(screen.getByText('No token usage was recorded for this session.')).toBeInTheDocument()
+    expect(container.querySelectorAll('.token-usage-inline')).toHaveLength(0)
+    expect(screen.queryByText('Usage not recorded')).not.toBeInTheDocument()
     expect([...container.querySelectorAll('.token-usage-metric strong')].map((metric) => metric.textContent)).toEqual([
       'Not recorded',
       'Not recorded',
@@ -230,6 +232,44 @@ describe('TraceView API conversation', () => {
       'Not recorded',
       'Not recorded',
     ])
+  })
+
+  it('shows per-event token counts without inventing an omitted producer cost', () => {
+    const { container } = render(<TraceView session={{
+      ...apiTrace,
+      timeline: [{
+        id: 'stop-usage-no-cost',
+        hook_event_name: 'Stop',
+        occurred_at: '2026-08-19T08:00:02Z',
+        token_usage: {
+          input_tokens: 100,
+          output_tokens: 40,
+          total_tokens: 140,
+          cost_recorded: false,
+        },
+      }],
+      conversation: [{
+        event_id: 'stop-usage-no-cost',
+        role: 'assistant',
+        content: 'Completed with usage but no cost.',
+        occurred_at: '2026-08-19T08:00:02Z',
+        turn_id: 'turn-1',
+      }],
+      summary: {
+        ...apiTrace.summary,
+        token_usage: {
+          input_tokens: 100,
+          output_tokens: 40,
+          total_tokens: 140,
+          cost_recorded: false,
+        },
+      },
+    }} />)
+
+    expect(screen.getByLabelText('Event token usage: 140 total tokens')).toHaveTextContent('140 tokens')
+    expect(screen.queryByText(/\$0\.0000/)).not.toBeInTheDocument()
+    expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(container.querySelectorAll('.token-usage-inline')).toHaveLength(1)
   })
 
   it('bounds the initially mounted stream and loads more rows on demand', () => {

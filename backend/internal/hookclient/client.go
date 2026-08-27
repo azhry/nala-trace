@@ -39,12 +39,12 @@ func Send(ctx context.Context, input io.Reader, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	payload = enrichWithTranscriptUsage(ctx, payload)
 	if strings.TrimSpace(cfg.URL) == "" || strings.TrimSpace(cfg.Token) == "" || cfg.Timeout <= 0 {
 		return errors.New("hook client configuration unavailable")
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
+	payload = enrichWithTranscriptUsage(requestCtx, payload)
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, cfg.URL, strings.NewReader(string(payload)))
 	if err != nil {
 		return errors.New("hook client request invalid")

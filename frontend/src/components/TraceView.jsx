@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
 import { getFileOperations, isReadFileOperation, isSkillDocumentPath, normalizeTraceViewModel, skillNameFromFilePath } from '../traceViewModel'
-import { EMPTY_TOKEN_USAGE, hasRecordedTokenUsage, tokenUsageCost } from '../tokenUsage'
+import { EMPTY_TOKEN_USAGE, hasRecordedTokenUsage } from '../tokenUsage'
 
 const filters = [
   ['all', 'Everything'],
@@ -80,14 +80,12 @@ function TokenUsageMeta({ usage }) {
 
 function usageLabel(usage) {
   const totalTokens = Number(usage.totalTokens ?? 0).toLocaleString()
-  const cost = tokenUsageCost(usage)
-  return `Event token usage: ${totalTokens} total tokens${cost ? `, ${cost}` : ''}`
+  return `Event token usage: ${totalTokens} total tokens`
 }
 
 function usageText(usage) {
   const totalTokens = Number(usage.totalTokens ?? 0).toLocaleString()
-  const cost = tokenUsageCost(usage)
-  return `${totalTokens} tokens${cost ? ` · ${cost}` : ''}`
+  return `${totalTokens} tokens`
 }
 
 function TokenUsageSummary({ usage }) {
@@ -99,13 +97,12 @@ function TokenUsageSummary({ usage }) {
     ['Output tokens', recorded ? safeUsage.outputTokens : 'Not recorded', 'completion tokens'],
     ['Reasoning', recorded ? safeUsage.reasoningTokens : 'Not recorded', 'reasoning tokens'],
     ['Total tokens', recorded ? safeUsage.totalTokens : 'Not recorded', 'all token types'],
-    ['Recorded cost', recorded && tokenUsageCost(safeUsage) ? tokenUsageCost(safeUsage) : 'Not recorded', 'producer-reported cost'],
   ]
 
   return <div className="token-usage" role="region" aria-label="Token usage summary">
     <div className="token-usage-heading"><div><span className="section-label">Token usage</span><strong>Session consumption</strong><small>{recorded ? 'Aggregated from token usage attached to captured events.' : 'No token usage was reported by the producer.'}</small></div><span className="record-count">from session summary</span></div>
     <div className="token-usage-grid">{metrics.map(([label, value, detail]) => <div className="token-usage-metric" key={label}><span>{label}</span><strong>{typeof value === 'number' ? value.toLocaleString() : value}</strong><small>{detail}</small></div>)}</div>
-    <p className="token-usage-note">{recorded ? 'Token counts are shown exactly as recorded; cost is not inferred when the producer omits it.' : 'No token usage was recorded for this session.'}</p>
+    <p className="token-usage-note">{recorded ? 'Token counts are shown exactly as recorded.' : 'No token usage was recorded for this session.'}</p>
   </div>
 }
 

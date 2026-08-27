@@ -52,11 +52,10 @@ describe('ToolCallCard', () => {
         outputTokens: 40,
         reasoningTokens: 5,
         totalTokens: 140,
-        costUsd: 0.0012,
       },
     }} />)
 
-    expect(screen.getByLabelText('Event token usage: 140 total tokens, $0.0012')).toHaveTextContent('140 tokens · $0.0012')
+    expect(screen.getByLabelText('Event token usage: 140 total tokens')).toHaveTextContent('140 tokens')
     expect(screen.getByText('recorded · record 42')).toBeInTheDocument()
   })
 
@@ -66,22 +65,5 @@ describe('ToolCallCard', () => {
     expect(screen.queryByLabelText('Event token usage not recorded')).not.toBeInTheDocument()
     expect(screen.queryByText('Usage not recorded')).not.toBeInTheDocument()
     expect(screen.queryByText(/0 tokens/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/\$0\.0000/)).not.toBeInTheDocument()
-  })
-
-  it('keeps token counts but omits cost when the producer did not record a cost', () => {
-    render(<ToolCallCard event={{
-      ...shellEvent,
-      tokenUsage: {
-        inputTokens: 100,
-        outputTokens: 40,
-        totalTokens: 140,
-        costUsd: 0,
-        costRecorded: false,
-      },
-    }} />)
-
-    expect(screen.getByLabelText('Event token usage: 140 total tokens')).toHaveTextContent('140 tokens')
-    expect(screen.queryByText(/\$0\.0000/)).not.toBeInTheDocument()
   })
 })

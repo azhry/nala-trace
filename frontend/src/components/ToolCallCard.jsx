@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { getInstructionScope, isInstructionFile } from './instructionScope'
 import { getToolInputPreview } from '../traceViewModel'
-import { hasRecordedTokenUsage, tokenUsageCost } from '../tokenUsage'
+import { hasRecordedTokenUsage } from '../tokenUsage'
 
 function Tag({ children, tone = 'purple' }) {
   return <span className={`trace-tag ${tone}`}>{children}</span>
@@ -16,9 +16,8 @@ function ToolUsageMeta({ usage }) {
   if (!hasRecordedTokenUsage(usage)) return null
 
   const totalTokens = Number(usage.totalTokens ?? 0).toLocaleString()
-  const cost = tokenUsageCost(usage)
-  const label = `Event token usage: ${totalTokens} total tokens${cost ? `, ${cost}` : ''}`
-  return <span className="tool-card-usage" aria-label={label}>{totalTokens} tokens{cost ? ` · ${cost}` : ''}</span>
+  const label = `Event token usage: ${totalTokens} total tokens`
+  return <span className="tool-card-usage" aria-label={label}>{totalTokens} tokens</span>
 }
 
 export default function ToolCallCard({ event, defaultOpen = false, selected = false, active = false }) {

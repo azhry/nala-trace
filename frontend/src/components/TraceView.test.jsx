@@ -121,7 +121,6 @@ describe('TraceView API conversation', () => {
           output_tokens: 40,
           reasoning_tokens: 5,
           total_tokens: 140,
-          cost_usd: 0.0012,
         },
       }],
       conversation: [{
@@ -139,7 +138,6 @@ describe('TraceView API conversation', () => {
           output_tokens: 40,
           reasoning_tokens: 5,
           total_tokens: 140,
-          cost_usd: 0.0012,
         },
       },
     }} />)
@@ -148,11 +146,11 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText('Token usage')).toBeInTheDocument()
     expect(screen.getByText('100')).toBeInTheDocument()
     expect(screen.getByText('140')).toBeInTheDocument()
-    expect(screen.getByText('$0.0012')).toBeInTheDocument()
-    const eventUsage = screen.getByLabelText('Event token usage: 140 total tokens, $0.0012')
+    expect(container.querySelectorAll('.token-usage-metric')).toHaveLength(5)
+    const eventUsage = screen.getByLabelText('Event token usage: 140 total tokens')
     expect(eventUsage).toBeInTheDocument()
     expect(eventUsage).toHaveClass('token-usage-inline')
-    expect(eventUsage).toHaveTextContent('140 tokens · $0.0012')
+    expect(eventUsage).toHaveTextContent('140 tokens')
     expect(container.querySelectorAll('.token-usage-inline')).toHaveLength(1)
     expect(container.querySelector('.token-usage-badge')).not.toBeInTheDocument()
   })
@@ -160,7 +158,6 @@ describe('TraceView API conversation', () => {
   it('summarizes usage-only provider content instead of showing its raw JSON body', () => {
     const providerUsage = {
       usage: {
-        cost_usd: 0.0012,
         input_tokens: 100,
         input_tokens_details: { cached_tokens: 20 },
         output_tokens: 40,
@@ -180,7 +177,6 @@ describe('TraceView API conversation', () => {
           output_tokens: 40,
           reasoning_tokens: 5,
           total_tokens: 140,
-          cost_usd: 0.0012,
         },
       }],
       conversation: [{
@@ -203,7 +199,6 @@ describe('TraceView API conversation', () => {
           output_tokens: 40,
           reasoning_tokens: 5,
           total_tokens: 140,
-          cost_usd: 0.0012,
         },
       },
     }} />)
@@ -212,7 +207,7 @@ describe('TraceView API conversation', () => {
     expect(usageMessage).toBeInTheDocument()
     expect(usageMessage.querySelector('.message-content-code')).not.toBeInTheDocument()
     expect(usageMessage).not.toHaveTextContent('"input_tokens"')
-    expect(usageMessage).toHaveTextContent('Usage recorded · 140 tokens · $0.0012')
+    expect(usageMessage).toHaveTextContent('Usage recorded · 140 tokens')
     expect(screen.getByText(/Keep this structured content visible/)).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
   })
@@ -230,28 +225,26 @@ describe('TraceView API conversation', () => {
       'Not recorded',
       'Not recorded',
       'Not recorded',
-      'Not recorded',
     ])
   })
 
-  it('shows per-event token counts without inventing an omitted producer cost', () => {
+  it('shows per-event token counts when only some token fields are present', () => {
     const { container } = render(<TraceView session={{
       ...apiTrace,
       timeline: [{
-        id: 'stop-usage-no-cost',
+        id: 'stop-usage-partial',
         hook_event_name: 'Stop',
         occurred_at: '2026-08-19T08:00:02Z',
         token_usage: {
           input_tokens: 100,
           output_tokens: 40,
           total_tokens: 140,
-          cost_recorded: false,
         },
       }],
       conversation: [{
-        event_id: 'stop-usage-no-cost',
+        event_id: 'stop-usage-partial',
         role: 'assistant',
-        content: 'Completed with usage but no cost.',
+        content: 'Completed with partial token usage.',
         occurred_at: '2026-08-19T08:00:02Z',
         turn_id: 'turn-1',
       }],
@@ -261,15 +254,13 @@ describe('TraceView API conversation', () => {
           input_tokens: 100,
           output_tokens: 40,
           total_tokens: 140,
-          cost_recorded: false,
         },
       },
     }} />)
 
     expect(screen.getByLabelText('Event token usage: 140 total tokens')).toHaveTextContent('140 tokens')
-    expect(screen.queryByText(/\$0\.0000/)).not.toBeInTheDocument()
-    expect(screen.getByText('Not recorded')).toBeInTheDocument()
     expect(container.querySelectorAll('.token-usage-inline')).toHaveLength(1)
+    expect(container.querySelectorAll('.token-usage-metric')).toHaveLength(5)
   })
 
   it('bounds the initially mounted stream and loads more rows on demand', () => {

@@ -81,6 +81,24 @@ func TestReconstructTokenUsageSupportsAliasesAndIgnoresInvalidCost(t *testing.T)
 	}
 }
 
+func TestReconstructTokenUsagePreservesCostPresence(t *testing.T) {
+	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
+		hookEvent("missing-cost", "Stop", "turn-1", time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC), map[string]any{
+			"usage": map[string]any{"input_tokens": 8, "output_tokens": 2, "total_tokens": 10},
+		}),
+		hookEvent("explicit-zero-cost", "Stop", "turn-2", time.Date(2026, 8, 22, 10, 0, 1, 0, time.UTC), map[string]any{
+			"usage": map[string]any{"input_tokens": 4, "output_tokens": 1, "total_tokens": 5, "cost_usd": 0},
+		}),
+	})
+
+	if result.Timeline[0].TokenUsage == nil || result.Timeline[0].TokenUsage.CostRecorded {
+		t.Fatalf("missing cost presence = %#v, want false", result.Timeline[0].TokenUsage)
+	}
+	if result.Timeline[1].TokenUsage == nil || !result.Timeline[1].TokenUsage.CostRecorded || result.Timeline[1].TokenUsage.CostUSD != 0 {
+		t.Fatalf("explicit zero cost = %#v, want recorded zero", result.Timeline[1].TokenUsage)
+	}
+}
+
 func TestReconstructUsesLatestCumulativeTranscriptUsageOnce(t *testing.T) {
 	base := time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC)
 	result := Reconstruct("session-1", "user-1", []storage.HookEvent{

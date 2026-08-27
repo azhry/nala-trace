@@ -107,6 +107,7 @@ func tokenUsageDocument(document map[string]any) (trace.TokenUsage, bool) {
 		ReasoningTokens:   reasoningTokens,
 		TotalTokens:       totalTokens,
 		CostUSD:           costUSD,
+		CostRecorded:      costPresent,
 	}, true
 }
 

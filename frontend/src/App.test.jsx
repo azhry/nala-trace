@@ -138,7 +138,7 @@ describe('authenticated sessions flow', () => {
     expect(signOutFromTrace).toHaveBeenCalledExactlyOnceWith()
   })
 
-  it('hides the dashboard shell while authentication and protected data are unresolved', async () => {
+  it('renders a neutral loading state while authentication is unresolved', async () => {
     let resolveAuthentication
     resolveSession.mockImplementationOnce(() => new Promise((resolve) => {
       resolveAuthentication = resolve
@@ -148,7 +148,10 @@ describe('authenticated sessions flow', () => {
 
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'All captured sessions' })).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Sign in through Nala Labs')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading authenticated sessions…')
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
+    expect(document.querySelector('.auth-boundary')).not.toBeInTheDocument()
 
     await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
     resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })

@@ -49,7 +49,7 @@ func (repository *sessionSummaryRepository) ListSessionSummariesForUser(_ contex
 func TestSessionsHandlerReturnsTokenUsage(t *testing.T) {
 	repository := &sessionSummaryRepository{rows: []storage.SessionSummary{{
 		SessionID:  "session-1",
-		TokenUsage: trace.TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14, CostUSD: 0.02},
+		TokenUsage: trace.TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14},
 	}}}
 	request := authenticatedTraceRequest(http.MethodGet, "/sessions?limit=10")
 	response := httptest.NewRecorder()
@@ -73,7 +73,7 @@ func TestSessionsHandlerReturnsTokenUsage(t *testing.T) {
 		t.Fatalf("response = %#v, want one session with limit 10", result)
 	}
 	usage := result.Sessions[0].TokenUsage
-	if usage.InputTokens != 10 || usage.OutputTokens != 4 || usage.TotalTokens != 14 || usage.CostUSD != 0.02 {
+	if usage.InputTokens != 10 || usage.OutputTokens != 4 || usage.TotalTokens != 14 {
 		t.Fatalf("session token usage = %#v", usage)
 	}
 }

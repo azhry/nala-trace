@@ -186,7 +186,7 @@ func containsTokenFieldAny(document map[string]any) bool {
 
 func isTokenUsageField(key string) bool {
 	switch strings.ToLower(key) {
-	case "input_tokens", "prompt_tokens", "cached_input_tokens", "cached_tokens", "output_tokens", "completion_tokens", "reasoning_tokens", "reasoning_output_tokens", "total_tokens", "cost_usd", "total_cost_usd":
+	case "input_tokens", "prompt_tokens", "cached_input_tokens", "cached_tokens", "output_tokens", "completion_tokens", "reasoning_tokens", "reasoning_output_tokens", "total_tokens":
 		return true
 	default:
 		return false

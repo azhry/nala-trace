@@ -85,68 +85,14 @@ type FileOperation struct {
 	Raw        json.RawMessage `json:"raw"`
 }
 
-// TokenUsage is the canonical token and producer-supplied cost contract.
+// TokenUsage is the canonical token usage contract.
 // Cached input tokens are a subset of input tokens and are reported separately.
 type TokenUsage struct {
-	InputTokens       int64   `bson:"input_tokens" json:"input_tokens"`
-	CachedInputTokens int64   `bson:"cached_input_tokens" json:"cached_input_tokens"`
-	OutputTokens      int64   `bson:"output_tokens" json:"output_tokens"`
-	ReasoningTokens   int64   `bson:"reasoning_tokens" json:"reasoning_tokens"`
-	TotalTokens       int64   `bson:"total_tokens" json:"total_tokens"`
-	CostUSD           float64 `bson:"cost_usd" json:"cost_usd"`
-	CostRecorded      bool    `bson:"cost_recorded" json:"-"`
-}
-
-// MarshalJSON omits cost when the producer did not report it. A non-zero
-// legacy CostUSD value remains serializable even when CostRecorded is unset.
-func (usage TokenUsage) MarshalJSON() ([]byte, error) {
-	type tokenUsageJSON struct {
-		InputTokens       int64    `json:"input_tokens"`
-		CachedInputTokens int64    `json:"cached_input_tokens"`
-		OutputTokens      int64    `json:"output_tokens"`
-		ReasoningTokens   int64    `json:"reasoning_tokens"`
-		TotalTokens       int64    `json:"total_tokens"`
-		CostUSD           *float64 `json:"cost_usd,omitempty"`
-	}
-	var costUSD *float64
-	if usage.CostRecorded || usage.CostUSD != 0 {
-		costUSD = &usage.CostUSD
-	}
-	return json.Marshal(tokenUsageJSON{
-		InputTokens:       usage.InputTokens,
-		CachedInputTokens: usage.CachedInputTokens,
-		OutputTokens:      usage.OutputTokens,
-		ReasoningTokens:   usage.ReasoningTokens,
-		TotalTokens:       usage.TotalTokens,
-		CostUSD:           costUSD,
-	})
-}
-
-func (usage *TokenUsage) UnmarshalJSON(data []byte) error {
-	type tokenUsageJSON struct {
-		InputTokens       int64    `json:"input_tokens"`
-		CachedInputTokens int64    `json:"cached_input_tokens"`
-		OutputTokens      int64    `json:"output_tokens"`
-		ReasoningTokens   int64    `json:"reasoning_tokens"`
-		TotalTokens       int64    `json:"total_tokens"`
-		CostUSD           *float64 `json:"cost_usd"`
-	}
-	var decoded tokenUsageJSON
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
-	}
-	*usage = TokenUsage{
-		InputTokens:       decoded.InputTokens,
-		CachedInputTokens: decoded.CachedInputTokens,
-		OutputTokens:      decoded.OutputTokens,
-		ReasoningTokens:   decoded.ReasoningTokens,
-		TotalTokens:       decoded.TotalTokens,
-		CostRecorded:      decoded.CostUSD != nil,
-	}
-	if decoded.CostUSD != nil {
-		usage.CostUSD = *decoded.CostUSD
-	}
-	return nil
+	InputTokens       int64 `bson:"input_tokens" json:"input_tokens"`
+	CachedInputTokens int64 `bson:"cached_input_tokens" json:"cached_input_tokens"`
+	OutputTokens      int64 `bson:"output_tokens" json:"output_tokens"`
+	ReasoningTokens   int64 `bson:"reasoning_tokens" json:"reasoning_tokens"`
+	TotalTokens       int64 `bson:"total_tokens" json:"total_tokens"`
 }
 
 func (usage *TokenUsage) Add(other TokenUsage) {
@@ -158,10 +104,6 @@ func (usage *TokenUsage) Add(other TokenUsage) {
 	usage.OutputTokens += other.OutputTokens
 	usage.ReasoningTokens += other.ReasoningTokens
 	usage.TotalTokens += other.TotalTokens
-	if other.CostRecorded || other.CostUSD != 0 {
-		usage.CostUSD += other.CostUSD
-		usage.CostRecorded = true
-	}
 }
 
 // RuntimeMetadata contains only allowlisted scalar execution settings found

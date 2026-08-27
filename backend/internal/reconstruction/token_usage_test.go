@@ -1,7 +1,6 @@
 package reconstruction
 
 import (
-	"math"
 	"testing"
 	"time"
 
@@ -18,7 +17,6 @@ func TestReconstructTokenUsageFromNestedProviderResponses(t *testing.T) {
 				"cached_tokens":    1,
 				"output_tokens":    4,
 				"reasoning_tokens": 2,
-				"total_cost_usd":   0.0003,
 			},
 		}),
 		hookEvent("explicit", "Stop", "turn-1", base, map[string]any{
@@ -33,7 +31,6 @@ func TestReconstructTokenUsageFromNestedProviderResponses(t *testing.T) {
 						"reasoning_tokens": 5,
 					},
 					"total_tokens": 140,
-					"cost_usd":     0.0012,
 				},
 			},
 		}),
@@ -46,20 +43,20 @@ func TestReconstructTokenUsageFromNestedProviderResponses(t *testing.T) {
 		t.Fatalf("timeline length = %d, want 3", len(result.Timeline))
 	}
 	assertTokenUsage(t, result.Timeline[0].TokenUsage, trace.TokenUsage{
-		InputTokens: 100, CachedInputTokens: 20, OutputTokens: 40, ReasoningTokens: 5, TotalTokens: 140, CostUSD: 0.0012,
+		InputTokens: 100, CachedInputTokens: 20, OutputTokens: 40, ReasoningTokens: 5, TotalTokens: 140,
 	})
 	assertTokenUsage(t, result.Timeline[1].TokenUsage, trace.TokenUsage{
-		InputTokens: 3, CachedInputTokens: 1, OutputTokens: 4, ReasoningTokens: 2, TotalTokens: 7, CostUSD: 0.0003,
+		InputTokens: 3, CachedInputTokens: 1, OutputTokens: 4, ReasoningTokens: 2, TotalTokens: 7,
 	})
 	if result.Timeline[2].TokenUsage != nil {
 		t.Fatalf("usage on event without usage = %#v, want nil", result.Timeline[2].TokenUsage)
 	}
 	assertTokenUsage(t, &result.Summary.TokenUsage, trace.TokenUsage{
-		InputTokens: 103, CachedInputTokens: 21, OutputTokens: 44, ReasoningTokens: 7, TotalTokens: 147, CostUSD: 0.0015,
+		InputTokens: 103, CachedInputTokens: 21, OutputTokens: 44, ReasoningTokens: 7, TotalTokens: 147,
 	})
 }
 
-func TestReconstructTokenUsageSupportsAliasesAndIgnoresInvalidCost(t *testing.T) {
+func TestReconstructTokenUsageSupportsAliases(t *testing.T) {
 	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
 		hookEvent("aliases", "Stop", "turn-1", time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC), map[string]any{
 			"usage": map[string]any{
@@ -68,7 +65,6 @@ func TestReconstructTokenUsageSupportsAliasesAndIgnoresInvalidCost(t *testing.T)
 				"completion_tokens": "2",
 				"reasoning_tokens":  "3",
 				"total_tokens":      "10",
-				"cost_usd":          "not-a-number",
 			},
 		}),
 	})
@@ -76,27 +72,6 @@ func TestReconstructTokenUsageSupportsAliasesAndIgnoresInvalidCost(t *testing.T)
 	assertTokenUsage(t, result.Timeline[0].TokenUsage, trace.TokenUsage{
 		InputTokens: 8, CachedInputTokens: 1, OutputTokens: 2, ReasoningTokens: 3, TotalTokens: 10,
 	})
-	if result.Summary.TokenUsage.CostUSD != 0 {
-		t.Fatalf("invalid cost = %v, want 0", result.Summary.TokenUsage.CostUSD)
-	}
-}
-
-func TestReconstructTokenUsagePreservesCostPresence(t *testing.T) {
-	result := Reconstruct("session-1", "user-1", []storage.HookEvent{
-		hookEvent("missing-cost", "Stop", "turn-1", time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC), map[string]any{
-			"usage": map[string]any{"input_tokens": 8, "output_tokens": 2, "total_tokens": 10},
-		}),
-		hookEvent("explicit-zero-cost", "Stop", "turn-2", time.Date(2026, 8, 22, 10, 0, 1, 0, time.UTC), map[string]any{
-			"usage": map[string]any{"input_tokens": 4, "output_tokens": 1, "total_tokens": 5, "cost_usd": 0},
-		}),
-	})
-
-	if result.Timeline[0].TokenUsage == nil || result.Timeline[0].TokenUsage.CostRecorded {
-		t.Fatalf("missing cost presence = %#v, want false", result.Timeline[0].TokenUsage)
-	}
-	if result.Timeline[1].TokenUsage == nil || !result.Timeline[1].TokenUsage.CostRecorded || result.Timeline[1].TokenUsage.CostUSD != 0 {
-		t.Fatalf("explicit zero cost = %#v, want recorded zero", result.Timeline[1].TokenUsage)
-	}
 }
 
 func TestReconstructUsesLatestCumulativeTranscriptUsageOnce(t *testing.T) {
@@ -130,7 +105,7 @@ func assertTokenUsage(t *testing.T, got *trace.TokenUsage, want trace.TokenUsage
 	if got == nil {
 		t.Fatalf("token usage = nil, want %#v", want)
 	}
-	if got.InputTokens != want.InputTokens || got.CachedInputTokens != want.CachedInputTokens || got.OutputTokens != want.OutputTokens || got.ReasoningTokens != want.ReasoningTokens || got.TotalTokens != want.TotalTokens || math.Abs(got.CostUSD-want.CostUSD) > 1e-9 {
+	if got.InputTokens != want.InputTokens || got.CachedInputTokens != want.CachedInputTokens || got.OutputTokens != want.OutputTokens || got.ReasoningTokens != want.ReasoningTokens || got.TotalTokens != want.TotalTokens {
 		t.Fatalf("token usage = %#v, want %#v", *got, want)
 	}
 }

@@ -69,16 +69,12 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "token_output_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.outputTokens}}},
 			{Key: "token_reasoning_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.reasoningTokens}}},
 			{Key: "token_total_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.totalTokens}}},
-			{Key: "token_cost_usd", Value: bson.D{{Key: "$sum", Value: tokenUsage.costUSD}}},
-			{Key: "token_cost_present", Value: bson.D{{Key: "$max", Value: tokenUsage.costPresent}}},
 			{Key: "token_cumulative_present", Value: bson.D{{Key: "$max", Value: cumulativeUsage.present}}},
 			{Key: "token_cumulative_input_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.inputTokens}}},
 			{Key: "token_cumulative_cached_input_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.cachedInputTokens}}},
 			{Key: "token_cumulative_output_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.outputTokens}}},
 			{Key: "token_cumulative_reasoning_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.reasoningTokens}}},
 			{Key: "token_cumulative_total_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.totalTokens}}},
-			{Key: "token_cumulative_cost_usd", Value: bson.D{{Key: "$max", Value: cumulativeUsage.costUSD}}},
-			{Key: "token_cumulative_cost_present", Value: bson.D{{Key: "$max", Value: cumulativeUsage.costPresent}}},
 		}}},
 		{{Key: "$project", Value: bson.D{
 			{Key: "_id", Value: 0},
@@ -104,8 +100,6 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 				{Key: "output_tokens", Value: preferredTokenUsageExpression("$token_cumulative_output_tokens", "$token_output_tokens")},
 				{Key: "reasoning_tokens", Value: preferredTokenUsageExpression("$token_cumulative_reasoning_tokens", "$token_reasoning_tokens")},
 				{Key: "total_tokens", Value: preferredTokenUsageExpression("$token_cumulative_total_tokens", "$token_total_tokens")},
-				{Key: "cost_usd", Value: preferredTokenCostExpression("$token_cumulative_present", "$token_cumulative_cost_present", "$token_cumulative_cost_usd", "$token_cost_present", "$token_cost_usd")},
-				{Key: "cost_recorded", Value: preferredTokenUsageExpression("$token_cumulative_cost_present", "$token_cost_present")},
 			}},
 		}}},
 		{{Key: "$sort", Value: bson.D{{Key: "last_event_at", Value: -1}, {Key: "session_id", Value: 1}}}},
@@ -247,8 +241,6 @@ type tokenUsageExpressions struct {
 	outputTokens      bson.D
 	reasoningTokens   bson.D
 	totalTokens       bson.D
-	costUSD           bson.D
-	costPresent       bson.D
 }
 
 type cumulativeTokenUsageExpressions struct {
@@ -258,8 +250,6 @@ type cumulativeTokenUsageExpressions struct {
 	outputTokens      bson.D
 	reasoningTokens   bson.D
 	totalTokens       bson.D
-	costUSD           bson.D
-	costPresent       bson.D
 }
 
 func sessionTokenUsageExpressions() tokenUsageExpressions {
@@ -289,21 +279,17 @@ func sessionTokenUsageExpressions() tokenUsageExpressions {
 		firstNumericExpression(tokenUsageFieldPaths("total_tokens"), "long"),
 		bson.D{{Key: "$add", Value: bson.A{zeroIfNull(inputTokens), zeroIfNull(outputTokens)}}},
 	)
-	costUSD := firstNumericExpression(append(tokenUsageFieldPaths("cost_usd"), tokenUsageFieldPaths("total_cost_usd")...), "double")
 	return tokenUsageExpressions{
 		inputTokens:       zeroIfNull(inputTokens),
 		cachedInputTokens: zeroIfNull(cachedInputTokens),
 		outputTokens:      zeroIfNull(outputTokens),
 		reasoningTokens:   zeroIfNull(reasoningTokens),
 		totalTokens:       zeroIfNull(totalTokens),
-		costUSD:           zeroIfNull(costUSD),
-		costPresent:       numericValuePresentExpression(costUSD),
 	}
 }
 
 func cumulativeTokenUsageExpression() cumulativeTokenUsageExpressions {
 	present := anyFieldEqualsExpression(payloadFieldPaths("usage_source"), "codex_transcript")
-	costUSD := firstNumericExpression(append(tokenUsageFieldPaths("cost_usd"), tokenUsageFieldPaths("total_cost_usd")...), "double")
 	return cumulativeTokenUsageExpressions{
 		present:           bson.D{{Key: "$cond", Value: bson.A{present, 1, 0}}},
 		inputTokens:       cumulativeValueExpression(present, firstNumericExpression(tokenUsageFieldPaths("input_tokens"), "long")),
@@ -311,8 +297,6 @@ func cumulativeTokenUsageExpression() cumulativeTokenUsageExpressions {
 		outputTokens:      cumulativeValueExpression(present, firstNumericExpression(tokenUsageFieldPaths("output_tokens"), "long")),
 		reasoningTokens:   cumulativeValueExpression(present, firstNumericExpression(append(tokenUsageFieldPaths("reasoning_tokens"), tokenUsageFieldPaths("reasoning_output_tokens")...), "long")),
 		totalTokens:       cumulativeValueExpression(present, firstNumericExpression(tokenUsageFieldPaths("total_tokens"), "long")),
-		costUSD:           cumulativeValueExpression(present, costUSD),
-		costPresent:       conditionalNumericPresenceExpression(present, costUSD),
 	}
 }
 
@@ -325,22 +309,6 @@ func preferredTokenUsageExpression(cumulativeField, summedField string) bson.D {
 		bson.D{{Key: "$eq", Value: bson.A{"$token_cumulative_present", 1}}},
 		cumulativeField,
 		summedField,
-	}}}
-}
-
-func preferredTokenCostExpression(cumulativeSessionField, cumulativeCostPresentField, cumulativeCostField, summedCostPresentField, summedCostField string) bson.D {
-	return bson.D{{Key: "$cond", Value: bson.A{
-		bson.D{{Key: "$eq", Value: bson.A{cumulativeSessionField, 1}}},
-		bson.D{{Key: "$cond", Value: bson.A{
-			bson.D{{Key: "$eq", Value: bson.A{cumulativeCostPresentField, 1}}},
-			cumulativeCostField,
-			nil,
-		}}},
-		bson.D{{Key: "$cond", Value: bson.A{
-			bson.D{{Key: "$eq", Value: bson.A{summedCostPresentField, 1}}},
-			summedCostField,
-			nil,
-		}}},
 	}}}
 }
 
@@ -394,22 +362,6 @@ func firstNonNullNumericExpression(primary, fallback bson.D) bson.D {
 
 func zeroIfNull(expression bson.D) bson.D {
 	return bson.D{{Key: "$ifNull", Value: bson.A{expression, 0}}}
-}
-
-func numericValuePresentExpression(expression bson.D) bson.D {
-	return bson.D{{Key: "$cond", Value: bson.A{
-		bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{expression, nil}}}, nil}}},
-		1,
-		0,
-	}}}
-}
-
-func conditionalNumericPresenceExpression(present, expression bson.D) bson.D {
-	return bson.D{{Key: "$cond", Value: bson.A{
-		present,
-		numericValuePresentExpression(expression),
-		0,
-	}}}
 }
 
 func firstMatchingString(candidates bson.A, regex string) bson.D {

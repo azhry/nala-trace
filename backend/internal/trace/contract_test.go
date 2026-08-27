@@ -5,28 +5,19 @@ import (
 	"testing"
 )
 
-func TestTokenUsageJSONOmitsUnreportedCost(t *testing.T) {
-	withoutCost, err := json.Marshal(TokenUsage{InputTokens: 10, TotalTokens: 10})
+func TestTokenUsageJSONIncludesTokenCountsOnly(t *testing.T) {
+	encoded, err := json.Marshal(TokenUsage{InputTokens: 10, CachedInputTokens: 2, OutputTokens: 4, ReasoningTokens: 1, TotalTokens: 14})
 	if err != nil {
-		t.Fatalf("marshal usage without cost: %v", err)
+		t.Fatalf("marshal token usage: %v", err)
 	}
-	var withoutCostFields map[string]any
-	if err := json.Unmarshal(withoutCost, &withoutCostFields); err != nil {
-		t.Fatalf("decode usage without cost: %v", err)
+	var fields map[string]any
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("decode token usage: %v", err)
 	}
-	if _, ok := withoutCostFields["cost_usd"]; ok {
-		t.Fatalf("unreported cost = %#v, want omitted", withoutCostFields["cost_usd"])
+	if fields["input_tokens"] != float64(10) || fields["cached_input_tokens"] != float64(2) || fields["output_tokens"] != float64(4) || fields["reasoning_tokens"] != float64(1) || fields["total_tokens"] != float64(14) {
+		t.Fatalf("token usage = %#v, want all token counts", fields)
 	}
-
-	withExplicitZero, err := json.Marshal(TokenUsage{InputTokens: 10, TotalTokens: 10, CostRecorded: true})
-	if err != nil {
-		t.Fatalf("marshal usage with explicit zero cost: %v", err)
-	}
-	var withExplicitZeroFields map[string]any
-	if err := json.Unmarshal(withExplicitZero, &withExplicitZeroFields); err != nil {
-		t.Fatalf("decode usage with explicit zero cost: %v", err)
-	}
-	if got, ok := withExplicitZeroFields["cost_usd"]; !ok || got != float64(0) {
-		t.Fatalf("explicit zero cost = %#v, want 0", withExplicitZeroFields["cost_usd"])
+	if _, ok := fields["cost_usd"]; ok {
+		t.Fatalf("token usage unexpectedly contains cost = %#v", fields["cost_usd"])
 	}
 }

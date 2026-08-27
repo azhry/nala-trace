@@ -12,8 +12,8 @@ evidence. Reconstruction itself never reads transcript files.
 Direct provider usage is preserved when present. Marked
 `usage_source=codex_transcript` values are cumulative session snapshots; the
 latest snapshot is used once for the session summary while each captured
-timeline event retains its own usage evidence. Cost is displayed only when a
-producer supplies it; Nala Trace does not infer pricing.
+timeline event retains its own usage evidence. Only token counts are exposed;
+Nala Trace does not infer pricing from model names or token totals.
 
 ## Conversation
 

@@ -92,9 +92,8 @@ func tokenUsageDocument(document map[string]any) (trace.TokenUsage, bool) {
 		reasoningTokens, reasoningPresent = nestedTokenCountField(document, "completion_tokens_details", "reasoning_tokens")
 	}
 	totalTokens, totalPresent := firstTokenCountField(document, "total_tokens")
-	costUSD, costPresent := firstCostField(document, "cost_usd", "total_cost_usd")
 
-	if !inputPresent && !cachedPresent && !outputPresent && !reasoningPresent && !totalPresent && !costPresent {
+	if !inputPresent && !cachedPresent && !outputPresent && !reasoningPresent && !totalPresent {
 		return trace.TokenUsage{}, false
 	}
 	if !totalPresent {
@@ -106,8 +105,6 @@ func tokenUsageDocument(document map[string]any) (trace.TokenUsage, bool) {
 		OutputTokens:      outputTokens,
 		ReasoningTokens:   reasoningTokens,
 		TotalTokens:       totalTokens,
-		CostUSD:           costUSD,
-		CostRecorded:      costPresent,
 	}, true
 }
 
@@ -134,19 +131,6 @@ func nestedTokenCountField(document map[string]any, container, field string) (in
 		return 0, false
 	}
 	return firstTokenCountField(nested, field)
-}
-
-func firstCostField(document map[string]any, keys ...string) (float64, bool) {
-	for _, key := range keys {
-		value, ok := mapValue(document, key)
-		if !ok {
-			continue
-		}
-		if parsed, ok := costValue(value); ok {
-			return parsed, true
-		}
-	}
-	return 0, false
 }
 
 func tokenCount(value any) (int64, bool) {
@@ -204,54 +188,6 @@ func tokenCount(value any) (int64, bool) {
 		return 0, false
 	}
 	if parsed < 0 {
-		return 0, false
-	}
-	return parsed, true
-}
-
-func costValue(value any) (float64, bool) {
-	var parsed float64
-	switch value := value.(type) {
-	case int:
-		parsed = float64(value)
-	case int8:
-		parsed = float64(value)
-	case int16:
-		parsed = float64(value)
-	case int32:
-		parsed = float64(value)
-	case int64:
-		parsed = float64(value)
-	case uint:
-		parsed = float64(value)
-	case uint8:
-		parsed = float64(value)
-	case uint16:
-		parsed = float64(value)
-	case uint32:
-		parsed = float64(value)
-	case uint64:
-		parsed = float64(value)
-	case float32:
-		parsed = float64(value)
-	case float64:
-		parsed = value
-	case json.Number:
-		var err error
-		parsed, err = strconv.ParseFloat(string(value), 64)
-		if err != nil {
-			return 0, false
-		}
-	case string:
-		var err error
-		parsed, err = strconv.ParseFloat(strings.TrimSpace(value), 64)
-		if err != nil {
-			return 0, false
-		}
-	default:
-		return 0, false
-	}
-	if math.IsNaN(parsed) || math.IsInf(parsed, 0) || parsed < 0 {
 		return 0, false
 	}
 	return parsed, true

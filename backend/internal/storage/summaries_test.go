@@ -11,7 +11,7 @@ import (
 )
 
 func TestSessionSummaryJSONIncludesTitle(t *testing.T) {
-	encoded, err := json.Marshal(SessionSummary{SessionID: "session-1", Title: "Inspect the trace", FileReadCount: 2, MCPCallCount: 3, MCPServers: []string{"linear", "github"}, TokenUsage: trace.TokenUsage{InputTokens: 10, TotalTokens: 12, CostUSD: 0.25}})
+	encoded, err := json.Marshal(SessionSummary{SessionID: "session-1", Title: "Inspect the trace", FileReadCount: 2, MCPCallCount: 3, MCPServers: []string{"linear", "github"}, TokenUsage: trace.TokenUsage{InputTokens: 10, TotalTokens: 12}})
 	if err != nil {
 		t.Fatalf("marshal summary: %v", err)
 	}
@@ -33,8 +33,11 @@ func TestSessionSummaryJSONIncludesTitle(t *testing.T) {
 		t.Fatalf("mcp_servers = %#v, want [linear github]", fields["mcp_servers"])
 	}
 	usage, ok := fields["token_usage"].(map[string]any)
-	if !ok || usage["input_tokens"] != float64(10) || usage["total_tokens"] != float64(12) || usage["cost_usd"] != 0.25 {
-		t.Fatalf("token_usage = %#v, want input 10 total 12 cost .25", fields["token_usage"])
+	if !ok || usage["input_tokens"] != float64(10) || usage["total_tokens"] != float64(12) {
+		t.Fatalf("token_usage = %#v, want input 10 total 12", fields["token_usage"])
+	}
+	if _, ok := usage["cost_usd"]; ok {
+		t.Fatalf("token_usage unexpectedly contains cost = %#v", usage["cost_usd"])
 	}
 }
 
@@ -79,9 +82,14 @@ func TestSessionSummaryPipelineDerivesAndProjectsTitle(t *testing.T) {
 		t.Fatalf("title expression = %T, want bson.D", title)
 	}
 	serialized := fmt.Sprintf("%#v", pipeline)
-	for _, expected := range []string{"$payload.tool_input", "$payload.hook_event_name", "$payload.tool_name", "$payload.payload.tool_input", "$payload.payload.hook_event_name", "$payload.payload.tool_name", "$payload.skills", "$payload.tool_input.skills", "$isArray", "SKILL\\\\.md", "file_read_count", "mcp_call_count", "mcp_servers", "token_input_tokens", "token_cached_input_tokens", "token_output_tokens", "token_reasoning_tokens", "token_total_tokens", "token_cost_usd", "token_cost_present", "token_cumulative_present", "token_cumulative_total_tokens", "token_cumulative_cost_present", "token_usage", "cost_recorded", "$payload.usage.input_tokens", "$payload.usage_source", "$payload.response.usage.output_tokens", "$convert", "$max", "$cond", "^mcp__(?:codex_apps__(?!(?:node_repl)_)[^_\\\\s]+_.+|(?!(?:codex_apps|node_repl)__).+__.+)$", "PreToolUse"} {
+	for _, expected := range []string{"$payload.tool_input", "$payload.hook_event_name", "$payload.tool_name", "$payload.payload.tool_input", "$payload.payload.hook_event_name", "$payload.payload.tool_name", "$payload.skills", "$payload.tool_input.skills", "$isArray", "SKILL\\\\.md", "file_read_count", "mcp_call_count", "mcp_servers", "token_input_tokens", "token_cached_input_tokens", "token_output_tokens", "token_reasoning_tokens", "token_total_tokens", "token_cumulative_present", "token_cumulative_total_tokens", "token_usage", "$payload.usage.input_tokens", "$payload.usage_source", "$payload.response.usage.output_tokens", "$convert", "$max", "$cond", "^mcp__(?:codex_apps__(?!(?:node_repl)_)[^_\\\\s]+_.+|(?!(?:codex_apps|node_repl)__).+__.+)$", "PreToolUse"} {
 		if !strings.Contains(serialized, expected) {
 			t.Fatalf("pipeline missing %q: %s", expected, serialized)
+		}
+	}
+	for _, forbidden := range []string{"token_cost_usd", "token_cost_present", "token_cumulative_cost_usd", "token_cumulative_cost_present", "cost_usd", "cost_recorded"} {
+		if strings.Contains(serialized, forbidden) {
+			t.Fatalf("pipeline unexpectedly contains cost field %q", forbidden)
 		}
 	}
 }

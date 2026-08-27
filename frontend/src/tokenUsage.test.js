@@ -1,36 +1,42 @@
 import { describe, expect, it } from 'vitest'
-import { hasRecordedTokenUsage, normalizeTokenUsage, tokenUsageCost } from './tokenUsage'
+import { hasRecordedTokenUsage, normalizeTokenUsage } from './tokenUsage'
 
 describe('token usage normalization', () => {
-  it('keeps an explicitly recorded zero cost visible', () => {
+  it('normalizes the five canonical token counts', () => {
     const usage = normalizeTokenUsage({
       input_tokens: 100,
-      total_tokens: 100,
-      cost_usd: 0,
-      cost_recorded: true,
+      cached_input_tokens: 20,
+      output_tokens: 40,
+      reasoning_tokens: 5,
+      total_tokens: 140,
     })
 
-    expect(usage.costRecorded).toBe(true)
-    expect(tokenUsageCost(usage)).toBe('$0.0000')
-  })
-
-  it('distinguishes an omitted cost from an explicit zero cost', () => {
-    const usage = normalizeTokenUsage({ input_tokens: 100, total_tokens: 100 })
-
-    expect(usage.costRecorded).toBe(false)
-    expect(tokenUsageCost(usage)).toBeNull()
-    expect(hasRecordedTokenUsage(usage)).toBe(true)
-  })
-
-  it('honors a backend cost marker when the payload contains a placeholder zero', () => {
-    const usage = normalizeTokenUsage({
-      input_tokens: 100,
-      total_tokens: 100,
-      cost_usd: 0,
-      cost_recorded: false,
+    expect(usage).toEqual({
+      inputTokens: 100,
+      cachedInputTokens: 20,
+      outputTokens: 40,
+      reasoningTokens: 5,
+      totalTokens: 140,
     })
+  })
 
-    expect(usage.costRecorded).toBe(false)
-    expect(tokenUsageCost(usage)).toBeNull()
+  it('accepts the legacy camel-case token field names', () => {
+    expect(normalizeTokenUsage({ inputTokens: 12, totalTokens: 12 })).toEqual({
+      inputTokens: 12,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 12,
+    })
+  })
+
+  it('returns no usage for payloads without recognized token counts', () => {
+    expect(normalizeTokenUsage({ provider: 'codex' })).toBeNull()
+    expect(hasRecordedTokenUsage(null)).toBe(false)
+  })
+
+  it('recognizes usage only when a token count is positive', () => {
+    expect(hasRecordedTokenUsage(normalizeTokenUsage({ input_tokens: 0, total_tokens: 0 }))).toBe(false)
+    expect(hasRecordedTokenUsage(normalizeTokenUsage({ output_tokens: 1 }))).toBe(true)
   })
 })

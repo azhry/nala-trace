@@ -71,7 +71,6 @@ describe('normalizeTraceViewModel', () => {
           output_tokens: 40,
           reasoning_tokens: 5,
           total_tokens: 140,
-          cost_usd: 0.0012,
         },
       }],
       summary: {
@@ -81,7 +80,6 @@ describe('normalizeTraceViewModel', () => {
           output_tokens: 40,
           reasoning_tokens: 5,
           total_tokens: 140,
-          cost_usd: 0.0012,
         },
       },
     })
@@ -92,8 +90,6 @@ describe('normalizeTraceViewModel', () => {
       outputTokens: 40,
       reasoningTokens: 5,
       totalTokens: 140,
-      costUsd: 0.0012,
-      costRecorded: true,
     })
     expect(model.events[0].tokenUsage).toEqual(model.tokenUsage)
   })

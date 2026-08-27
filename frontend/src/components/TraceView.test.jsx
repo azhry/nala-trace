@@ -108,6 +108,57 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText('No MCP calls or MCP servers were recorded.')).toBeInTheDocument()
   })
 
+  it('renders session token usage and per-event usage from the API detail response', () => {
+    render(<TraceView session={{
+      ...apiTrace,
+      timeline: [{
+        id: 'stop-usage',
+        hook_event_name: 'Stop',
+        occurred_at: '2026-08-19T08:00:02Z',
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+          cost_usd: 0.0012,
+        },
+      }],
+      conversation: [{
+        event_id: 'stop-usage',
+        role: 'assistant',
+        content: 'Completed with usage.',
+        occurred_at: '2026-08-19T08:00:02Z',
+        turn_id: 'turn-1',
+      }],
+      summary: {
+        ...apiTrace.summary,
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+          cost_usd: 0.0012,
+        },
+      },
+    }} />)
+
+    expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
+    expect(screen.getByText('Token usage')).toBeInTheDocument()
+    expect(screen.getByText('100')).toBeInTheDocument()
+    expect(screen.getByText('140')).toBeInTheDocument()
+    expect(screen.getByText('$0.0012')).toBeInTheDocument()
+    expect(screen.getByLabelText('Event token usage: 140 total tokens, $0.0012')).toBeInTheDocument()
+  })
+
+  it('explains when a session has no recorded token usage', () => {
+    render(<TraceView session={apiTrace} />)
+
+    expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
+    expect(screen.getByText('No token usage was recorded for this session.')).toBeInTheDocument()
+  })
+
   it('bounds the initially mounted stream and loads more rows on demand', () => {
     const { container } = render(<TraceView session={createLargeTrace()} />)
 

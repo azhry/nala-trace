@@ -1,3 +1,5 @@
+import { EMPTY_TOKEN_USAGE, normalizeTokenUsage } from './tokenUsage'
+
 const EMPTY_LIST = []
 const LIFECYCLE_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse'])
 const TOOL_INPUT_PREVIEW_LIMIT = 520
@@ -274,6 +276,7 @@ function normalizeConversationItem(item = {}, index) {
     raw: item.raw ?? null,
     provenance,
     lifecycleEvent: provenance.eventName,
+    tokenUsage: normalizeTokenUsage(item.token_usage ?? item.tokenUsage),
   }
 }
 
@@ -326,6 +329,7 @@ function normalizeToolCall(call = {}, index) {
     turnId: cleanString(call.turn_id ?? call.turnId) || null,
     provenance,
     lifecycleEvent: provenance.eventName,
+    tokenUsage: normalizeTokenUsage(call.token_usage ?? call.tokenUsage),
   }
 }
 
@@ -356,6 +360,7 @@ function normalizeTimelineEvent(event = {}, index) {
     raw: event.raw ?? null,
     provenance,
     lifecycleEvent: provenance.eventName,
+    tokenUsage: normalizeTokenUsage(event.token_usage ?? event.tokenUsage),
   }
 }
 
@@ -381,6 +386,7 @@ function withTimelinePosition(event, timeline, streamOrder) {
     occurredAt: timeline.occurredAt,
     time: timeline.time,
     turnId: event.turnId || timeline.turnId,
+    tokenUsage: event.tokenUsage || timeline.tokenUsage,
   }
 }
 
@@ -584,6 +590,7 @@ function apiTraceViewModel(trace) {
       mcpCalls: mcpCallCount,
       mcpServers: mcpServers.length,
     },
+    tokenUsage: normalizeTokenUsage(summary.token_usage ?? summary.tokenUsage) || EMPTY_TOKEN_USAGE,
     startedAt: orderedEvents[0]?.time || 'Time not recorded',
     capturedAt: orderedEvents.at(-1)?.time || 'Time not recorded',
   }
@@ -604,6 +611,7 @@ function legacyTraceViewModel(trace) {
     toolCount: Number(trace.toolCalls || events.filter((event) => event.type === 'tool').length),
     mcpCallCount: 0,
     mcpServers: EMPTY_LIST,
+    tokenUsage: normalizeTokenUsage(trace.token_usage ?? trace.tokenUsage) || EMPTY_TOKEN_USAGE,
     startedAt: trace.startedAt || 'Time not recorded',
     capturedAt: trace.capturedAt || 'Time not recorded',
   }

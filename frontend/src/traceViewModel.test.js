@@ -51,6 +51,52 @@ describe('normalizeTraceViewModel', () => {
     expect(model.messageCount).toBe(3)
   })
 
+  it('retains session and timeline token usage from the API contract', () => {
+    const model = normalizeTraceViewModel({
+      schema_version: '1',
+      conversation: [{
+        event_id: 'stop-usage',
+        role: 'assistant',
+        content: 'Completed with usage.',
+        occurred_at: '2026-08-19T08:00:02Z',
+        turn_id: 'turn-1',
+      }],
+      timeline: [{
+        id: 'stop-usage',
+        hook_event_name: 'Stop',
+        occurred_at: '2026-08-19T08:00:02Z',
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+          cost_usd: 0.0012,
+        },
+      }],
+      summary: {
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+          cost_usd: 0.0012,
+        },
+      },
+    })
+
+    expect(model.tokenUsage).toEqual({
+      inputTokens: 100,
+      cachedInputTokens: 20,
+      outputTokens: 40,
+      reasoningTokens: 5,
+      totalTokens: 140,
+      costUsd: 0.0012,
+    })
+    expect(model.events[0].tokenUsage).toEqual(model.tokenUsage)
+  })
+
   it('creates a bounded command preview for shell tools and compact summaries for other tools', () => {
     const model = normalizeTraceViewModel({
       schema_version: '1',

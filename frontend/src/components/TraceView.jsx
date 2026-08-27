@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
 import { getFileOperations, isReadFileOperation, isSkillDocumentPath, normalizeTraceViewModel, skillNameFromFilePath } from '../traceViewModel'
+import { EMPTY_TOKEN_USAGE, hasRecordedTokenUsage, tokenUsageCost } from '../tokenUsage'
 
 const filters = [
   ['all', 'Everything'],
@@ -59,7 +60,7 @@ function ConversationMessage({ event, selected = false, active = false }) {
   return <>
     {event.turnBoundary && <div className="turn-boundary" role="separator" aria-label={event.turnLabel}><span>Turn boundary</span><strong>{event.turnLabel}</strong></div>}
     <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`conversation-message ${isUser ? 'user' : 'assistant'} ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}>
-      <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}</div>
+      <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}<TokenUsageBadge usage={event.tokenUsage} /></div>
       {event.contentIsCode ? <pre className="message-content-code">{body}</pre> : <p>{body}</p>}
       {event.partial && <span className="message-partial">partial evidence</span>}
       <SkillTags skills={event.skills} />
@@ -68,7 +69,33 @@ function ConversationMessage({ event, selected = false, active = false }) {
 }
 
 function SystemEvent({ event, selected = false, active = false }) {
-  return <div id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`system-event ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body}</small></span><span className="system-event-line" /></div>
+  return <div id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`system-event ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body} <TokenUsageBadge usage={event.tokenUsage} /></small></span><span className="system-event-line" /></div>
+}
+
+function TokenUsageBadge({ usage }) {
+  if (!usage) return null
+  const totalTokens = Number(usage.totalTokens ?? 0).toLocaleString()
+  const cost = tokenUsageCost(usage)
+  return <span className="token-usage-badge" aria-label={`Event token usage: ${totalTokens} total tokens, ${cost}`}>{totalTokens} tokens · {cost}</span>
+}
+
+function TokenUsageSummary({ usage }) {
+  const safeUsage = usage || EMPTY_TOKEN_USAGE
+  const recorded = hasRecordedTokenUsage(safeUsage)
+  const metrics = [
+    ['Input tokens', safeUsage.inputTokens, 'prompt tokens'],
+    ['Cached input', safeUsage.cachedInputTokens, 'cached prompt tokens'],
+    ['Output tokens', safeUsage.outputTokens, 'completion tokens'],
+    ['Reasoning', safeUsage.reasoningTokens, 'reasoning tokens'],
+    ['Total tokens', safeUsage.totalTokens, 'all token types'],
+    ['Recorded cost', tokenUsageCost(safeUsage), 'producer-reported cost'],
+  ]
+
+  return <div className="token-usage" role="region" aria-label="Token usage summary">
+    <div className="token-usage-heading"><div><span className="section-label">Token usage</span><strong>Session consumption</strong><small>{recorded ? 'Aggregated from token usage attached to captured events.' : 'No token usage was reported by the producer.'}</small></div><span className="record-count">from session summary</span></div>
+    <div className="token-usage-grid">{metrics.map(([label, value, detail]) => <div className="token-usage-metric" key={label}><span>{label}</span><strong>{typeof value === 'number' ? value.toLocaleString() : value}</strong><small>{detail}</small></div>)}</div>
+    <p className="token-usage-note">{recorded ? 'Token counts are shown exactly as recorded; cost is not inferred when the producer omits it.' : 'No token usage was recorded for this session.'}</p>
+  </div>
 }
 
 function InstructionScopeBadge({ scope, compact = false }) {
@@ -358,6 +385,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div><span>MCP</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()} calls</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
       <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
+    <TokenUsageSummary usage={viewModel.tokenUsage} />
     <SkillInventory events={events} fileRecords={inventoryFiles} capturedSkillEvidenceCount={viewModel.skillInvocations?.length || 0} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <McpInventory callCount={viewModel.mcpCallCount} servers={viewModel.mcpServers} />
     <InstructionInventory fileRecords={inventoryFiles} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />

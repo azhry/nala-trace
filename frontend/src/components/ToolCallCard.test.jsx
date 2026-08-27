@@ -42,4 +42,29 @@ describe('ToolCallCard', () => {
     expect(screen.getByText('Input not recorded')).toBeInTheDocument()
     expect(screen.queryByText('Command')).not.toBeInTheDocument()
   })
+
+  it('shows recorded token usage in the tool row header', () => {
+    render(<ToolCallCard event={{
+      ...shellEvent,
+      tokenUsage: {
+        inputTokens: 100,
+        cachedInputTokens: 20,
+        outputTokens: 40,
+        reasoningTokens: 5,
+        totalTokens: 140,
+        costUsd: 0.0012,
+      },
+    }} />)
+
+    expect(screen.getByLabelText('Event token usage: 140 total tokens, $0.0012')).toHaveTextContent('140 tokens · $0.0012')
+    expect(screen.getByText('recorded · record 42')).toBeInTheDocument()
+  })
+
+  it('states when the tool row has no recorded token usage', () => {
+    render(<ToolCallCard event={shellEvent} />)
+
+    expect(screen.getByLabelText('Event token usage not recorded')).toHaveTextContent('Usage not recorded')
+    expect(screen.queryByText(/0 tokens/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\$0\.0000/)).not.toBeInTheDocument()
+  })
 })

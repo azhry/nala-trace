@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { getInstructionScope, isInstructionFile } from './instructionScope'
 import { getToolInputPreview } from '../traceViewModel'
+import { hasRecordedTokenUsage, tokenUsageCost } from '../tokenUsage'
 
 function Tag({ children, tone = 'purple' }) {
   return <span className={`trace-tag ${tone}`}>{children}</span>
@@ -9,6 +10,15 @@ function Tag({ children, tone = 'purple' }) {
 function FileTag({ file }) {
   const scope = isInstructionFile(file) ? getInstructionScope(file) : null
   return <Tag tone="green"><span>file / {file}</span>{scope && <span className={`instruction-scope-badge ${scope.kind}`}>{scope.shortLabel}</span>}</Tag>
+}
+
+function ToolUsageMeta({ usage }) {
+  if (!hasRecordedTokenUsage(usage)) {
+    return <span className="tool-card-usage is-unrecorded" aria-label="Event token usage not recorded">Usage not recorded</span>
+  }
+
+  const totalTokens = Number(usage.totalTokens ?? 0).toLocaleString()
+  return <span className="tool-card-usage" aria-label={`Event token usage: ${totalTokens} total tokens, ${tokenUsageCost(usage)}`}>{totalTokens} tokens · {tokenUsageCost(usage)}</span>
 }
 
 export default function ToolCallCard({ event, defaultOpen = false, selected = false, active = false }) {
@@ -42,7 +52,7 @@ export default function ToolCallCard({ event, defaultOpen = false, selected = fa
             {files.map((file) => <FileTag file={file} key={`file-${file}`} />)}
           </span>
         </span>
-        <span className="tool-card-status">{event.status} · record {event.record}<span className="tool-card-chevron" aria-hidden="true">⌄</span></span>
+        <span className="tool-card-status"><span>{event.status} · record {event.record}</span><ToolUsageMeta usage={event.tokenUsage} /><span className="tool-card-chevron" aria-hidden="true">⌄</span></span>
       </button>
       {open && (
         <div className="tool-card-body" id={bodyId}>

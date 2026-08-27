@@ -91,11 +91,12 @@ describe('authenticated sessions flow', () => {
 
   it('automatically redirects an unauthorized entry to Nala Labs in the same tab', async () => {
     window.sessionStorage.removeItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
+    resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
 
     render(<App />)
 
+    expect(await screen.findByRole('heading', { name: 'Sign in through Nala Labs' })).toBeInTheDocument()
     await waitFor(() => expect(redirectToNalaLabs).toHaveBeenCalledExactlyOnceWith())
-    expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
   })
 
   it('keeps the auth boundary for an invalid stored credential', async () => {
@@ -148,8 +149,13 @@ describe('authenticated sessions flow', () => {
 
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'All captured sessions' })).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Loading authenticated sessions…')
-    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+    const loadingStatus = screen.getByRole('status')
+    expect(loadingStatus).toHaveTextContent('Loading authenticated sessions…')
+    expect(loadingStatus).toHaveTextContent('Resolving your application session before reading Trace records.')
+    expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
+    expect(loadingStatus).toHaveClass('trace-loading-panel')
+    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+    expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
     expect(document.querySelector('.auth-boundary')).not.toBeInTheDocument()
 
@@ -158,6 +164,27 @@ describe('authenticated sessions flow', () => {
 
     expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
+  })
+
+  it('does not gate refresh entry on session storage before auth resolution', async () => {
+    window.sessionStorage.clear()
+    let resolveAuthentication
+    resolveSession.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveAuthentication = resolve
+    }))
+
+    render(<App />)
+
+    const loadingStatus = screen.getByRole('status')
+    expect(loadingStatus).toHaveClass('trace-loading-panel')
+    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+    expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
+    expect(redirectToNalaLabs).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
+    resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
+    expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
   })
 
   it('shows the sign-in boundary and retry when authentication is unauthorized', async () => {

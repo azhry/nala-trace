@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
-import { AuthHandoffError, readNalaLabsAuthCode, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
+import { ApiError, getSessions, getTrace, resolveSession } from './api'
+import { AuthHandoffError, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
@@ -27,22 +27,8 @@ function dataSourceCopy(apiState) {
   return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
 }
 
-function hasStoredNalaLabsSession() {
-  try {
-    return Boolean(window.sessionStorage?.getItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY))
-  } catch {
-    return false
-  }
-}
-
-function shouldRedirectOnEntry() {
-  return !hasStoredNalaLabsSession() && !readNalaLabsAuthCode()
-}
-
-function AuthBoundary({ apiState, handoffState, onRetry }) {
+function AuthBoundary({ handoffState, onRetry }) {
   const redirectedRef = useRef(false)
-  const isUnauthorized = apiState === 'unauthorized'
-  const title = 'Sign in through Nala Labs'
   const defaultDetail = 'Your Nala Labs application session could not be verified. Sign in through Nala Labs, then try again.'
   const detail = handoffState === 'waiting'
     ? 'Redirecting to Nala Labs for sign-in.'
@@ -52,10 +38,10 @@ function AuthBoundary({ apiState, handoffState, onRetry }) {
   const actionLabel = 'Try again'
 
   useEffect(() => {
-    if (!isUnauthorized || handoffState !== 'idle' || redirectedRef.current) return
+    if (handoffState !== 'idle' || redirectedRef.current) return
     redirectedRef.current = true
     redirectToNalaLabs()
-  }, [handoffState, isUnauthorized])
+  }, [handoffState])
 
   function openLogin() {
     redirectToNalaLabs()
@@ -67,9 +53,9 @@ function AuthBoundary({ apiState, handoffState, onRetry }) {
     <main className="auth-boundary" aria-labelledby="auth-boundary-title">
       <section className="auth-boundary-panel" role="alert" aria-live="polite">
         <p className="eyebrow">Nala Trace access</p>
-        <h1 id="auth-boundary-title">{title}</h1>
+        <h1 id="auth-boundary-title">Sign in through Nala Labs</h1>
         <p>{detail}</p>
-        {isUnauthorized && <button type="button" className="state-action" onClick={openLogin}>Sign in through Nala Labs</button>}
+        <button type="button" className="state-action" onClick={openLogin}>Sign in through Nala Labs</button>
         <button type="button" className="state-action" onClick={retry}>{actionLabel}</button>
       </section>
     </main>
@@ -100,13 +86,8 @@ function DataSourceNotice({ apiState }) {
 }
 
 function SessionStatePanel({ state, onRetry }) {
-  if (state === 'loading') return <div className="panel session-state-panel" role="status" aria-live="polite" aria-busy="true"><strong>Loading authenticated sessions…</strong><span>Resolving your application session, then reading bounded summaries.</span></div>
   if (state === 'unauthorized') return <div className="panel session-state-panel" role="alert"><strong>Sign in to view sessions.</strong><span>Your application session could not be resolved. Sign in, then try again.</span><button type="button" className="state-action" onClick={onRetry}>Try again</button></div>
   return <div className="panel session-state-panel" role="alert"><strong>Sessions could not be loaded.</strong><span>The API returned an error while reading session summaries.</span><button type="button" className="state-action" onClick={onRetry}>Retry request</button></div>
-}
-
-function NeutralState({ state, onRetry }) {
-  return <main className="main-content"><section className="page-section" aria-label={state === 'loading' ? 'Loading sessions' : 'Session loading error'}><SessionStatePanel state={state} onRetry={onRetry} /></section></main>
 }
 
 function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, sortBy, onSortChange, apiState, onRetry }) {
@@ -133,9 +114,6 @@ export default function App() {
   const [traceRequestSessionId, setTraceRequestSessionId] = useState(null)
   const [traceState, setTraceState] = useState('idle')
   const [traceError, setTraceError] = useState(null)
-  const [redirectOnEntry] = useState(() => shouldRedirectOnEntry())
-  const redirectedOnEntryRef = useRef(false)
-
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute())
     window.addEventListener('hashchange', onHashChange)
@@ -165,17 +143,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (redirectOnEntry) {
-      if (redirectedOnEntryRef.current) return
-      redirectedOnEntryRef.current = true
-      redirectToNalaLabs()
-      return
-    }
-
     let active = true
     loadSessions(() => active)
     return () => { active = false }
-  }, [loadSessions, redirectOnEntry])
+  }, [loadSessions])
 
   const selectedSession = useMemo(() => sessions.find((session) => session.id === route.sessionId), [route.sessionId, sessions])
 
@@ -233,10 +204,9 @@ export default function App() {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
   }
 
-  if (redirectOnEntry) return null
-  if (apiState === 'loading') return <NeutralState state="loading" onRetry={loadSessions} />
-  if (apiState === 'unauthorized') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
-  if (apiState === 'error') return <NeutralState state="error" onRetry={loadSessions} />
+  if (apiState === 'loading') return <div className="app-shell"><main className="main-content"><TraceLoadingPanel title="Loading authenticated sessions…" detail="Resolving your application session before reading Trace records." /></main></div>
+  if (apiState === 'unauthorized') return <AuthBoundary handoffState={handoffState} onRetry={loadSessions} />
+  if (apiState === 'error') return <div className="app-shell"><main className="main-content"><section className="page-section" aria-label="Session loading error"><SessionStatePanel state="error" onRetry={loadSessions} /></section></main></div>
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
   return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>

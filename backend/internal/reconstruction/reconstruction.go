@@ -147,6 +147,13 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 		if reason != "" {
 			kind = "partial"
 		}
+		var tokenUsage *trace.TokenUsage
+		if payloadSafe {
+			tokenUsage = tokenUsageFromPayload(event.Payload)
+			if tokenUsage != nil {
+				result.Summary.TokenUsage.Add(*tokenUsage)
+			}
+		}
 		timeline := trace.TimelineEvent{
 			ID:            eventID(event, item.OriginalIndex),
 			HookEventName: event.HookEventName,
@@ -154,6 +161,7 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 			Kind:          kind,
 			PartialReason: reason,
 			ToolCallIndex: toolCallIndex,
+			TokenUsage:    tokenUsage,
 			Raw:           raw,
 		}
 		result.Timeline = append(result.Timeline, timeline)

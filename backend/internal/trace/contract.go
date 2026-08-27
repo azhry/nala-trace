@@ -39,6 +39,7 @@ type TimelineEvent struct {
 	Kind          string          `json:"kind"`
 	PartialReason string          `json:"partial_reason,omitempty"`
 	ToolCallIndex *int            `json:"tool_call_index,omitempty"`
+	TokenUsage    *TokenUsage     `json:"token_usage,omitempty"`
 	Raw           json.RawMessage `json:"raw"`
 }
 
@@ -84,6 +85,29 @@ type FileOperation struct {
 	Raw        json.RawMessage `json:"raw"`
 }
 
+// TokenUsage is the canonical token and producer-supplied cost contract.
+// Cached input tokens are a subset of input tokens and are reported separately.
+type TokenUsage struct {
+	InputTokens       int64   `bson:"input_tokens" json:"input_tokens"`
+	CachedInputTokens int64   `bson:"cached_input_tokens" json:"cached_input_tokens"`
+	OutputTokens      int64   `bson:"output_tokens" json:"output_tokens"`
+	ReasoningTokens   int64   `bson:"reasoning_tokens" json:"reasoning_tokens"`
+	TotalTokens       int64   `bson:"total_tokens" json:"total_tokens"`
+	CostUSD           float64 `bson:"cost_usd" json:"cost_usd"`
+}
+
+func (usage *TokenUsage) Add(other TokenUsage) {
+	if usage == nil {
+		return
+	}
+	usage.InputTokens += other.InputTokens
+	usage.CachedInputTokens += other.CachedInputTokens
+	usage.OutputTokens += other.OutputTokens
+	usage.ReasoningTokens += other.ReasoningTokens
+	usage.TotalTokens += other.TotalTokens
+	usage.CostUSD += other.CostUSD
+}
+
 // RuntimeMetadata contains only allowlisted scalar execution settings found
 // in captured hook payloads. Missing producer fields remain empty.
 type RuntimeMetadata struct {
@@ -100,14 +124,15 @@ type RuntimeMetadata struct {
 }
 
 type Summary struct {
-	EventCount           int      `json:"event_count"`
-	MessageCount         int      `json:"message_count"`
-	ToolCallCount        int      `json:"tool_call_count"`
-	MCPCallCount         int      `json:"mcp_call_count"`
-	MCPServers           []string `json:"mcp_servers"`
-	SkillInvocationCount int      `json:"skill_invocation_count"`
-	FileOperationCount   int      `json:"file_operation_count"`
-	FileReadCount        int      `json:"file_read_count"`
+	EventCount           int        `json:"event_count"`
+	MessageCount         int        `json:"message_count"`
+	ToolCallCount        int        `json:"tool_call_count"`
+	MCPCallCount         int        `json:"mcp_call_count"`
+	MCPServers           []string   `json:"mcp_servers"`
+	SkillInvocationCount int        `json:"skill_invocation_count"`
+	FileOperationCount   int        `json:"file_operation_count"`
+	FileReadCount        int        `json:"file_read_count"`
+	TokenUsage           TokenUsage `json:"token_usage"`
 }
 
 func New(sessionID, userID string) Trace {

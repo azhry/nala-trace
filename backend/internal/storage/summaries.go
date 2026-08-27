@@ -3,6 +3,7 @@ package storage
 import (
 	"time"
 
+	"github.com/azhry/nala-trace/backend/internal/trace"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -10,18 +11,19 @@ const mcpToolNamePattern = `^mcp__(?:codex_apps__(?!(?:node_repl)_)[^_\s]+_.+|(?
 const codexAppsToolPrefix = "mcp__codex_apps__"
 
 type SessionSummary struct {
-	SessionID            string    `bson:"session_id" json:"session_id"`
-	Title                string    `bson:"title" json:"title"`
-	UserID               string    `bson:"user_id" json:"user_id"`
-	FirstEventAt         time.Time `bson:"first_event_at" json:"first_event_at"`
-	LastEventAt          time.Time `bson:"last_event_at" json:"last_event_at"`
-	EventCount           int64     `bson:"event_count" json:"event_count"`
-	ToolCallCount        int64     `bson:"tool_call_count" json:"tool_call_count"`
-	MCPCallCount         int64     `bson:"mcp_call_count" json:"mcp_call_count"`
-	MCPServers           []string  `bson:"mcp_servers" json:"mcp_servers"`
-	SkillInvocationCount int64     `bson:"skill_invocation_count" json:"skill_invocation_count"`
-	FileOperationCount   int64     `bson:"file_operation_count" json:"file_operation_count"`
-	FileReadCount        int64     `bson:"file_read_count" json:"file_read_count"`
+	SessionID            string           `bson:"session_id" json:"session_id"`
+	Title                string           `bson:"title" json:"title"`
+	UserID               string           `bson:"user_id" json:"user_id"`
+	FirstEventAt         time.Time        `bson:"first_event_at" json:"first_event_at"`
+	LastEventAt          time.Time        `bson:"last_event_at" json:"last_event_at"`
+	EventCount           int64            `bson:"event_count" json:"event_count"`
+	ToolCallCount        int64            `bson:"tool_call_count" json:"tool_call_count"`
+	MCPCallCount         int64            `bson:"mcp_call_count" json:"mcp_call_count"`
+	MCPServers           []string         `bson:"mcp_servers" json:"mcp_servers"`
+	SkillInvocationCount int64            `bson:"skill_invocation_count" json:"skill_invocation_count"`
+	FileOperationCount   int64            `bson:"file_operation_count" json:"file_operation_count"`
+	FileReadCount        int64            `bson:"file_read_count" json:"file_read_count"`
+	TokenUsage           trace.TokenUsage `bson:"token_usage" json:"token_usage"`
 }
 
 func sessionSummaryPipeline() []bson.D {
@@ -34,6 +36,7 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 	fileEvent := andExpression(toolEvent, fileSignalExpression())
 	fileReadEvent := andExpression(toolEvent, fileSignalExpression(), fileReadSignalExpression())
 	mcpEvent := andExpression(toolEvent, mcpSignalExpression())
+	tokenUsage := sessionTokenUsageExpressions()
 	explicitTitle := firstNonEmptyString(bson.A{
 		stringFieldCandidate("$payload.title"),
 		stringFieldCandidate("$payload.session_title"),
@@ -60,6 +63,12 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "skill_invocation_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{skillEvent, 1, 0}}}}}},
 			{Key: "file_operation_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{fileEvent, 1, 0}}}}}},
 			{Key: "file_read_count", Value: bson.D{{Key: "$sum", Value: bson.D{{Key: "$cond", Value: bson.A{fileReadEvent, 1, 0}}}}}},
+			{Key: "token_input_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.inputTokens}}},
+			{Key: "token_cached_input_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.cachedInputTokens}}},
+			{Key: "token_output_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.outputTokens}}},
+			{Key: "token_reasoning_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.reasoningTokens}}},
+			{Key: "token_total_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.totalTokens}}},
+			{Key: "token_cost_usd", Value: bson.D{{Key: "$sum", Value: tokenUsage.costUSD}}},
 		}}},
 		{{Key: "$project", Value: bson.D{
 			{Key: "_id", Value: 0},
@@ -79,6 +88,14 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "skill_invocation_count", Value: 1},
 			{Key: "file_operation_count", Value: 1},
 			{Key: "file_read_count", Value: 1},
+			{Key: "token_usage", Value: bson.D{
+				{Key: "input_tokens", Value: "$token_input_tokens"},
+				{Key: "cached_input_tokens", Value: "$token_cached_input_tokens"},
+				{Key: "output_tokens", Value: "$token_output_tokens"},
+				{Key: "reasoning_tokens", Value: "$token_reasoning_tokens"},
+				{Key: "total_tokens", Value: "$token_total_tokens"},
+				{Key: "cost_usd", Value: "$token_cost_usd"},
+			}},
 		}}},
 		{{Key: "$sort", Value: bson.D{{Key: "last_event_at", Value: -1}, {Key: "session_id", Value: 1}}}},
 	}...)
@@ -211,6 +228,101 @@ func payloadFieldPaths(field string) []string {
 		"$payload.data." + field,
 		"$payload.event." + field,
 	}
+}
+
+type tokenUsageExpressions struct {
+	inputTokens       bson.D
+	cachedInputTokens bson.D
+	outputTokens      bson.D
+	reasoningTokens   bson.D
+	totalTokens       bson.D
+	costUSD           bson.D
+}
+
+func sessionTokenUsageExpressions() tokenUsageExpressions {
+	inputTokens := firstNumericExpression(tokenUsageFieldPaths("input_tokens"), "long")
+	cachedInputTokens := firstNumericExpression(append(
+		tokenUsageFieldPaths("cached_input_tokens"),
+		tokenUsageFieldPaths("cached_tokens")...,
+	), "long")
+	if inputDetails := firstNumericExpression(append(
+		tokenUsageFieldPaths("input_tokens_details.cached_tokens"),
+		tokenUsageFieldPaths("prompt_tokens_details.cached_tokens")...,
+	), "long"); inputDetails != nil {
+		cachedInputTokens = firstNonNullNumericExpression(cachedInputTokens, inputDetails)
+	}
+	outputTokens := firstNumericExpression(tokenUsageFieldPaths("output_tokens"), "long")
+	reasoningTokens := firstNumericExpression(tokenUsageFieldPaths("reasoning_tokens"), "long")
+	if outputDetails := firstNumericExpression(append(
+		tokenUsageFieldPaths("output_tokens_details.reasoning_tokens"),
+		tokenUsageFieldPaths("completion_tokens_details.reasoning_tokens")...,
+	), "long"); outputDetails != nil {
+		reasoningTokens = firstNonNullNumericExpression(reasoningTokens, outputDetails)
+	}
+	totalTokens := firstNonNullNumericExpression(
+		firstNumericExpression(tokenUsageFieldPaths("total_tokens"), "long"),
+		bson.D{{Key: "$add", Value: bson.A{zeroIfNull(inputTokens), zeroIfNull(outputTokens)}}},
+	)
+	return tokenUsageExpressions{
+		inputTokens:       zeroIfNull(inputTokens),
+		cachedInputTokens: zeroIfNull(cachedInputTokens),
+		outputTokens:      zeroIfNull(outputTokens),
+		reasoningTokens:   zeroIfNull(reasoningTokens),
+		totalTokens:       zeroIfNull(totalTokens),
+		costUSD:           zeroIfNull(firstNumericExpression(append(tokenUsageFieldPaths("cost_usd"), tokenUsageFieldPaths("total_cost_usd")...), "double")),
+	}
+}
+
+func tokenUsageFieldPaths(field string) []string {
+	containers := []string{
+		"usage." + field,
+		"response.usage." + field,
+		"tool_response.usage." + field,
+		"output.usage." + field,
+		"result.usage." + field,
+		"response." + field,
+		"tool_response." + field,
+		"output." + field,
+		"result." + field,
+	}
+	paths := make([]string, 0, len(containers)*5)
+	for _, container := range containers {
+		paths = append(paths, payloadFieldPaths(container)...)
+	}
+	return paths
+}
+
+func firstNumericExpression(paths []string, target string) bson.D {
+	candidates := make(bson.A, 0, len(paths))
+	for _, path := range paths {
+		candidates = append(candidates, path)
+	}
+	converted := bson.D{{Key: "$map", Value: bson.D{
+		{Key: "input", Value: candidates},
+		{Key: "as", Value: "candidate"},
+		{Key: "in", Value: bson.D{{Key: "$convert", Value: bson.D{
+			{Key: "input", Value: "$$candidate"},
+			{Key: "to", Value: target},
+			{Key: "onError", Value: nil},
+			{Key: "onNull", Value: nil},
+		}}}},
+	}}}
+	return bson.D{{Key: "$arrayElemAt", Value: bson.A{
+		bson.D{{Key: "$filter", Value: bson.D{
+			{Key: "input", Value: converted},
+			{Key: "as", Value: "candidate"},
+			{Key: "cond", Value: bson.D{{Key: "$ne", Value: bson.A{"$$candidate", nil}}}},
+		}}},
+		0,
+	}}}
+}
+
+func firstNonNullNumericExpression(primary, fallback bson.D) bson.D {
+	return bson.D{{Key: "$ifNull", Value: bson.A{primary, fallback}}}
+}
+
+func zeroIfNull(expression bson.D) bson.D {
+	return bson.D{{Key: "$ifNull", Value: bson.A{expression, 0}}}
 }
 
 func firstMatchingString(candidates bson.A, regex string) bson.D {

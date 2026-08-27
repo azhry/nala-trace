@@ -4,6 +4,7 @@ import { AuthHandoffError, readNalaLabsAuthCode, redirectToNalaLabs, redeemNalaL
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
+import ScrollToTopButton from './components/ScrollToTopButton'
 import TraceView, { TraceLoadingPanel } from './components/TraceView'
 import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries'
 
@@ -237,5 +238,5 @@ export default function App() {
   if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

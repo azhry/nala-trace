@@ -57,11 +57,12 @@ function SkillTags({ skills = [] }) {
 function ConversationMessage({ event, selected = false, active = false }) {
   const isUser = event.role === 'user'
   const body = event.hasContent === false ? 'Content not recorded' : event.body
+  const usageOnly = event.usageOnlyStructuredContent && event.tokenUsage
   return <>
     {event.turnBoundary && <div className="turn-boundary" role="separator" aria-label={event.turnLabel}><span>Turn boundary</span><strong>{event.turnLabel}</strong></div>}
     <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`conversation-message ${isUser ? 'user' : 'assistant'} ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}>
-      <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}<TokenUsageMeta usage={event.tokenUsage} /></div>
-      {event.contentIsCode ? <pre className="message-content-code">{body}</pre> : <p>{body}</p>}
+      <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}{!usageOnly && <TokenUsageMeta usage={event.tokenUsage} />}</div>
+      {usageOnly ? <p className="message-usage-summary" aria-label={`Event token usage: ${event.tokenUsage.totalTokens.toLocaleString()} total tokens, ${tokenUsageCost(event.tokenUsage)}`}>Usage recorded · {event.tokenUsage.totalTokens.toLocaleString()} tokens · {tokenUsageCost(event.tokenUsage)}</p> : event.contentIsCode ? <pre className="message-content-code">{body}</pre> : <p>{body}</p>}
       {event.partial && <span className="message-partial">partial evidence</span>}
       <SkillTags skills={event.skills} />
     </article>

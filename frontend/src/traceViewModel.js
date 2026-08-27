@@ -1,4 +1,4 @@
-import { EMPTY_TOKEN_USAGE, normalizeTokenUsage } from './tokenUsage'
+import { EMPTY_TOKEN_USAGE, hasRecordedTokenUsage, normalizeTokenUsage } from './tokenUsage'
 
 const EMPTY_LIST = []
 const LIFECYCLE_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse'])
@@ -220,6 +220,46 @@ function isCodeShaped(value, text) {
     || /```|[{}[\];<>]|\b(const|function|return|import|export)\b/.test(text)
 }
 
+const USAGE_CONTAINER_KEYS = new Set(['usage', 'token_usage', 'tokenUsage'])
+const PROVIDER_METADATA_KEYS = new Set([
+  'id',
+  'model',
+  'object',
+  'created',
+  'created_at',
+  'createdAt',
+  'provider',
+  'status',
+  'type',
+  'finish_reason',
+  'finishReason',
+  'system_fingerprint',
+  'systemFingerprint',
+  'response_id',
+  'responseId',
+])
+
+function parseStructuredContent(value) {
+  if (!value || typeof value !== 'string') return value
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
+
+export function isUsageOnlyStructuredContent(value, tokenUsage) {
+  if (!hasRecordedTokenUsage(tokenUsage)) return false
+  const content = parseStructuredContent(value)
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return false
+
+  const usageKey = [...USAGE_CONTAINER_KEYS].find((key) => content[key] && typeof content[key] === 'object' && !Array.isArray(content[key]))
+  if (!usageKey || !normalizeTokenUsage(content[usageKey])) return false
+
+  return Object.keys(content).every((key) => key === usageKey || PROVIDER_METADATA_KEYS.has(key))
+}
+
 export function formatTraceTimestamp(value) {
   if (!value) return 'Time not recorded'
   const date = new Date(value)
@@ -242,6 +282,7 @@ function roleLabel(role) {
 function normalizeConversationItem(item = {}, index) {
   const content = item.content
   const body = serializeJson(content)
+  const tokenUsage = normalizeTokenUsage(item.token_usage ?? item.tokenUsage)
   const role = normalizeRole(item.role)
   const raw = rawRecord(item.raw)
   const provenance = normalizeProvenance(item, raw)
@@ -276,7 +317,8 @@ function normalizeConversationItem(item = {}, index) {
     raw: item.raw ?? null,
     provenance,
     lifecycleEvent: provenance.eventName,
-    tokenUsage: normalizeTokenUsage(item.token_usage ?? item.tokenUsage),
+    tokenUsage,
+    usageOnlyStructuredContent: isUsageOnlyStructuredContent(content, tokenUsage),
   }
 }
 
@@ -379,6 +421,7 @@ function eventTimeKey(eventName, occurredAt) {
 }
 
 function withTimelinePosition(event, timeline, streamOrder) {
+  const tokenUsage = event.tokenUsage || timeline.tokenUsage
   return {
     ...event,
     streamOrder,
@@ -386,7 +429,8 @@ function withTimelinePosition(event, timeline, streamOrder) {
     occurredAt: timeline.occurredAt,
     time: timeline.time,
     turnId: event.turnId || timeline.turnId,
-    tokenUsage: event.tokenUsage || timeline.tokenUsage,
+    tokenUsage,
+    usageOnlyStructuredContent: event.usageOnlyStructuredContent || isUsageOnlyStructuredContent(event.body, tokenUsage),
   }
 }
 

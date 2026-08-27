@@ -157,6 +157,66 @@ describe('TraceView API conversation', () => {
     expect(container.querySelector('.token-usage-badge')).not.toBeInTheDocument()
   })
 
+  it('summarizes usage-only provider content instead of showing its raw JSON body', () => {
+    const providerUsage = {
+      usage: {
+        cost_usd: 0.0012,
+        input_tokens: 100,
+        input_tokens_details: { cached_tokens: 20 },
+        output_tokens: 40,
+        output_tokens_details: { reasoning_tokens: 5 },
+        total_tokens: 140,
+      },
+    }
+    const { container } = render(<TraceView session={{
+      ...apiTrace,
+      timeline: [{
+        id: 'stop-usage-json',
+        hook_event_name: 'Stop',
+        occurred_at: '2026-08-19T08:00:02Z',
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+          cost_usd: 0.0012,
+        },
+      }],
+      conversation: [{
+        event_id: 'stop-usage-json',
+        role: 'assistant',
+        content: providerUsage,
+        occurred_at: '2026-08-19T08:00:02Z',
+        turn_id: 'turn-usage-json',
+      }, {
+        role: 'user',
+        content: { note: 'Keep this structured content visible.' },
+        occurred_at: '2026-08-19T08:00:03Z',
+        turn_id: 'turn-usage-json',
+      }],
+      summary: {
+        ...apiTrace.summary,
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+          cost_usd: 0.0012,
+        },
+      },
+    }} />)
+
+    const usageMessage = container.querySelector('.conversation-message.assistant')
+    expect(usageMessage).toBeInTheDocument()
+    expect(usageMessage.querySelector('.message-content-code')).not.toBeInTheDocument()
+    expect(usageMessage).not.toHaveTextContent('"input_tokens"')
+    expect(usageMessage).toHaveTextContent('Usage recorded · 140 tokens · $0.0012')
+    expect(screen.getByText(/Keep this structured content visible/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
+  })
+
   it('explains when a session has no recorded token usage', () => {
     render(<TraceView session={apiTrace} />)
 

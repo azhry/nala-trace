@@ -208,6 +208,7 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .turn-boundary strong { color: var(--purple); font-size: 10px; font-weight: 600; }
 .message-turn { padding: 2px 5px; border: 1px solid rgba(187,165,255,.22); border-radius: 3px; color: var(--purple); font-family: var(--mono); font-size: 9px; }
 .message-content-code { max-height: 360px; margin: 9px 0 0; padding: 11px 12px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: rgba(15,19,24,.72); color: var(--muted); font-family: var(--mono); font-size: 12px; line-height: 1.55; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-usage-summary { margin: 10px 0 0; color: var(--green); font-family: var(--mono); font-size: 12px; line-height: 1.5; }
 .message-partial { display: inline-block; margin-top: 9px; color: var(--amber); font-family: var(--mono); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
 
 @media (max-width: 720px) {

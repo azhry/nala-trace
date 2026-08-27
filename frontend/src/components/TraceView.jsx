@@ -60,7 +60,7 @@ function ConversationMessage({ event, selected = false, active = false }) {
   return <>
     {event.turnBoundary && <div className="turn-boundary" role="separator" aria-label={event.turnLabel}><span>Turn boundary</span><strong>{event.turnLabel}</strong></div>}
     <article id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`conversation-message ${isUser ? 'user' : 'assistant'} ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}>
-      <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}<TokenUsageBadge usage={event.tokenUsage} /></div>
+      <div className="message-meta"><span className="message-avatar">{isUser ? 'U' : 'AI'}</span><strong>{event.roleLabel || (isUser ? 'User' : 'Codex')}</strong><span>{event.time}</span>{event.turnId && <span className="message-turn">turn {event.turnId}</span>}{event.record && <span className="message-record">record {event.record}</span>}<TokenUsageMeta usage={event.tokenUsage} /></div>
       {event.contentIsCode ? <pre className="message-content-code">{body}</pre> : <p>{body}</p>}
       {event.partial && <span className="message-partial">partial evidence</span>}
       <SkillTags skills={event.skills} />
@@ -69,14 +69,14 @@ function ConversationMessage({ event, selected = false, active = false }) {
 }
 
 function SystemEvent({ event, selected = false, active = false }) {
-  return <div id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`system-event ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body} <TokenUsageBadge usage={event.tokenUsage} /></small></span><span className="system-event-line" /></div>
+  return <div id={eventAnchorId(event.id)} data-trace-event-id={event.id} data-trace-event-selected={selected ? 'true' : 'false'} data-trace-event-active={active ? 'true' : 'false'} tabIndex={selected ? -1 : undefined} className={`system-event ${selected ? 'is-evidence-selected' : ''} ${active ? 'is-evidence-active' : ''}`}><span className="system-event-line" /><span><strong>{event.label}</strong><small>{event.body} <TokenUsageMeta usage={event.tokenUsage} /></small></span><span className="system-event-line" /></div>
 }
 
-function TokenUsageBadge({ usage }) {
+function TokenUsageMeta({ usage }) {
   if (!usage) return null
   const totalTokens = Number(usage.totalTokens ?? 0).toLocaleString()
   const cost = tokenUsageCost(usage)
-  return <span className="token-usage-badge" aria-label={`Event token usage: ${totalTokens} total tokens, ${cost}`}>{totalTokens} tokens · {cost}</span>
+  return <span className="token-usage-inline" aria-label={`Event token usage: ${totalTokens} total tokens, ${cost}`}>{totalTokens} tokens · {cost}</span>
 }
 
 function TokenUsageSummary({ usage }) {

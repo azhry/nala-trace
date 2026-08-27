@@ -109,7 +109,7 @@ describe('TraceView API conversation', () => {
   })
 
   it('renders session token usage and per-event usage from the API detail response', () => {
-    render(<TraceView session={{
+    const { container } = render(<TraceView session={{
       ...apiTrace,
       timeline: [{
         id: 'stop-usage',
@@ -149,7 +149,12 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText('100')).toBeInTheDocument()
     expect(screen.getByText('140')).toBeInTheDocument()
     expect(screen.getByText('$0.0012')).toBeInTheDocument()
-    expect(screen.getByLabelText('Event token usage: 140 total tokens, $0.0012')).toBeInTheDocument()
+    const eventUsage = screen.getByLabelText('Event token usage: 140 total tokens, $0.0012')
+    expect(eventUsage).toBeInTheDocument()
+    expect(eventUsage).toHaveClass('token-usage-inline')
+    expect(eventUsage).toHaveTextContent('140 tokens · $0.0012')
+    expect(container.querySelectorAll('.token-usage-inline')).toHaveLength(1)
+    expect(container.querySelector('.token-usage-badge')).not.toBeInTheDocument()
   })
 
   it('explains when a session has no recorded token usage', () => {

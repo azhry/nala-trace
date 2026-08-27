@@ -1,8 +1,19 @@
 # Nala Trace reconstruction heuristics
 
-Nala Trace reconstructs conversation and operation evidence from the stored
-Codex hook payload. It does not read rollout-log or transcript files because
-those formats are undocumented and can drift between Codex versions.
+The reconstruction package reconstructs conversation and operation evidence
+from the stored Codex hook payload. The hook client performs the separate,
+best-effort token-usage capture before persistence: it reads only the local
+transcript path supplied on terminal hook events, extracts the latest
+`token_count.info.total_token_usage` record, and stores it as marked usage
+evidence. Reconstruction itself never reads transcript files.
+
+## Token usage
+
+Direct provider usage is preserved when present. Marked
+`usage_source=codex_transcript` values are cumulative session snapshots; the
+latest snapshot is used once for the session summary while each captured
+timeline event retains its own usage evidence. Cost is displayed only when a
+producer supplies it; Nala Trace does not infer pricing.
 
 ## Conversation
 

@@ -12,6 +12,11 @@ import (
 
 const maxTokenUsageDepth = 6
 
+type tokenUsageEvidence struct {
+	usage      trace.TokenUsage
+	cumulative bool
+}
+
 var tokenUsageContainerKeys = []string{
 	"usage",
 	"response",
@@ -25,15 +30,25 @@ var tokenUsageContainerKeys = []string{
 }
 
 func tokenUsageFromPayload(payload bson.Raw) *trace.TokenUsage {
-	if len(payload) == 0 || len(payload) > maxReconstructionPayloadBytes {
+	evidence, ok := tokenUsageEvidenceFromPayload(payload)
+	if !ok {
 		return nil
+	}
+	return &evidence.usage
+}
+
+func tokenUsageEvidenceFromPayload(payload bson.Raw) (tokenUsageEvidence, bool) {
+	if len(payload) == 0 || len(payload) > maxReconstructionPayloadBytes {
+		return tokenUsageEvidence{}, false
 	}
 	document := payloadDocument(payload)
 	usage, ok := findTokenUsage(document, 0)
 	if !ok {
-		return nil
+		return tokenUsageEvidence{}, false
 	}
-	return &usage
+	source, _ := mapValue(document, "usage_source")
+	sourceName, _ := source.(string)
+	return tokenUsageEvidence{usage: usage, cumulative: strings.EqualFold(strings.TrimSpace(sourceName), "codex_transcript")}, true
 }
 
 func findTokenUsage(document map[string]any, depth int) (trace.TokenUsage, bool) {
@@ -69,7 +84,7 @@ func tokenUsageDocument(document map[string]any) (trace.TokenUsage, bool) {
 	if !cachedPresent {
 		cachedInputTokens, cachedPresent = nestedTokenCountField(document, "prompt_tokens_details", "cached_tokens")
 	}
-	reasoningTokens, reasoningPresent := firstTokenCountField(document, "reasoning_tokens")
+	reasoningTokens, reasoningPresent := firstTokenCountField(document, "reasoning_tokens", "reasoning_output_tokens")
 	if !reasoningPresent {
 		reasoningTokens, reasoningPresent = nestedTokenCountField(document, "output_tokens_details", "reasoning_tokens")
 	}

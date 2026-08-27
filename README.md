@@ -32,8 +32,11 @@ events. Each command hook receives the lifecycle payload as JSON on stdin:
 - `Stop`
 
 The API reconstructs conversation messages, tool-call timelines, skill
-evidence, and file-operation evidence from stored hook payloads. It does not
-read undocumented Codex rollout or transcript files.
+evidence, and file-operation evidence from stored hook payloads. For terminal
+events, the hook client also reads the bounded local `transcript_path` supplied
+by Codex and copies the latest `token_count.info.total_token_usage` record into
+the payload before delivery. If that transcript is unavailable, the event is
+still delivered without invented usage.
 
 ## Prerequisites
 
@@ -95,10 +98,13 @@ curl --fail-with-body --silent --show-error http://127.0.0.1:3003/healthz
 
 Session summaries expose a `token_usage` object with `input_tokens`,
 `cached_input_tokens`, `output_tokens`, `reasoning_tokens`, `total_tokens`,
-and producer-supplied `cost_usd`. The session trace also includes
+and producer-supplied `cost_usd`. The hook client obtains cumulative token
+counts from Codex transcript `token_count` records on `Stop` and
+`SubagentStop` events when available. The session trace also includes
 `token_usage` on timeline events whose retained payload contains usage
-evidence; the trace summary totals those event values. Missing producer fields
-remain zero in aggregates, and cost is not inferred from model pricing.
+evidence; the trace summary totals direct per-event usage or uses the latest
+cumulative transcript snapshot once. Missing producer fields remain zero in
+the API aggregate, and cost is not inferred from model pricing.
 
 Protected requests accept either of these Nala Labs credentials:
 
@@ -219,7 +225,8 @@ command-hook behavior and is not a field in `hooks.json`.
 ### 4. Generate and inspect a real trace
 
 Start a normal Codex session after the hook is trusted. The hook client will
-receive each supported lifecycle event automatically. It sends one bounded
+receive each supported lifecycle event automatically. On terminal events it
+reads the local transcript usage record when available, then sends one bounded
 `POST /ingest`, ignores the response body, and returns zero whether delivery
 succeeds or fails.
 

@@ -37,6 +37,7 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 	fileReadEvent := andExpression(toolEvent, fileSignalExpression(), fileReadSignalExpression())
 	mcpEvent := andExpression(toolEvent, mcpSignalExpression())
 	tokenUsage := sessionTokenUsageExpressions()
+	cumulativeUsage := cumulativeTokenUsageExpression()
 	explicitTitle := firstNonEmptyString(bson.A{
 		stringFieldCandidate("$payload.title"),
 		stringFieldCandidate("$payload.session_title"),
@@ -69,6 +70,13 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "token_reasoning_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.reasoningTokens}}},
 			{Key: "token_total_tokens", Value: bson.D{{Key: "$sum", Value: tokenUsage.totalTokens}}},
 			{Key: "token_cost_usd", Value: bson.D{{Key: "$sum", Value: tokenUsage.costUSD}}},
+			{Key: "token_cumulative_present", Value: bson.D{{Key: "$max", Value: cumulativeUsage.present}}},
+			{Key: "token_cumulative_input_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.inputTokens}}},
+			{Key: "token_cumulative_cached_input_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.cachedInputTokens}}},
+			{Key: "token_cumulative_output_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.outputTokens}}},
+			{Key: "token_cumulative_reasoning_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.reasoningTokens}}},
+			{Key: "token_cumulative_total_tokens", Value: bson.D{{Key: "$max", Value: cumulativeUsage.totalTokens}}},
+			{Key: "token_cumulative_cost_usd", Value: bson.D{{Key: "$max", Value: cumulativeUsage.costUSD}}},
 		}}},
 		{{Key: "$project", Value: bson.D{
 			{Key: "_id", Value: 0},
@@ -89,12 +97,12 @@ func sessionSummaryPipelineForUser(userID string, limit int) []bson.D {
 			{Key: "file_operation_count", Value: 1},
 			{Key: "file_read_count", Value: 1},
 			{Key: "token_usage", Value: bson.D{
-				{Key: "input_tokens", Value: "$token_input_tokens"},
-				{Key: "cached_input_tokens", Value: "$token_cached_input_tokens"},
-				{Key: "output_tokens", Value: "$token_output_tokens"},
-				{Key: "reasoning_tokens", Value: "$token_reasoning_tokens"},
-				{Key: "total_tokens", Value: "$token_total_tokens"},
-				{Key: "cost_usd", Value: "$token_cost_usd"},
+				{Key: "input_tokens", Value: preferredTokenUsageExpression("$token_cumulative_input_tokens", "$token_input_tokens")},
+				{Key: "cached_input_tokens", Value: preferredTokenUsageExpression("$token_cumulative_cached_input_tokens", "$token_cached_input_tokens")},
+				{Key: "output_tokens", Value: preferredTokenUsageExpression("$token_cumulative_output_tokens", "$token_output_tokens")},
+				{Key: "reasoning_tokens", Value: preferredTokenUsageExpression("$token_cumulative_reasoning_tokens", "$token_reasoning_tokens")},
+				{Key: "total_tokens", Value: preferredTokenUsageExpression("$token_cumulative_total_tokens", "$token_total_tokens")},
+				{Key: "cost_usd", Value: preferredTokenUsageExpression("$token_cumulative_cost_usd", "$token_cost_usd")},
 			}},
 		}}},
 		{{Key: "$sort", Value: bson.D{{Key: "last_event_at", Value: -1}, {Key: "session_id", Value: 1}}}},
@@ -239,6 +247,16 @@ type tokenUsageExpressions struct {
 	costUSD           bson.D
 }
 
+type cumulativeTokenUsageExpressions struct {
+	present           bson.D
+	inputTokens       bson.D
+	cachedInputTokens bson.D
+	outputTokens      bson.D
+	reasoningTokens   bson.D
+	totalTokens       bson.D
+	costUSD           bson.D
+}
+
 func sessionTokenUsageExpressions() tokenUsageExpressions {
 	inputTokens := firstNumericExpression(tokenUsageFieldPaths("input_tokens"), "long")
 	cachedInputTokens := firstNumericExpression(append(
@@ -252,7 +270,10 @@ func sessionTokenUsageExpressions() tokenUsageExpressions {
 		cachedInputTokens = firstNonNullNumericExpression(cachedInputTokens, inputDetails)
 	}
 	outputTokens := firstNumericExpression(tokenUsageFieldPaths("output_tokens"), "long")
-	reasoningTokens := firstNumericExpression(tokenUsageFieldPaths("reasoning_tokens"), "long")
+	reasoningTokens := firstNumericExpression(append(
+		tokenUsageFieldPaths("reasoning_tokens"),
+		tokenUsageFieldPaths("reasoning_output_tokens")...,
+	), "long")
 	if outputDetails := firstNumericExpression(append(
 		tokenUsageFieldPaths("output_tokens_details.reasoning_tokens"),
 		tokenUsageFieldPaths("completion_tokens_details.reasoning_tokens")...,
@@ -271,6 +292,31 @@ func sessionTokenUsageExpressions() tokenUsageExpressions {
 		totalTokens:       zeroIfNull(totalTokens),
 		costUSD:           zeroIfNull(firstNumericExpression(append(tokenUsageFieldPaths("cost_usd"), tokenUsageFieldPaths("total_cost_usd")...), "double")),
 	}
+}
+
+func cumulativeTokenUsageExpression() cumulativeTokenUsageExpressions {
+	present := anyFieldEqualsExpression(payloadFieldPaths("usage_source"), "codex_transcript")
+	return cumulativeTokenUsageExpressions{
+		present:           bson.D{{Key: "$cond", Value: bson.A{present, 1, 0}}},
+		inputTokens:       cumulativeValueExpression(present, firstNumericExpression(tokenUsageFieldPaths("input_tokens"), "long")),
+		cachedInputTokens: cumulativeValueExpression(present, firstNumericExpression(append(tokenUsageFieldPaths("cached_input_tokens"), tokenUsageFieldPaths("cached_tokens")...), "long")),
+		outputTokens:      cumulativeValueExpression(present, firstNumericExpression(tokenUsageFieldPaths("output_tokens"), "long")),
+		reasoningTokens:   cumulativeValueExpression(present, firstNumericExpression(append(tokenUsageFieldPaths("reasoning_tokens"), tokenUsageFieldPaths("reasoning_output_tokens")...), "long")),
+		totalTokens:       cumulativeValueExpression(present, firstNumericExpression(tokenUsageFieldPaths("total_tokens"), "long")),
+		costUSD:           cumulativeValueExpression(present, firstNumericExpression(append(tokenUsageFieldPaths("cost_usd"), tokenUsageFieldPaths("total_cost_usd")...), "double")),
+	}
+}
+
+func cumulativeValueExpression(present bson.D, value bson.D) bson.D {
+	return bson.D{{Key: "$cond", Value: bson.A{present, zeroIfNull(value), 0}}}
+}
+
+func preferredTokenUsageExpression(cumulativeField, summedField string) bson.D {
+	return bson.D{{Key: "$cond", Value: bson.A{
+		bson.D{{Key: "$eq", Value: bson.A{"$token_cumulative_present", 1}}},
+		cumulativeField,
+		summedField,
+	}}}
 }
 
 func tokenUsageFieldPaths(field string) []string {

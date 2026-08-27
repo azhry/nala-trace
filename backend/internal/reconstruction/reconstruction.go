@@ -44,6 +44,7 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 	ordered := Order(events)
 	pending := make(map[string]int)
 	mcpServers := make(map[string]struct{})
+	var cumulativeUsage *trace.TokenUsage
 	for _, item := range ordered {
 		event := item.Event
 		raw := payloadJSON(event.Payload)
@@ -149,9 +150,14 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 		}
 		var tokenUsage *trace.TokenUsage
 		if payloadSafe {
-			tokenUsage = tokenUsageFromPayload(event.Payload)
-			if tokenUsage != nil {
-				result.Summary.TokenUsage.Add(*tokenUsage)
+			if evidence, ok := tokenUsageEvidenceFromPayload(event.Payload); ok {
+				tokenUsage = &evidence.usage
+				if evidence.cumulative {
+					usage := evidence.usage
+					cumulativeUsage = &usage
+				} else if cumulativeUsage == nil {
+					result.Summary.TokenUsage.Add(evidence.usage)
+				}
 			}
 		}
 		timeline := trace.TimelineEvent{
@@ -165,6 +171,9 @@ func Reconstruct(sessionID, userID string, events []storage.HookEvent) trace.Tra
 			Raw:           raw,
 		}
 		result.Timeline = append(result.Timeline, timeline)
+	}
+	if cumulativeUsage != nil {
+		result.Summary.TokenUsage = *cumulativeUsage
 	}
 	for index := range result.ToolCalls {
 		if result.ToolCalls[index].Status == trace.ToolCallPending {

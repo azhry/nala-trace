@@ -51,6 +51,19 @@ verify delivery against the running API and real dependencies.
 Review and trust the project-relative hook command when Codex prompts for hook
 approval. Keep runtime credentials outside the committed manifest.
 
+## Token usage capture
+
+Codex hook stdin does not include the model response usage fields. For
+`Stop` and `SubagentStop`, the client therefore follows the event's local
+`transcript_path`, scans it within a bounded size and line limit, and selects
+the latest `event_msg` record whose payload type is `token_count`. Its
+`info.total_token_usage` is normalized under `usage` with
+`usage_source=codex_transcript` before the event is posted. This is cumulative
+session usage, so the API uses the latest marked snapshot once instead of
+summing repeated terminal snapshots. Transcript read failures are
+best-effort: the original hook payload is still sent and the API reports usage
+as not recorded when no producer usage evidence is present.
+
 ## Known coverage gaps
 
 The current project contract explicitly records two gaps: `unified_exec` and

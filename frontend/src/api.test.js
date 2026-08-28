@@ -62,6 +62,34 @@ describe('API auth configuration', () => {
     expect(fetch).not.toHaveBeenCalledWith('/api/auth/session', expect.anything())
   })
 
+  it('returns the persisted analysis sections from the session-detail response', async () => {
+    configureAuth({ jwt: 'jwt-token' })
+    const analysis = {
+      annotation: null,
+      evaluation: {
+        schema_version: '1',
+        source: 'session-evaluator',
+        verdict: 'unknown',
+        critique: '',
+        review_signals: [],
+        judge_alignment: { status: 'not_recorded' },
+        evaluation_ledger: { project: 'nala-trace', improvements: [] },
+      },
+    }
+    fetch.mockResolvedValueOnce(jsonResponse({ schema_version: '1', session_id: 'session-analysis', analysis }))
+
+    await expect(getTrace('session-analysis')).resolves.toMatchObject({
+      session_id: 'session-analysis',
+      analysis,
+    })
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('/sessions/session-analysis', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer jwt-token',
+      },
+    })
+  })
+
   it('bootstraps the approved same-origin session token into JWT mode', async () => {
     const storage = { getItem: vi.fn(() => 'stored-jwt') }
     expect(bootstrapAuthFromSessionStorage(storage)).toBe(true)

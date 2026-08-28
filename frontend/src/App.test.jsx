@@ -220,6 +220,39 @@ describe('authenticated sessions flow', () => {
     expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session')
   })
 
+  it('renders persisted session analysis from the live detail response', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    getTrace.mockResolvedValueOnce({
+      ...apiTracePayload,
+      analysis: {
+        annotation: {
+          schema_version: '1',
+          source: 'session-annotator',
+          turns: [{ event_id: 'stop-1', turn_id: 'turn-1', follows_instructions: 'yes', performance: 'improved', rationale: 'The recorded turn followed the task.' }],
+          tools: [],
+          skills: [],
+        },
+        evaluation: {
+          schema_version: '1',
+          source: 'session-evaluator',
+          verdict: 'fail',
+          critique: 'The evaluator recorded a review concern.',
+          review_signals: [{ name: 'review required', count: 1, severity: 'warning', detail: 'One concern was recorded.' }],
+          judge_alignment: { status: 'not_recorded' },
+          evaluation_ledger: { project: 'nala-trace', improvements: [] },
+        },
+      },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('What was actually reviewed')).toBeInTheDocument()
+    expect(screen.getByText('1 / 2 captured')).toBeInTheDocument()
+    expect(screen.getByText('The evaluator recorded a review concern.')).toBeInTheDocument()
+    expect(screen.getByText('review required')).toBeInTheDocument()
+    expect(screen.getAllByText('Not recorded').length).toBeGreaterThan(0)
+  })
+
   it('shows an accessible stable loader during the initial detail request', async () => {
     window.history.replaceState({}, '', '/#/sessions/authenticated-session')
     let resolveTrace

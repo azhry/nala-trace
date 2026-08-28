@@ -34,9 +34,10 @@ events. Each command hook receives the lifecycle payload as JSON on stdin:
 The API reconstructs conversation messages, tool-call timelines, skill
 evidence, and file-operation evidence from stored hook payloads. For terminal
 events, the hook client also reads the bounded local `transcript_path` supplied
-by Codex and copies the latest `token_count.info.total_token_usage` record into
-the payload before delivery. If that transcript is unavailable, the event is
-still delivered without invented usage.
+by Codex and copies the latest `token_count.info.total_token_usage` record and
+the latest reasoning-effort setting into the payload before delivery. If that
+transcript is unavailable, the event is still delivered without invented
+usage or settings.
 
 ## Prerequisites
 

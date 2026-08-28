@@ -42,6 +42,8 @@ func TestSendUsesNalaLabsAPIKeyHeader(t *testing.T) {
 func TestSendEnrichesTerminalEventFromCodexTranscript(t *testing.T) {
 	transcriptPath := filepath.Join(t.TempDir(), "rollout.jsonl")
 	transcript := strings.Join([]string{
+		`{"type":"event_msg","payload":{"type":"thread_settings_applied","thread_settings":{"reasoning_effort":"xhigh"}}}`,
+		`{"type":"turn_context","payload":{"effort":"xhigh"}}`,
 		`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2,"reasoning_output_tokens":1,"total_tokens":12}}}}`,
 		`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":30,"cached_input_tokens":20,"output_tokens":5,"reasoning_output_tokens":2,"total_tokens":35}}}}`,
 	}, "\n") + "\n"
@@ -78,6 +80,84 @@ func TestSendEnrichesTerminalEventFromCodexTranscript(t *testing.T) {
 	}
 	if got, want := captured["usage_source"], "codex_transcript"; got != want {
 		t.Fatalf("usage_source = %#v, want %q", got, want)
+	}
+	runtimeMetadata, ok := captured["runtime_metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime_metadata = %#v, want transcript metadata", captured["runtime_metadata"])
+	}
+	if got, want := runtimeMetadata["reasoning_effort"], "xhigh"; got != want {
+		t.Fatalf("runtime_metadata.reasoning_effort = %#v, want %q", got, want)
+	}
+}
+
+func TestSendEnrichesReasoningEffortWhenTranscriptHasNoUsage(t *testing.T) {
+	transcriptPath := filepath.Join(t.TempDir(), "rollout.jsonl")
+	transcript := `{"type":"turn_context","payload":{"effort":"high"}}` + "\n"
+	if err := os.WriteFile(transcriptPath, []byte(transcript), 0600); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ = io.ReadAll(request.Body)
+		writer.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	input := `{"session_id":"session-1","hook_event_name":"Stop","transcript_path":` + mustJSONString(t, transcriptPath) + `}`
+	if err := Send(context.Background(), strings.NewReader(input), Config{URL: server.URL, Token: "api-key-test", Timeout: time.Second}); err != nil {
+		t.Fatalf("Send() error: %v", err)
+	}
+
+	var captured map[string]any
+	if err := json.Unmarshal(body, &captured); err != nil {
+		t.Fatalf("decode captured body: %v", err)
+	}
+	runtimeMetadata, ok := captured["runtime_metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime_metadata = %#v, want transcript metadata", captured["runtime_metadata"])
+	}
+	if got, want := runtimeMetadata["reasoning_effort"], "high"; got != want {
+		t.Fatalf("runtime_metadata.reasoning_effort = %#v, want %q", got, want)
+	}
+	if _, ok := captured["usage"]; ok {
+		t.Fatalf("usage = %#v, want omitted when transcript has no token count", captured["usage"])
+	}
+}
+
+func TestSendAddsReasoningEffortWithoutOverwritingProviderUsage(t *testing.T) {
+	transcriptPath := filepath.Join(t.TempDir(), "rollout.jsonl")
+	transcript := `{"type":"turn_context","payload":{"effort":"xhigh"}}` + "\n"
+	if err := os.WriteFile(transcriptPath, []byte(transcript), 0600); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ = io.ReadAll(request.Body)
+		writer.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	input := `{"session_id":"session-1","hook_event_name":"Stop","transcript_path":` + mustJSONString(t, transcriptPath) + `,"usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10}}`
+	if err := Send(context.Background(), strings.NewReader(input), Config{URL: server.URL, Token: "api-key-test", Timeout: time.Second}); err != nil {
+		t.Fatalf("Send() error: %v", err)
+	}
+
+	var captured map[string]any
+	if err := json.Unmarshal(body, &captured); err != nil {
+		t.Fatalf("decode captured body: %v", err)
+	}
+	usage, ok := captured["usage"].(map[string]any)
+	if !ok || usage["total_tokens"] != float64(10) {
+		t.Fatalf("usage = %#v, want provider usage preserved", captured["usage"])
+	}
+	if _, ok := captured["usage_source"]; ok {
+		t.Fatalf("usage_source = %#v, want omitted for provider usage", captured["usage_source"])
+	}
+	runtimeMetadata, ok := captured["runtime_metadata"].(map[string]any)
+	if !ok || runtimeMetadata["reasoning_effort"] != "xhigh" {
+		t.Fatalf("runtime_metadata = %#v, want transcript reasoning effort", captured["runtime_metadata"])
 	}
 }
 

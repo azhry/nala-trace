@@ -22,6 +22,8 @@ describe('SessionMetadata', () => {
     expect(screen.getByText('gpt-5')).toBeInTheDocument()
     expect(screen.getByText('workspace-write')).toBeInTheDocument()
     expect(screen.getByText('high')).toBeInTheDocument()
+    expect(screen.getByText('Runtime settings may be sourced from captured hook payloads or the bounded Codex transcript. Fields not recorded by either source remain “Not recorded”.')).toBeInTheDocument()
+    expect(screen.getByText('Captured hook payloads or bounded Codex transcript · Fields absent from both sources remain “Not recorded”.')).toBeInTheDocument()
     expect(document.querySelectorAll('.session-metadata-field')).toHaveLength(3)
     expect(screen.queryByText('Provider')).not.toBeInTheDocument()
     expect(screen.queryByText('Context window')).not.toBeInTheDocument()

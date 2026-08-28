@@ -107,7 +107,8 @@ func (usage *TokenUsage) Add(other TokenUsage) {
 }
 
 // RuntimeMetadata contains only allowlisted scalar execution settings found
-// in captured hook payloads. Missing producer fields remain empty.
+// in captured hook payloads or their bounded Codex transcript enrichment.
+// Missing producer fields remain empty.
 type RuntimeMetadata struct {
 	Model               string `json:"model,omitempty"`
 	Provider            string `json:"provider,omitempty"`

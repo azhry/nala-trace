@@ -7,6 +7,12 @@ transcript path supplied on terminal hook events, extracts the latest
 `token_count.info.total_token_usage` record, and stores it as marked usage
 evidence. Reconstruction itself never reads transcript files.
 
+The hook client also enriches terminal payloads with the latest
+`thread_settings_applied.thread_settings.reasoning_effort` or
+`turn_context.effort` value as `runtime_metadata.reasoning_effort` before
+persistence. Reconstruction reads that already-captured field; it never
+opens the transcript itself.
+
 ## Token usage
 
 Direct provider usage is preserved when present. Marked

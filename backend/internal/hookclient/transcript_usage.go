@@ -13,9 +13,10 @@ const (
 	maxTranscriptLineBytes       = 4 << 20
 )
 
-// enrichWithTranscriptUsage is deliberately best effort. Hook delivery must
-// still work when the producer removes, rotates, or cannot read its transcript.
-func enrichWithTranscriptUsage(ctx context.Context, payload []byte) []byte {
+// enrichWithTranscriptMetadata is deliberately best effort. Hook delivery
+// must still work when the producer removes, rotates, or cannot read its
+// transcript.
+func enrichWithTranscriptMetadata(ctx context.Context, payload []byte) []byte {
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &object); err != nil || object == nil {
 		return payload
@@ -24,24 +25,45 @@ func enrichWithTranscriptUsage(ctx context.Context, payload []byte) []byte {
 	if !ok || (hookEventName != "Stop" && hookEventName != "SubagentStop") {
 		return payload
 	}
-	if containsUsageEvidence(object, 0) {
-		return payload
-	}
 	transcriptPath, ok := rawString(object, "transcript_path")
 	if !ok {
 		return payload
 	}
-	usage, ok := latestTranscriptUsage(ctx, transcriptPath)
+	metadata, ok := latestTranscriptMetadata(ctx, transcriptPath)
 	if !ok {
 		return payload
 	}
-	encodedUsage, err := json.Marshal(usage)
-	if err != nil {
+	changed := false
+	if !containsUsageEvidence(object, 0) && metadata.usage != nil {
+		encodedUsage, err := json.Marshal(metadata.usage)
+		if err != nil {
+			return payload
+		}
+		object["usage"] = encodedUsage
+		object["usage_source"] = json.RawMessage(`"codex_transcript"`)
+		object["usage_scope"] = json.RawMessage(`"session_cumulative"`)
+		changed = true
+	}
+	if metadata.reasoningEffort != "" && !hasRuntimeReasoningEffort(object) {
+		runtimeMetadata, _ := rawObjectField(object, "runtime_metadata")
+		if runtimeMetadata == nil {
+			runtimeMetadata = make(map[string]json.RawMessage)
+		}
+		reasoningEffort, err := json.Marshal(metadata.reasoningEffort)
+		if err != nil {
+			return payload
+		}
+		runtimeMetadata["reasoning_effort"] = reasoningEffort
+		enrichedMetadata, err := json.Marshal(runtimeMetadata)
+		if err != nil {
+			return payload
+		}
+		object["runtime_metadata"] = enrichedMetadata
+		changed = true
+	}
+	if !changed {
 		return payload
 	}
-	object["usage"] = encodedUsage
-	object["usage_source"] = json.RawMessage(`"codex_transcript"`)
-	object["usage_scope"] = json.RawMessage(`"session_cumulative"`)
 	enriched, err := json.Marshal(object)
 	if err != nil {
 		return payload
@@ -49,56 +71,96 @@ func enrichWithTranscriptUsage(ctx context.Context, payload []byte) []byte {
 	return enriched
 }
 
+type transcriptMetadata struct {
+	usage           map[string]int64
+	reasoningEffort string
+}
+
 func latestTranscriptUsage(ctx context.Context, path string) (map[string]int64, bool) {
+	metadata, ok := latestTranscriptMetadata(ctx, path)
+	if !ok || metadata.usage == nil {
+		return nil, false
+	}
+	return metadata.usage, true
+}
+
+func latestTranscriptMetadata(ctx context.Context, path string) (transcriptMetadata, bool) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, false
+		return transcriptMetadata{}, false
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || info.Size() < 0 || info.Size() > maxTranscriptBytes {
-		return nil, false
+		return transcriptMetadata{}, false
 	}
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64<<10), maxTranscriptLineBytes)
-	var latest map[string]int64
+	metadata := transcriptMetadata{}
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			return nil, false
+			return transcriptMetadata{}, false
 		default:
 		}
 		var record map[string]json.RawMessage
 		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
 			continue
 		}
-		if value, ok := rawString(record, "type"); !ok || value != "event_msg" {
+		recordType, ok := rawString(record, "type")
+		if !ok {
 			continue
 		}
 		payload, ok := rawObject(record, "payload")
 		if !ok {
 			continue
 		}
-		if value, ok := rawString(payload, "type"); !ok || value != "token_count" {
-			continue
-		}
-		info, ok := rawObject(payload, "info")
-		if !ok {
-			continue
-		}
-		cumulative, ok := rawObject(info, "total_token_usage")
-		if !ok {
-			continue
-		}
-		if usage, ok := normalizedTranscriptUsage(cumulative); ok {
-			latest = usage
+		switch recordType {
+		case "event_msg":
+			payloadType, ok := rawString(payload, "type")
+			if !ok {
+				continue
+			}
+			if payloadType == "token_count" {
+				info, ok := rawObject(payload, "info")
+				if !ok {
+					continue
+				}
+				cumulative, ok := rawObject(info, "total_token_usage")
+				if !ok {
+					continue
+				}
+				if usage, ok := normalizedTranscriptUsage(cumulative); ok {
+					metadata.usage = usage
+				}
+			}
+			if payloadType == "thread_settings_applied" {
+				if effort := transcriptReasoningEffort(payload); effort != "" {
+					metadata.reasoningEffort = effort
+				}
+			}
+		case "turn_context":
+			if effort := transcriptReasoningEffort(payload); effort != "" {
+				metadata.reasoningEffort = effort
+			}
 		}
 	}
-	if scanner.Err() != nil || latest == nil {
-		return nil, false
+	if scanner.Err() != nil || (metadata.usage == nil && metadata.reasoningEffort == "") {
+		return transcriptMetadata{}, false
 	}
-	return latest, true
+	return metadata, true
+}
+
+func transcriptReasoningEffort(payload map[string]json.RawMessage) string {
+	if value := firstRawStringField(payload, "reasoning_effort", "reasoningEffort", "effort"); value != "" {
+		return value
+	}
+	threadSettings, ok := rawObjectField(payload, "thread_settings")
+	if !ok {
+		return ""
+	}
+	return firstRawStringField(threadSettings, "reasoning_effort", "reasoningEffort", "effort")
 }
 
 func normalizedTranscriptUsage(document map[string]json.RawMessage) (map[string]int64, bool) {
@@ -193,6 +255,46 @@ func isTokenUsageField(key string) bool {
 	}
 }
 
+func hasRuntimeReasoningEffort(document map[string]json.RawMessage) bool {
+	const maxDepth = 4
+	containerKeys := []string{"metadata", "runtime", "runtime_metadata", "execution_settings", "session_meta", "turn_context", "task_started", "payload"}
+	var visit func(map[string]json.RawMessage, int) bool
+	visit = func(current map[string]json.RawMessage, depth int) bool {
+		if current == nil || depth > maxDepth {
+			return false
+		}
+		if firstRawStringField(current, "reasoning_effort", "reasoningEffort", "effort") != "" {
+			return true
+		}
+		for _, key := range containerKeys {
+			nested, ok := rawObjectField(current, key)
+			if ok && visit(nested, depth+1) {
+				return true
+			}
+		}
+		return false
+	}
+	return visit(document, 0)
+}
+
+func firstRawStringField(document map[string]json.RawMessage, keys ...string) string {
+	for _, key := range keys {
+		for actual, raw := range document {
+			if strings.EqualFold(actual, key) {
+				var value string
+				if err := json.Unmarshal(raw, &value); err != nil {
+					continue
+				}
+				value = strings.TrimSpace(value)
+				if value != "" {
+					return value
+				}
+			}
+		}
+	}
+	return ""
+}
+
 func rawString(document map[string]json.RawMessage, key string) (string, bool) {
 	value, ok := document[key]
 	if !ok {
@@ -212,6 +314,15 @@ func rawObject(document map[string]json.RawMessage, key string) (map[string]json
 		return nil, false
 	}
 	return rawJSONDocument(value)
+}
+
+func rawObjectField(document map[string]json.RawMessage, key string) (map[string]json.RawMessage, bool) {
+	for actual, value := range document {
+		if strings.EqualFold(actual, key) {
+			return rawJSONDocument(value)
+		}
+	}
+	return nil, false
 }
 
 func rawJSONDocument(value json.RawMessage) (map[string]json.RawMessage, bool) {

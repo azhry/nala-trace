@@ -9,6 +9,7 @@ import (
 	"github.com/azhry/nala-trace/backend/internal/auth"
 	"github.com/azhry/nala-trace/backend/internal/reconstruction"
 	"github.com/azhry/nala-trace/backend/internal/storage"
+	"github.com/azhry/nala-trace/backend/internal/trace"
 )
 
 const defaultSessionLimit = 100
@@ -56,7 +57,11 @@ func NewSessionsHandler(repository SessionSummaryReader) http.Handler {
 	})
 }
 
-func NewSessionTraceHandler(repository SessionEventReader) http.Handler {
+func NewSessionTraceHandler(repository SessionEventReader, analysisReaders ...storage.SessionAnalysisReader) http.Handler {
+	var analysisReader storage.SessionAnalysisReader
+	if len(analysisReaders) > 0 {
+		analysisReader = analysisReaders[0]
+	}
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			WriteError(response, http.StatusMethodNotAllowed, "method_not_allowed", "method is not allowed")
@@ -85,7 +90,18 @@ func NewSessionTraceHandler(repository SessionEventReader) http.Handler {
 			WriteError(response, http.StatusNotFound, "trace_not_found", "session trace was not found")
 			return
 		}
-		WriteJSON(response, http.StatusOK, reconstruction.Reconstruct(sessionID, user.ID, events))
+		result := reconstruction.Reconstruct(sessionID, user.ID, events)
+		if analysisReader != nil {
+			analysis, err := analysisReader.GetSessionAnalysisForUser(request.Context(), user.ID, sessionID)
+			if err != nil {
+				WriteError(response, http.StatusInternalServerError, "analysis_failed", "session analysis could not be loaded")
+				return
+			}
+			result.Analysis = analysis
+		} else {
+			result.Analysis = trace.NewAnalysis()
+		}
+		WriteJSON(response, http.StatusOK, result)
 	})
 }
 

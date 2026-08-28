@@ -30,6 +30,7 @@ type Trace struct {
 	Files            []FileOperation    `json:"files"`
 	RuntimeMetadata  RuntimeMetadata    `json:"runtime_metadata"`
 	Summary          Summary            `json:"summary"`
+	Analysis         Analysis           `json:"analysis"`
 }
 
 type TimelineEvent struct {
@@ -145,5 +146,6 @@ func New(sessionID, userID string) Trace {
 		SkillInvocations: make([]SkillInvocation, 0),
 		Files:            make([]FileOperation, 0),
 		Summary:          Summary{MCPServers: make([]string, 0)},
+		Analysis:         NewAnalysis(),
 	}
 }

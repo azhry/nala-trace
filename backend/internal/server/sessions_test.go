@@ -33,6 +33,51 @@ func (repository *traceEventRepository) ListSessionEventsForUser(_ context.Conte
 	return repository.events, repository.err
 }
 
+type sessionSummaryRepository struct {
+	userID string
+	limit  int
+	rows   []storage.SessionSummary
+	err    error
+}
+
+func (repository *sessionSummaryRepository) ListSessionSummariesForUser(_ context.Context, userID string, limit int) ([]storage.SessionSummary, error) {
+	repository.userID = userID
+	repository.limit = limit
+	return repository.rows, repository.err
+}
+
+func TestSessionsHandlerReturnsTokenUsage(t *testing.T) {
+	repository := &sessionSummaryRepository{rows: []storage.SessionSummary{{
+		SessionID:  "session-1",
+		TokenUsage: trace.TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14},
+	}}}
+	request := authenticatedTraceRequest(http.MethodGet, "/sessions?limit=10")
+	response := httptest.NewRecorder()
+
+	NewSessionsHandler(repository).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if repository.userID != "user-1" || repository.limit != 10 {
+		t.Fatalf("repository request = (%q, %d), want (user-1, 10)", repository.userID, repository.limit)
+	}
+	var result struct {
+		Sessions []storage.SessionSummary `json:"sessions"`
+		Limit    int                      `json:"limit"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Limit != 10 || len(result.Sessions) != 1 {
+		t.Fatalf("response = %#v, want one session with limit 10", result)
+	}
+	usage := result.Sessions[0].TokenUsage
+	if usage.InputTokens != 10 || usage.OutputTokens != 4 || usage.TotalTokens != 14 {
+		t.Fatalf("session token usage = %#v", usage)
+	}
+}
+
 func TestSessionTraceHandlerReconstructsOwnerScopedTrace(t *testing.T) {
 	base := time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC)
 	repository := &traceEventRepository{events: []storage.HookEvent{

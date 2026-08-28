@@ -44,6 +44,7 @@ func Send(ctx context.Context, input io.Reader, cfg Config) error {
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
+	payload = enrichWithTranscriptMetadata(requestCtx, payload)
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, cfg.URL, strings.NewReader(string(payload)))
 	if err != nil {
 		return errors.New("hook client request invalid")

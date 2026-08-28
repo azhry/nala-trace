@@ -1,3 +1,5 @@
+import { normalizeTokenUsage } from './tokenUsage'
+
 const EMPTY_DATE = Number.POSITIVE_INFINITY
 
 function numberOrZero(value) {
@@ -70,6 +72,7 @@ export function normalizeSessionSummary(summary = {}) {
       ['skill_invocations', 'skillInvocations', 'skills'],
     ),
     fileOperationCount: numberOrZero(summary.file_operation_count ?? summary.fileOperationCount),
+    tokenUsage: normalizeTokenUsage(summary.token_usage ?? summary.tokenUsage),
     evaluationStatus,
     status: evaluationStatus || 'captured',
   }

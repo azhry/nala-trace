@@ -34,7 +34,7 @@ export default function SessionMetadata({ session }) {
       <div>
         <p className="section-label">Runtime metadata</p>
         <h2 id="session-metadata-title">Recorded execution settings</h2>
-        <p>These settings come from captured hook payloads. Fields not emitted by the producer remain “Not recorded”.</p>
+        <p>Runtime settings may be sourced from captured hook payloads or the bounded Codex transcript. Fields not recorded by either source remain “Not recorded”.</p>
       </div>
       <span className="record-count">session-bound</span>
     </div>
@@ -43,6 +43,6 @@ export default function SessionMetadata({ session }) {
       <MetadataField label="Permission mode" value={metadata.permissionMode} />
       <MetadataField label="Reasoning effort" value={metadata.reasoningEffort} />
     </div>
-    <p className="session-metadata-provenance">Captured hook payloads · Fields absent from the producer remain “Not recorded”.</p>
+    <p className="session-metadata-provenance">Captured hook payloads or bounded Codex transcript · Fields absent from both sources remain “Not recorded”.</p>
   </section>
 }

@@ -108,6 +108,161 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText('No MCP calls or MCP servers were recorded.')).toBeInTheDocument()
   })
 
+  it('renders session token usage and per-event usage from the API detail response', () => {
+    const { container } = render(<TraceView session={{
+      ...apiTrace,
+      timeline: [{
+        id: 'stop-usage',
+        hook_event_name: 'Stop',
+        occurred_at: '2026-08-19T08:00:02Z',
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+        },
+      }],
+      conversation: [{
+        event_id: 'stop-usage',
+        role: 'assistant',
+        content: 'Completed with usage.',
+        occurred_at: '2026-08-19T08:00:02Z',
+        turn_id: 'turn-1',
+      }],
+      summary: {
+        ...apiTrace.summary,
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+        },
+      },
+    }} />)
+
+    expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
+    expect(screen.getByText('Token usage')).toBeInTheDocument()
+    expect(screen.getByText('100')).toBeInTheDocument()
+    expect(screen.getByText('140')).toBeInTheDocument()
+    expect(container.querySelectorAll('.token-usage-metric')).toHaveLength(5)
+    const eventUsage = screen.getByLabelText('Event token usage: 140 total tokens')
+    expect(eventUsage).toBeInTheDocument()
+    expect(eventUsage).toHaveClass('token-usage-inline')
+    expect(eventUsage).toHaveTextContent('140 tokens')
+    expect(container.querySelectorAll('.token-usage-inline')).toHaveLength(1)
+    expect(container.querySelector('.token-usage-badge')).not.toBeInTheDocument()
+  })
+
+  it('summarizes usage-only provider content instead of showing its raw JSON body', () => {
+    const providerUsage = {
+      usage: {
+        input_tokens: 100,
+        input_tokens_details: { cached_tokens: 20 },
+        output_tokens: 40,
+        output_tokens_details: { reasoning_tokens: 5 },
+        total_tokens: 140,
+      },
+    }
+    const { container } = render(<TraceView session={{
+      ...apiTrace,
+      timeline: [{
+        id: 'stop-usage-json',
+        hook_event_name: 'Stop',
+        occurred_at: '2026-08-19T08:00:02Z',
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+        },
+      }],
+      conversation: [{
+        event_id: 'stop-usage-json',
+        role: 'assistant',
+        content: providerUsage,
+        occurred_at: '2026-08-19T08:00:02Z',
+        turn_id: 'turn-usage-json',
+      }, {
+        role: 'user',
+        content: { note: 'Keep this structured content visible.' },
+        occurred_at: '2026-08-19T08:00:03Z',
+        turn_id: 'turn-usage-json',
+      }],
+      summary: {
+        ...apiTrace.summary,
+        token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 20,
+          output_tokens: 40,
+          reasoning_tokens: 5,
+          total_tokens: 140,
+        },
+      },
+    }} />)
+
+    const usageMessage = container.querySelector('.conversation-message.assistant')
+    expect(usageMessage).toBeInTheDocument()
+    expect(usageMessage.querySelector('.message-content-code')).not.toBeInTheDocument()
+    expect(usageMessage).not.toHaveTextContent('"input_tokens"')
+    expect(usageMessage).toHaveTextContent('Usage recorded · 140 tokens')
+    expect(screen.getByText(/Keep this structured content visible/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
+  })
+
+  it('explains when a session has no recorded token usage', () => {
+    const { container } = render(<TraceView session={apiTrace} />)
+
+    expect(screen.getByRole('region', { name: 'Token usage summary' })).toBeInTheDocument()
+    expect(screen.getByText('No token usage was recorded for this session.')).toBeInTheDocument()
+    expect(container.querySelectorAll('.token-usage-inline')).toHaveLength(0)
+    expect(screen.queryByText('Usage not recorded')).not.toBeInTheDocument()
+    expect([...container.querySelectorAll('.token-usage-metric strong')].map((metric) => metric.textContent)).toEqual([
+      'Not recorded',
+      'Not recorded',
+      'Not recorded',
+      'Not recorded',
+      'Not recorded',
+    ])
+  })
+
+  it('shows per-event token counts when only some token fields are present', () => {
+    const { container } = render(<TraceView session={{
+      ...apiTrace,
+      timeline: [{
+        id: 'stop-usage-partial',
+        hook_event_name: 'Stop',
+        occurred_at: '2026-08-19T08:00:02Z',
+        token_usage: {
+          input_tokens: 100,
+          output_tokens: 40,
+          total_tokens: 140,
+        },
+      }],
+      conversation: [{
+        event_id: 'stop-usage-partial',
+        role: 'assistant',
+        content: 'Completed with partial token usage.',
+        occurred_at: '2026-08-19T08:00:02Z',
+        turn_id: 'turn-1',
+      }],
+      summary: {
+        ...apiTrace.summary,
+        token_usage: {
+          input_tokens: 100,
+          output_tokens: 40,
+          total_tokens: 140,
+        },
+      },
+    }} />)
+
+    expect(screen.getByLabelText('Event token usage: 140 total tokens')).toHaveTextContent('140 tokens')
+    expect(container.querySelectorAll('.token-usage-inline')).toHaveLength(1)
+    expect(container.querySelectorAll('.token-usage-metric')).toHaveLength(5)
+  })
+
   it('bounds the initially mounted stream and loads more rows on demand', () => {
     const { container } = render(<TraceView session={createLargeTrace()} />)
 

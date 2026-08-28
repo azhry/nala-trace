@@ -16,6 +16,7 @@ const payload = {
       tool_call_count: 4,
       skill_invocation_count: 1,
       file_operation_count: 2,
+      token_usage: { input_tokens: 12, total_tokens: 12 },
     },
     {
       session_id: 'session-new',
@@ -43,6 +44,7 @@ describe('session summary adapter', () => {
       toolCallCount: 4,
       skillInvocationCount: 1,
       fileOperationCount: 2,
+      tokenUsage: { inputTokens: 12, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: 12 },
       status: 'captured',
     })
     expect(summary.firstEventTime).toBe(Date.parse('2026-08-18T08:00:00Z'))

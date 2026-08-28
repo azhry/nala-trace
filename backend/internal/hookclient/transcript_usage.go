@@ -22,7 +22,11 @@ func enrichWithTranscriptMetadata(ctx context.Context, payload []byte) []byte {
 		return payload
 	}
 	hookEventName, ok := rawString(object, "hook_event_name")
-	if !ok || (hookEventName != "Stop" && hookEventName != "SubagentStop") {
+	if !ok {
+		return payload
+	}
+	terminalEvent := hookEventName == "Stop" || hookEventName == "SubagentStop"
+	if !terminalEvent && !capturesReasoningEffort(hookEventName) {
 		return payload
 	}
 	transcriptPath, ok := rawString(object, "transcript_path")
@@ -34,7 +38,7 @@ func enrichWithTranscriptMetadata(ctx context.Context, payload []byte) []byte {
 		return payload
 	}
 	changed := false
-	if !containsUsageEvidence(object, 0) && metadata.usage != nil {
+	if terminalEvent && !containsUsageEvidence(object, 0) && metadata.usage != nil {
 		encodedUsage, err := json.Marshal(metadata.usage)
 		if err != nil {
 			return payload
@@ -69,6 +73,15 @@ func enrichWithTranscriptMetadata(ctx context.Context, payload []byte) []byte {
 		return payload
 	}
 	return enriched
+}
+
+func capturesReasoningEffort(hookEventName string) bool {
+	switch hookEventName {
+	case "SessionStart", "UserPromptSubmit", "SubagentStart", "PreCompact", "PostCompact":
+		return true
+	default:
+		return false
+	}
 }
 
 type transcriptMetadata struct {

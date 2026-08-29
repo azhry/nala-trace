@@ -8,7 +8,7 @@ const trace = {
     { role: 'user', turn_id: 'turn-1' },
     { role: 'assistant', turn_id: 'turn-1' },
   ],
-  tool_calls: [{ tool_name: 'rg' }],
+  tool_calls: [{ tool_use_id: 'tool-1', tool_name: 'rg', input: { cmd: 'rg --files' } }],
   skill_invocations: [],
 }
 
@@ -44,20 +44,26 @@ describe('InsightCards', () => {
     expect(screen.queryByText('The recorded workflow is complete.')).not.toBeInTheDocument()
   })
 
-  it('renders annotation evidence, evaluation details, alignment, and ledger provenance', () => {
+  it('renders annotation evidence, performance summary, tool details, and evaluation details', () => {
     render(<InsightCards analysis={{
       annotation: {
         schema_version: '1',
         source: 'session-annotator',
         turns: [{ event_id: 'stop-1', turn_id: 'turn-1', follows_instructions: 'yes', performance: 'neutral', rationale: 'The recorded turn stayed within scope.' }],
-        tools: [{ event_id: 'tool-1', necessary: 'no', rationale: 'This lookup was not needed.' }],
+        tools: [{ event_id: 'pre-tool-1', tool_use_id: 'tool-1', necessary: 'no', rationale: 'This lookup was not needed.' }],
         skills: [],
       },
       evaluation,
       updated_at: '2026-08-19T08:10:00Z',
     }} trace={trace} />)
 
-    expect(screen.getAllByText('1 / 1 captured')).toHaveLength(2)
+    expect(screen.getAllByText('1 labeled / 1 total')).toHaveLength(2)
+    expect(screen.getByText('Turn performance')).toBeInTheDocument()
+    expect(screen.getAllByText('Neutral').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('turn-1')).toBeInTheDocument()
+    expect(screen.getByText('rg')).toBeInTheDocument()
+    expect(screen.getByText('tool use: tool-1')).toBeInTheDocument()
+    expect(screen.getByText('rg --files', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('The recorded turn stayed within scope.')).toBeInTheDocument()
     expect(screen.getByText('Evaluation result')).toBeInTheDocument()
     expect(screen.getByText('Pass')).toBeInTheDocument()
@@ -65,8 +71,6 @@ describe('InsightCards', () => {
     expect(screen.getByText('files read before write')).toBeInTheDocument()
     expect(screen.getByText('Aligned')).toBeInTheDocument()
     expect(screen.getByText('golden-set-v1')).toBeInTheDocument()
-    expect(screen.getByText('nala-trace')).toBeInTheDocument()
-    expect(screen.getByText('No instruction or workflow improvements were recorded.')).toBeInTheDocument()
     expect(screen.getByText('No improvement actions recorded')).toBeInTheDocument()
   })
 
@@ -87,7 +91,7 @@ describe('InsightCards', () => {
     }} trace={trace} />)
 
     expect(screen.getByRole('heading', { name: 'What to improve' })).toBeInTheDocument()
-    expect(screen.getByText('Recorded changes from the evaluator’s ledger.')).toBeInTheDocument()
+    expect(screen.getByText('Concrete changes suggested by the evaluation.')).toBeInTheDocument()
     expect(screen.getByText('AGENTS.md')).toBeInTheDocument()
     expect(screen.getByText('Clarify the frontend handoff boundary.')).toBeInTheDocument()
     expect(screen.getByText('Reviewers need one unambiguous ownership rule.')).toBeInTheDocument()
@@ -108,8 +112,8 @@ describe('InsightCards', () => {
 
     expect(screen.getByText('Unknown')).toBeInTheDocument()
     expect(screen.getByText('Critique not recorded.')).toBeInTheDocument()
-    expect(screen.getByText('Evaluation ledger')).toBeInTheDocument()
     expect(screen.getByText('Judge alignment')).toBeInTheDocument()
+    expect(screen.getByText('Comparison unavailable: a human label and evaluator label were not both recorded.')).toBeInTheDocument()
     expect(screen.queryByText('No analysis recorded')).not.toBeInTheDocument()
   })
 

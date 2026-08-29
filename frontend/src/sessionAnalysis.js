@@ -1,3 +1,5 @@
+import { getToolInputPreview } from './traceViewModel'
+
 const EMPTY_LIST = []
 
 const ANNOTATION_VERDICTS = new Set(['yes', 'no', 'unclear'])
@@ -67,10 +69,36 @@ function normalizeTurn(record = {}) {
   }
 }
 
-function normalizeTool(record = {}) {
+function linkedToolCall(trace, record) {
+  const toolCalls = safeArray(trace?.tool_calls)
+  const toolUseId = cleanString(record.tool_use_id ?? record.toolUseId)
+  if (toolUseId) {
+    const byToolUseId = toolCalls.find((call) => cleanString(call?.tool_use_id ?? call?.toolUseId) === toolUseId)
+    if (byToolUseId) return byToolUseId
+  }
+
+  const eventId = cleanString(record.event_id ?? record.eventId)
+  if (!eventId) return null
+  const timeline = safeArray(trace?.timeline)
+  const timelineEvent = timeline.find((event) => cleanString(event?.id) === eventId)
+  const toolCallIndex = timelineEvent?.tool_call_index ?? timelineEvent?.toolCallIndex
+  if (Number.isInteger(toolCallIndex) && toolCalls[toolCallIndex]) return toolCalls[toolCallIndex]
+
+  return toolCalls.find((call) => cleanString(call?.event_id ?? call?.eventId) === eventId) || null
+}
+
+function normalizeTool(record = {}, trace = {}) {
+  const toolCall = linkedToolCall(trace, record)
+  const toolName = cleanString(record.tool_name ?? record.toolName) || cleanString(toolCall?.tool_name ?? toolCall?.toolName) || null
+  const toolUseId = cleanString(record.tool_use_id ?? record.toolUseId) || cleanString(toolCall?.tool_use_id ?? toolCall?.toolUseId) || null
+  const input = record.input ?? record.tool_input ?? toolCall?.input
+  const inputPreview = input == null ? null : getToolInputPreview(toolName || '', input)
   return {
     eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
-    toolUseId: cleanString(record.tool_use_id ?? record.toolUseId) || null,
+    toolUseId,
+    toolName,
+    inputPreview: inputPreview?.kind === 'missing' ? null : inputPreview?.text || null,
+    inputPreviewLabel: inputPreview?.kind === 'missing' ? null : inputPreview?.label || null,
     necessary: validEnum(record.necessary, ANNOTATION_VERDICTS),
     rationale: cleanString(record.rationale) || 'Rationale not recorded',
   }
@@ -94,12 +122,12 @@ function countVerdicts(records, key, values) {
 
 function coverageCopy(annotatedCount, capturedCountValue) {
   const annotated = annotatedCount.toLocaleString()
-  if (capturedCountValue === null) return { value: `${annotated} annotated`, detail: 'Captured denominator not available' }
-  if (capturedCountValue === 0) return { value: `${annotated} / 0 captured`, detail: 'No captured evidence in this trace' }
+  if (capturedCountValue === null) return { value: `${annotated} labeled`, detail: 'Total not recorded' }
+  if (capturedCountValue === 0) return { value: `${annotated} labeled / 0 total`, detail: 'No evidence in this trace' }
   const percentage = Math.round((annotatedCount / capturedCountValue) * 100)
   return {
-    value: `${annotated} / ${capturedCountValue.toLocaleString()} captured`,
-    detail: `${percentage}% of captured evidence labeled`,
+    value: `${annotated} labeled / ${capturedCountValue.toLocaleString()} total`,
+    detail: `${percentage}% labeled`,
   }
 }
 
@@ -123,14 +151,20 @@ function normalizeCategory(key, label, records, capturedCountValue, fields) {
 function normalizeAnnotation(annotation, trace) {
   const recorded = isObject(annotation)
   const turns = safeArray(annotation?.turns).map(normalizeTurn)
-  const tools = safeArray(annotation?.tools).map(normalizeTool)
+  const tools = safeArray(annotation?.tools).map((record) => normalizeTool(record, trace))
   const skills = safeArray(annotation?.skills).map(normalizeSkill)
   const captured = capturedEvidenceCounts(trace)
+  const performanceSummary = countVerdicts(turns, 'performance', ['improved', 'neutral', 'worsened', 'unclear']).map((item) => ({
+    ...item,
+    turnIds: turns.filter((turn) => turn.performance === item.value).map((turn) => turn.turnId || turn.eventId),
+  }))
 
   return {
     recorded,
     schemaVersion: cleanString(annotation?.schema_version ?? annotation?.schemaVersion) || null,
     source: cleanString(annotation?.source) || null,
+    performanceSummary,
+    performanceLabeledCount: performanceSummary.reduce((total, item) => total + item.count, 0),
     categories: [
       normalizeCategory('turns', 'Agent turns', turns, captured.turns, [
         { label: 'Follows instructions', key: 'followsInstructions', values: ['yes', 'no', 'unclear'] },

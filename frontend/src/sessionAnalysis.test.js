@@ -7,7 +7,7 @@ const trace = {
     { role: 'assistant', turn_id: 'turn-1' },
     { role: 'user', turn_id: 'turn-2' },
   ],
-  tool_calls: [{ tool_name: 'rg' }, { tool_name: 'git' }],
+  tool_calls: [{ tool_use_id: 'tool-1', tool_name: 'rg', input: { cmd: 'rg --files' } }, { tool_name: 'git' }],
   skill_invocations: [{ name: 'frontend-design' }],
 }
 
@@ -76,10 +76,21 @@ describe('session analysis view model', () => {
       evaluation: { recorded: true, verdict: 'fail', verdictLabel: 'Fail' },
     })
     expect(model.annotation.categories).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'turns', coverageValue: '1 / 2 captured', coverageDetail: '50% of captured evidence labeled' }),
-      expect.objectContaining({ key: 'tools', coverageValue: '1 / 2 captured', coverageDetail: '50% of captured evidence labeled' }),
-      expect.objectContaining({ key: 'skills', coverageValue: '1 / 1 captured', coverageDetail: '100% of captured evidence labeled' }),
+      expect.objectContaining({ key: 'turns', coverageValue: '1 labeled / 2 total', coverageDetail: '50% labeled' }),
+      expect.objectContaining({ key: 'tools', coverageValue: '1 labeled / 2 total', coverageDetail: '50% labeled' }),
+      expect.objectContaining({ key: 'skills', coverageValue: '1 labeled / 1 total', coverageDetail: '100% labeled' }),
     ]))
+    expect(model.annotation.performanceSummary).toEqual([
+      { value: 'improved', count: 1, turnIds: ['turn-1'] },
+      { value: 'neutral', count: 0, turnIds: [] },
+      { value: 'worsened', count: 0, turnIds: [] },
+      { value: 'unclear', count: 0, turnIds: [] },
+    ])
+    expect(model.annotation.categories.find((category) => category.key === 'tools').records[0]).toMatchObject({
+      toolName: 'rg',
+      toolUseId: 'tool-1',
+      inputPreview: expect.stringContaining('rg --files'),
+    })
     expect(model.annotation.categories[0].breakdowns[0].values).toEqual([
       { value: 'yes', count: 1 },
       { value: 'no', count: 0 },

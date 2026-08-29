@@ -36,7 +36,7 @@ describe('EvaluationPage', () => {
     render(<EvaluationPage session={session} onBack={onBack} />)
 
     expect(screen.getByRole('heading', { name: 'Session evaluation', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Recorded evaluation evidence' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Review details' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'What to improve' })).toBeInTheDocument()
     expect(screen.getByText('The evaluator recorded a complete review.')).toBeInTheDocument()
     expect(screen.getByText('Keep the handoff boundary explicit.')).toBeInTheDocument()
@@ -44,5 +44,19 @@ describe('EvaluationPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '← Session detail' }))
     expect(onBack).toHaveBeenCalledExactlyOnceWith()
+  })
+
+  it('leads with a human summary and progressively discloses forensic evidence', () => {
+    render(<EvaluationPage session={session} onBack={vi.fn()} />)
+
+    expect(screen.getByRole('heading', { name: 'Review at a glance' })).toBeInTheDocument()
+    expect(screen.getByText('The evaluator recorded a complete review.')).toBeInTheDocument()
+    expect(screen.getByText('What to improve')).toBeInTheDocument()
+
+    const evidenceDetails = screen.getByText('Evidence details').closest('details')
+    expect(evidenceDetails).not.toHaveAttribute('open')
+
+    fireEvent.click(screen.getByText('Evidence details'))
+    expect(evidenceDetails).toHaveAttribute('open')
   })
 })

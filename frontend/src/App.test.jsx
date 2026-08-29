@@ -279,7 +279,7 @@ describe('authenticated sessions flow', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Session evaluation', level: 1 })).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: 'Recorded evaluation evidence' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Review details' })).toBeInTheDocument()
     expect(await screen.findByText('The evaluator recorded a review concern.')).toBeInTheDocument()
     expect(screen.getAllByText('review required').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('heading', { name: 'Evaluation summary' })).not.toBeInTheDocument()

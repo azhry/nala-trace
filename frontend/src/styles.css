@@ -191,10 +191,45 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-summary-link:hover { color: var(--text); }
 .analysis-full-page { max-width: 980px; }
 .evaluation-page .analysis-content { gap: 14px; }
-.analysis-category-list { display: grid; gap: 1px; background: var(--line); }
-.analysis-category-card { min-width: 0; padding: 12px; background: var(--surface-soft); }
+.analysis-overview { overflow: hidden; border: 1px solid rgba(187,165,255,.28); border-radius: 9px; background: linear-gradient(135deg, rgba(187,165,255,.1), rgba(131,198,245,.04) 62%, var(--surface) 100%); box-shadow: 0 8px 22px rgba(0,0,0,.12); }
+.analysis-overview.pass { border-color: rgba(117,224,168,.35); background: linear-gradient(135deg, rgba(117,224,168,.09), rgba(131,198,245,.035) 62%, var(--surface) 100%); }
+.analysis-overview.fail { border-color: rgba(239,182,110,.4); background: linear-gradient(135deg, rgba(239,182,110,.12), rgba(187,165,255,.035) 62%, var(--surface) 100%); }
+.analysis-overview-readout { display: grid; gap: 7px; padding: 20px 22px 18px; }
+.analysis-overview-readout .section-label { color: var(--purple); }
+.analysis-overview.pass .analysis-overview-readout .section-label { color: var(--green); }
+.analysis-overview.fail .analysis-overview-readout .section-label { color: var(--amber); }
+.analysis-overview-readout h3 { margin: 0; color: var(--text); font-size: 13px; font-weight: 650; letter-spacing: -.01em; }
+.analysis-overview-verdict { color: var(--text); font-size: 22px; font-weight: 700; letter-spacing: -.035em; }
+.analysis-overview-readout p { max-width: 820px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.analysis-overview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--line); background: var(--line); }
+.analysis-overview-stats > div { display: grid; gap: 4px; min-width: 0; padding: 12px 14px; background: rgba(15,19,24,.34); }
+.analysis-overview-stats span { color: var(--faint); font-family: var(--mono); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
+.analysis-overview-stats strong { overflow: hidden; color: var(--text); font-family: var(--mono); font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.analysis-overview-stats small { color: var(--muted); font-size: 10px; line-height: 1.35; }
+.analysis-evidence-disclosure { overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
+.analysis-evidence-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 18px; cursor: pointer; list-style: none; }
+.analysis-evidence-disclosure > summary::-webkit-details-marker { display: none; }
+.analysis-evidence-disclosure > summary::after { flex: 0 0 auto; color: var(--purple); content: '⌄'; font-size: 18px; line-height: 1; transform: translateY(-2px); }
+.analysis-evidence-disclosure[open] > summary { border-bottom: 1px solid var(--line); background: rgba(187,165,255,.035); }
+.analysis-evidence-disclosure[open] > summary::after { content: '⌃'; }
+.analysis-disclosure-summary-copy { display: grid; gap: 4px; min-width: 0; }
+.analysis-disclosure-summary-copy strong { color: var(--text); font-size: 15px; font-weight: 650; }
+.analysis-disclosure-summary-copy > span:last-child { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.analysis-disclosure-summary-meta { display: grid; flex: 0 0 auto; gap: 5px; color: var(--faint); font-family: var(--mono); font-size: 9px; text-align: right; }
+.analysis-disclosure-toggle { color: var(--purple); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.analysis-disclosure-content { display: grid; gap: 14px; padding: 14px; }
+.analysis-category-list { display: grid; gap: 8px; }
+.analysis-category-card { min-width: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
+.analysis-category-card > summary { padding: 12px; cursor: pointer; list-style: none; }
+.analysis-category-card > summary::-webkit-details-marker { display: none; }
+.analysis-category-card > summary::after { display: block; margin-top: 10px; color: var(--purple); content: 'View evidence ↓'; font-family: var(--mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.analysis-category-card[open] > summary { border-bottom: 1px solid var(--line); background: rgba(187,165,255,.025); }
+.analysis-category-card[open] > summary::after { content: 'Hide evidence ↑'; }
+.analysis-category-content { padding: 0 12px 12px; }
 .analysis-category-header { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
 .analysis-category-header > div { min-width: 0; }
+.analysis-category-summary-side { display: grid; justify-items: end; gap: 7px; }
+.analysis-disclosure-hint { color: var(--purple); font-family: var(--mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
 .analysis-card-kicker, .analysis-category-header small { display: block; color: var(--faint); font-size: 10px; }
 .analysis-category-header strong { display: block; margin: 4px 0 2px; color: var(--text); font-family: var(--mono); font-size: 15px; font-weight: 600; }
 .analysis-category-header small { line-height: 1.35; }
@@ -207,7 +242,7 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-evidence-heading { margin-top: 12px; color: var(--faint); font-family: var(--mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
 .analysis-evidence-heading strong { color: var(--muted); font-size: 9px; font-weight: 500; }
 .analysis-evidence-list, .analysis-signal-list { margin: 7px 0 0; padding: 0; list-style: none; }
-.analysis-evidence-list { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: rgba(15,19,24,.28); }
+.analysis-evidence-list { border: 1px solid var(--line); border-radius: 5px; background: rgba(15,19,24,.28); }
 .analysis-evidence-record { padding: 8px; border-bottom: 1px solid var(--line); }
 .analysis-evidence-record:last-child { border-bottom: 0; }
 .analysis-evidence-record-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -295,6 +330,15 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-signal-occurrences-heading strong { color: var(--amber) !important; font-family: var(--mono); font-size: 9px !important; letter-spacing: .04em; text-transform: uppercase; }
 .analysis-signal-occurrences-heading span { margin: 0 !important; color: var(--muted) !important; font-family: var(--mono); font-size: 9px !important; text-align: right; }
 .analysis-signal-occurrences-note { margin: 5px 0 0 !important; color: var(--faint) !important; font-family: var(--mono); font-size: 9px !important; }
+.analysis-signal-details { margin-top: 9px; border: 1px solid rgba(239,182,110,.18); background: rgba(15,19,24,.34); }
+.analysis-signal-details > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px; cursor: pointer; list-style: none; }
+.analysis-signal-details > summary::-webkit-details-marker { display: none; }
+.analysis-signal-details > summary::after { color: var(--amber); content: '＋'; font-family: var(--mono); font-size: 11px; }
+.analysis-signal-details[open] > summary { border-bottom: 1px solid rgba(239,182,110,.18); }
+.analysis-signal-details[open] > summary::after { content: '−'; }
+.analysis-signal-details > summary strong { color: var(--amber); font-family: var(--mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.analysis-signal-details > summary span { flex: 1; color: var(--muted); font-family: var(--mono); font-size: 9px; text-align: right; }
+.analysis-signal-details .analysis-signal-occurrences { margin-top: 0; border: 0; background: transparent; }
 .analysis-signal-occurrences ol { display: grid; gap: 5px; margin: 7px 0 0; padding: 0; list-style: none; counter-reset: signal-occurrence; }
 .analysis-signal-occurrence { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; padding: 7px; border: 1px solid var(--line); background: rgba(15,19,24,.44); counter-increment: signal-occurrence; }
 .analysis-signal-occurrence-index { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(239,182,110,.14); color: var(--amber); font-family: var(--mono); font-size: 9px; }
@@ -310,7 +354,6 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-alignment-grid > div { display: flex; justify-content: space-between; gap: 8px; }
 .analysis-alignment-grid span { color: var(--faint); font-size: 10px; }
 .analysis-alignment-grid strong { color: var(--muted); font-family: var(--mono); font-size: 9px; text-align: right; }
-.analysis-provenance { margin: 0; padding: 9px 2px 1px; color: var(--faint); font-family: var(--mono); font-size: 9px; line-height: 1.4; }
 .analysis-empty-state { display: grid; gap: 6px; padding: 18px 14px; border: 1px dashed rgba(174,183,196,.25); border-radius: 7px; background: rgba(174,183,196,.035); }
 .analysis-empty-mark { color: var(--faint); font-family: var(--mono); font-size: 22px; line-height: 1; }
 .analysis-empty-state > strong { color: var(--text); font-size: 14px; }
@@ -327,9 +370,17 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 @media (max-width: 720px) {
   .analysis-heading, .analysis-block-heading { display: block; }
   .analysis-heading .analysis-status-pill, .analysis-block-heading .analysis-status-pill { margin-top: 10px; }
+  .analysis-overview-readout { padding: 17px 15px 15px; }
+  .analysis-overview-verdict { font-size: 18px; }
+  .analysis-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analysis-evidence-disclosure > summary { display: block; padding: 14px 15px; }
+  .analysis-evidence-disclosure > summary::after { float: right; margin-top: -18px; }
+  .analysis-disclosure-summary-meta { margin-top: 10px; text-align: left; }
   .analysis-category-list { grid-template-columns: 1fr; }
   .analysis-category-header { display: block; }
   .analysis-category-header .analysis-status-pill { margin-top: 9px; }
+  .analysis-category-summary-side { justify-items: start; margin-top: 9px; }
+  .analysis-category-summary-side .analysis-status-pill { margin-top: 0; }
   .analysis-breakdown-row { display: block; }
   .analysis-breakdown-row > div { justify-content: flex-start; margin-top: 3px; }
   .analysis-filter-controls { align-items: stretch; display: grid; }

@@ -455,3 +455,203 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
   .trace-state-panel { padding: 20px 14px; }
   .trace-loading-panel { min-height: 280px; }
 }
+
+/* Human-scale console defaults. Keep primary evidence comfortable to read; reserve the mono face for supporting data. */
+:root {
+  --muted: #c2cbd7;
+  --faint: #9aa6b6;
+}
+
+body { font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
+.sidebar { max-height: 100vh; overflow-y: auto; scrollbar-gutter: stable; }
+.main-content { padding-right: 48px; padding-left: 48px; }
+.topbar { height: 72px; }
+.breadcrumb { font-size: 14px; }
+.source-chip, .source-note, .topbar-session { font-size: 12px; }
+.page-section { padding-top: 36px; }
+.page-heading, .detail-heading { padding-bottom: 28px; }
+.page-heading h1, .detail-heading h1 { font-size: 40px; }
+.page-heading p:not(.eyebrow), .detail-heading p:not(.eyebrow) { font-size: 16px; line-height: 1.55; }
+.eyebrow, .section-label, .sidebar-section-label { font-size: 12px; }
+.panel-header { padding: 22px 24px 20px; }
+.panel-header h2, .section-heading-row h2 { font-size: 24px; }
+.panel-description, .section-description { font-size: 15px; line-height: 1.55; }
+.record-count { padding: 6px 8px; font-size: 12px; }
+.session-controls { padding: 16px 24px; }
+.search-box { height: 40px; padding: 0 11px; }
+.search-box input { font-size: 15px; }
+.filter-tabs button, .trace-controls button { min-height: 36px; padding: 8px 11px; font-size: 13px; }
+.records-table-head { padding: 14px 24px; font-size: 11px; }
+.records-table-head, .session-record { gap: 18px; }
+.session-record { min-height: 96px; padding: 17px 24px; }
+.session-record-title strong { font-size: 16px; }
+.session-record-id, .session-last-event span, .session-captured { font-size: 12px; }
+.status-badge { padding: 5px 8px; font-size: 11px; }
+.count-badge { padding: 5px 7px; font-size: 11px; }
+.count-badge strong, .session-last-event strong { font-size: 12px; }
+.session-mcp-servers, .workspace-stat-server-list { font-size: 11px; }
+.empty-records { padding: 34px 24px; }
+.empty-records span { font-size: 13px; }
+.detail-layout { gap: 26px; }
+.trace-panel-header { padding: 22px 24px 20px; }
+.trace-summary span, .trace-summary small { font-size: 12px; }
+.trace-summary strong { font-size: 15px; }
+.trace-controls { padding: 12px 24px; font-size: 13px; }
+.trace-visible-count { font-size: 11px; }
+.trace-stream { padding: 22px 24px 28px; }
+.stream-intro, .stream-end { font-size: 11px; }
+.conversation-message { margin: 24px 0; padding: 16px 18px; }
+.conversation-message p { font-size: 16px; line-height: 1.65; }
+.message-meta { font-size: 13px; }
+.message-meta strong { font-size: 14px; }
+.message-record, .message-tag, .message-turn { font-size: 11px; }
+.system-event { font-size: 11px; }
+.system-event strong { font-size: 11px; }
+.system-event small { font-size: 10px; }
+.tool-card { margin: 16px 0; }
+.tool-card-toggle { padding: 14px 15px; }
+.tool-card-index { font-size: 11px; }
+.tool-card-name strong { font-size: 14px; }
+.tool-card-name span, .tool-card-status { font-size: 11px; }
+.tool-card-intent { font-size: 13px; line-height: 1.5; }
+.tool-card-preview-label, .trace-tag, .code-block-label { font-size: 11px; }
+.tool-card-preview code, .code-block pre, .context-code pre { font-size: 13px; line-height: 1.6; }
+.skill-inventory, .instruction-inventory, .context-inventory, .mcp-inventory, .token-usage { padding: 18px 24px; }
+.skill-inventory-heading strong, .instruction-inventory-heading strong, .mcp-inventory-heading strong, .token-usage-heading strong { font-size: 16px; }
+.skill-inventory-heading small, .instruction-inventory-heading small, .mcp-inventory-heading small, .token-usage-heading small { font-size: 13px; }
+.skill-evidence-label, .context-inventory small, .context-row-header strong { font-size: 13px; }
+.skill-evidence-label strong, .context-row-header small, .context-row-count, .mcp-server-chip { font-size: 11px; }
+.skill-inventory-item, .instruction-source-item, .context-tag { font-size: 12px; }
+.instruction-source-item strong { font-size: 12px; }
+.instruction-source-item small { font-size: 11px; }
+.context-row { padding: 16px; }
+.context-row-kind, .context-code > span { font-size: 11px; }
+.context-row-header strong { font-size: 15px; }
+.context-row details summary { font-size: 13px; }
+.token-usage-metric span, .token-usage-metric small { font-size: 12px; }
+.token-usage-metric strong { font-size: 15px; }
+.token-usage-note { font-size: 12px; }
+.analysis-block-heading { padding: 20px 22px; }
+.analysis-block-heading h3 { font-size: 18px; }
+.analysis-block-heading p { font-size: 14px; line-height: 1.55; }
+.analysis-status-pill { padding: 6px 8px; font-size: 11px; }
+.analysis-overview-readout { padding: 24px 26px 22px; }
+.analysis-overview-readout h3 { font-size: 15px; }
+.analysis-overview-verdict { font-size: 28px; }
+.analysis-overview-readout p { font-size: 14px; line-height: 1.6; }
+.analysis-overview-stats > div { padding: 15px 17px; }
+.analysis-overview-stats span { font-size: 11px; }
+.analysis-overview-stats strong { font-size: 18px; }
+.analysis-overview-stats small { font-size: 12px; line-height: 1.45; }
+.analysis-evidence-disclosure > summary { padding: 20px 22px; }
+.analysis-disclosure-summary-copy strong { font-size: 18px; }
+.analysis-disclosure-summary-copy > span:last-child { font-size: 13px; line-height: 1.5; }
+.analysis-disclosure-summary-meta, .analysis-disclosure-toggle, .analysis-disclosure-hint { font-size: 11px; }
+.analysis-disclosure-content { gap: 18px; padding: 18px; }
+.analysis-category-card > summary { padding: 16px; }
+.analysis-category-header strong { font-size: 18px; }
+.analysis-card-kicker, .analysis-category-header small { font-size: 12px; }
+.analysis-category-header small { line-height: 1.5; }
+.analysis-category-card > summary::after { font-size: 11px; }
+.analysis-category-content { padding: 0 16px 16px; }
+.analysis-breakdown-row { font-size: 12px; }
+.analysis-breakdown-value { font-size: 12px; }
+.analysis-breakdown-value strong { font-size: 13px; }
+.analysis-evidence-heading { font-size: 11px; }
+.analysis-evidence-heading strong { font-size: 11px; }
+.analysis-evidence-record { padding: 13px; }
+.analysis-evidence-record-heading strong { font-size: 13px; }
+.analysis-evidence-record-heading code { font-size: 11px; }
+.analysis-evidence-tags { gap: 6px; }
+.analysis-evidence-input > span, .analysis-evidence-context > span, .analysis-evidence-turn > span { font-size: 11px; }
+.analysis-evidence-input code, .analysis-evidence-context code { font-size: 12px; line-height: 1.55; }
+.analysis-evidence-turn p, .analysis-evidence-record p, .analysis-empty-copy { font-size: 13px; line-height: 1.55; }
+.analysis-filter-panel { margin: 18px 22px; padding: 14px; }
+.analysis-filter-controls label { font-size: 11px; }
+.analysis-filter-controls select { min-height: 38px; font-size: 14px; }
+.analysis-filter-clear { min-height: 36px; padding: 7px 11px; font-size: 11px; }
+.analysis-filter-explanation { font-size: 13px; line-height: 1.55; }
+.analysis-filter-summary { font-size: 11px; }
+.analysis-subsection { padding: 18px 22px; }
+.analysis-subsection-heading > span { font-size: 14px; }
+.analysis-subsection-heading > strong { font-size: 11px; }
+.analysis-actions-group-heading strong { font-size: 13px; }
+.analysis-actions-group-heading span { font-size: 11px; }
+.analysis-actions-list { gap: 11px; padding: 16px 18px 18px 38px; }
+.analysis-action-field > span, .analysis-action-source { font-size: 11px; }
+.analysis-action-field code { font-size: 12px; }
+.analysis-action-field strong { font-size: 13px; line-height: 1.5; }
+.analysis-action-field p { font-size: 13px; line-height: 1.55; }
+.analysis-performance-copy { font-size: 13px; line-height: 1.55; }
+.analysis-performance-value strong { font-size: 13px; }
+.analysis-performance-value span, .analysis-performance-value code, .analysis-performance-value em { font-size: 11px; }
+.analysis-performance-turn > strong { font-size: 10px; }
+.analysis-performance-turn > span { font-size: 11px; line-height: 1.45; }
+.analysis-signal-legend { font-size: 11px; line-height: 1.5; }
+.analysis-signal-row { gap: 14px; padding: 14px; }
+.analysis-signal-row > div > strong { font-size: 13px; }
+.analysis-signal-row > div > span { font-size: 13px; line-height: 1.55; }
+.analysis-signal-row > div > em { font-size: 11px; }
+.analysis-signal-details > summary strong, .analysis-signal-details > summary span { font-size: 11px; }
+.analysis-signal-occurrence > div > strong { font-size: 13px; }
+.analysis-signal-occurrence > div > span { font-size: 11px; }
+.analysis-signal-occurrence-input span { font-size: 10px; }
+.analysis-signal-occurrence-input code { font-size: 12px; line-height: 1.55; }
+.analysis-signal-occurrence p { font-size: 12px !important; line-height: 1.5; }
+.analysis-alignment-grid span { font-size: 13px; }
+.analysis-alignment-grid strong { font-size: 11px; }
+.analysis-empty-state > strong { font-size: 16px; }
+.analysis-empty-state > p { font-size: 13px; line-height: 1.55; }
+.analysis-not-recorded-grid span { font-size: 11px; }
+.analysis-not-recorded-grid strong { font-size: 11px; }
+
+@media (max-width: 1100px) {
+  .main-content { padding-right: 32px; padding-left: 32px; }
+}
+
+@media (max-width: 720px) {
+  .sidebar { max-height: none; overflow: visible; }
+  .main-content { padding: 0 18px 52px; }
+  .topbar { height: 62px; }
+  .breadcrumb { font-size: 12px; }
+  .page-section { padding-top: 28px; }
+  .page-heading, .detail-heading { padding-bottom: 22px; }
+  .page-heading h1, .detail-heading h1 { font-size: 32px; line-height: 1.12; }
+  .page-heading p:not(.eyebrow), .detail-heading p:not(.eyebrow) { font-size: 15px; }
+  .panel-header { padding: 20px 18px 18px; }
+  .panel-header h2, .section-heading-row h2 { font-size: 22px; }
+  .panel-description, .section-description { font-size: 14px; }
+  .record-count { font-size: 11px; }
+  .session-controls { padding: 14px 18px; }
+  .search-box input { font-size: 15px; }
+  .filter-tabs button, .trace-controls button { min-height: 40px; font-size: 14px; }
+  .session-record { padding: 17px 18px; }
+  .session-record-title strong { font-size: 16px; }
+  .session-record-id, .session-captured { font-size: 13px; }
+  .count-badge { font-size: 12px; }
+  .count-badge strong { font-size: 13px; }
+  .trace-panel-header { padding: 20px 18px 18px; }
+  .trace-summary > div { padding: 14px 18px; }
+  .trace-summary strong { font-size: 15px; }
+  .trace-controls { padding: 11px 18px; }
+  .trace-stream { padding: 18px 18px 22px; }
+  .conversation-message { padding: 15px 16px; }
+  .conversation-message p { font-size: 16px; }
+  .tool-card-toggle { padding: 13px; }
+  .tool-card-name strong { font-size: 14px; }
+  .tool-card-intent { font-size: 14px; }
+  .tool-card-preview code, .code-block pre, .context-code pre { font-size: 13px; }
+  .skill-inventory, .instruction-inventory, .context-inventory, .mcp-inventory, .token-usage { padding: 16px 18px; }
+  .analysis-block-heading { padding: 18px; }
+  .analysis-overview-readout { padding: 20px 18px 18px; }
+  .analysis-overview-verdict { font-size: 23px; }
+  .analysis-overview-stats { grid-template-columns: 1fr; }
+  .analysis-overview-stats > div { padding: 14px 18px; }
+  .analysis-evidence-disclosure > summary { padding: 17px 18px; }
+  .analysis-disclosure-content { padding: 12px; }
+  .analysis-filter-panel { margin: 14px 18px; }
+  .analysis-subsection { padding: 16px 18px; }
+  .analysis-actions-list { padding-left: 34px; }
+  .analysis-signal-row > div > span { font-size: 14px; }
+}

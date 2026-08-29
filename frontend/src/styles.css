@@ -605,6 +605,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .analysis-empty-state > p { font-size: 13px; line-height: 1.55; }
 .analysis-not-recorded-grid span { font-size: 11px; }
 .analysis-not-recorded-grid strong { font-size: 11px; }
+.analysis-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.analysis-summary-metrics > div { padding: 13px 14px; }
+.analysis-summary-metrics span { font-size: 12px; }
+.analysis-summary-metrics strong { font-size: 14px; overflow-wrap: anywhere; white-space: normal; }
+.analysis-summary-link { font-size: 13px; }
 
 @media (max-width: 1100px) {
   .main-content { padding-right: 32px; padding-left: 32px; }
@@ -654,4 +659,5 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .analysis-subsection { padding: 16px 18px; }
   .analysis-actions-list { padding-left: 34px; }
   .analysis-signal-row > div > span { font-size: 14px; }
+  .analysis-summary-metrics { grid-template-columns: 1fr; }
 }

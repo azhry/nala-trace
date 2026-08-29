@@ -69,6 +69,8 @@ describe('InsightCards', () => {
     expect(screen.getByText('Pass')).toBeInTheDocument()
     expect(screen.getByText('The recorded workflow is complete.')).toBeInTheDocument()
     expect(screen.getByText('files read before write')).toBeInTheDocument()
+    expect(screen.getByText('Warning = a review concern. Info = context, not a failure.')).toBeInTheDocument()
+    expect(screen.getByText('1 occurrence · Info')).toBeInTheDocument()
     expect(screen.getByText('Aligned')).toBeInTheDocument()
     expect(screen.getByText('golden-set-v1')).toBeInTheDocument()
     expect(screen.getByText('No improvement actions recorded')).toBeInTheDocument()
@@ -97,6 +99,26 @@ describe('InsightCards', () => {
     expect(screen.getByText('Reviewers need one unambiguous ownership rule.')).toBeInTheDocument()
     expect(screen.queryByText('How to read these labels')).not.toBeInTheDocument()
     expect(screen.queryByText('No improvement actions recorded')).not.toBeInTheDocument()
+  })
+
+  it('turns signal keys and event references into readable review evidence', () => {
+    render(<InsightCards analysis={{
+      annotation: null,
+      evaluation: {
+        ...evaluation,
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 2,
+          severity: 'warning',
+          detail: 'Unmatched event: ObjectID("stop-1").',
+        }],
+      },
+    }} trace={trace} />)
+
+    expect(screen.getByText('Unmatched tool hook pairs')).toBeInTheDocument()
+    expect(screen.getByText('Unmatched event: Codex response: The assistant completed the requested inspection.')).toBeInTheDocument()
+    expect(screen.getByText('2 occurrences · Warning')).toBeInTheDocument()
+    expect(screen.getByText('Review concern')).toBeInTheDocument()
   })
 
   it('keeps an evaluator unknown verdict distinct from a missing evaluation', () => {

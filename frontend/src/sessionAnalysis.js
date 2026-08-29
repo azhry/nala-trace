@@ -7,6 +7,19 @@ const ANNOTATION_VERDICTS = new Set(['yes', 'no', 'unclear'])
 const PERFORMANCE_VERDICTS = new Set(['improved', 'neutral', 'worsened', 'unclear'])
 const EVALUATION_VERDICTS = new Set(['pass', 'fail', 'unknown'])
 const ALIGNMENT_STATUSES = new Set(['aligned', 'not_aligned', 'not_recorded'])
+const SIGNAL_NAME_LABELS = {
+  unverified_authenticated_browser_flow: 'Authenticated browser flow not verified',
+  unmatched_tool_hook_pairs: 'Unmatched tool hook pairs',
+  delivery_branch_collision_recovered: 'Delivery branch collision recovered',
+  environment_retry_without_regression: 'Environment retry completed without regression',
+  live_api_contract_verified: 'Live API contract verified',
+}
+const SIGNAL_SEVERITY_MEANINGS = {
+  warning: 'Review concern',
+  info: 'Context, not a failure',
+  critical: 'Requires attention',
+  unknown: 'Meaning not recorded',
+}
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -45,6 +58,54 @@ function contentText(value) {
 function clipTurnPreview(value) {
   const text = contentText(value).replace(/\s+/g, ' ').trim()
   return text.length <= TURN_PREVIEW_LIMIT ? text : `${text.slice(0, TURN_PREVIEW_LIMIT).trimEnd()}…`
+}
+
+function humanizeSignalName(value) {
+  const normalized = cleanString(value)
+  if (!normalized) return 'Unnamed signal'
+  if (SIGNAL_NAME_LABELS[normalized]) return SIGNAL_NAME_LABELS[normalized]
+  if (!normalized.includes('_')) return normalized
+  return normalized.split('_').map((word) => word ? `${word.charAt(0).toUpperCase()}${word.slice(1)}` : '').join(' ')
+}
+
+function referenceCandidates(value) {
+  const reference = cleanString(value)
+  const match = reference.match(/^ObjectI[Dd]\("(.+)"\)$/)
+  return match ? [reference, match[1]] : [reference]
+}
+
+function traceEvidenceLabel(trace, reference) {
+  const candidates = referenceCandidates(reference)
+  const conversationItem = safeArray(trace?.conversation).find((item) => candidates.includes(cleanString(item?.event_id ?? item?.eventId)))
+  if (conversationItem) {
+    const role = cleanString(conversationItem.role).toLowerCase()
+    const roleLabel = role === 'assistant' ? 'Codex response' : role === 'user' ? 'User prompt' : 'Captured message'
+    const preview = clipTurnPreview(conversationItem.content)
+    return preview ? `${roleLabel}: ${preview}` : roleLabel
+  }
+
+  const timelineEvent = safeArray(trace?.timeline).find((event) => candidates.includes(cleanString(event?.id)))
+  if (!timelineEvent) return null
+
+  const toolCallIndex = timelineEvent.tool_call_index ?? timelineEvent.toolCallIndex
+  const toolCall = Number.isInteger(toolCallIndex) ? safeArray(trace?.tool_calls)[toolCallIndex] : null
+  if (toolCall) {
+    const toolName = cleanString(toolCall.tool_name ?? toolCall.toolName) || 'Tool call'
+    const input = toolCall.input ?? toolCall.tool_input
+    const inputPreview = input == null ? null : getToolInputPreview(toolName, input)
+    return inputPreview?.kind === 'missing' || !inputPreview?.text
+      ? toolName
+      : `${toolName}: ${inputPreview.text}`
+  }
+
+  return `${cleanString(timelineEvent.hook_event_name ?? timelineEvent.hookEventName) || 'Captured trace'} event`
+}
+
+function readableSignalDetail(detail, trace) {
+  return detail.replace(/ObjectI[Dd]\("([^"]+)"\)/g, (reference) => {
+    const label = traceEvidenceLabel(trace, reference)
+    return label ? label.replace(/[.!?]+$/, '') : reference
+  })
 }
 
 function numberOrNull(value) {
@@ -241,12 +302,15 @@ function displayVerdict(value) {
   return 'Not recorded'
 }
 
-function normalizeReviewSignal(record = {}) {
+function normalizeReviewSignal(record = {}, trace = {}) {
+  const severity = validEnum(record.severity, new Set(['info', 'warning', 'critical', 'unknown'])) || 'unknown'
+  const detail = cleanString(record.detail) || 'Signal detail not recorded'
   return {
-    name: cleanString(record.name) || 'Unnamed signal',
+    name: humanizeSignalName(record.name),
     count: numberOrNull(record.count),
-    severity: validEnum(record.severity, new Set(['info', 'warning', 'critical', 'unknown'])) || 'unknown',
-    detail: cleanString(record.detail) || 'Signal detail not recorded',
+    severity,
+    severityMeaning: SIGNAL_SEVERITY_MEANINGS[severity],
+    detail: readableSignalDetail(detail, trace),
   }
 }
 
@@ -276,7 +340,7 @@ function normalizeLedger(ledger) {
   }
 }
 
-function normalizeEvaluation(evaluation) {
+function normalizeEvaluation(evaluation, trace) {
   const recorded = isObject(evaluation)
   const verdict = validEnum(evaluation?.verdict, EVALUATION_VERDICTS)
   return {
@@ -286,7 +350,7 @@ function normalizeEvaluation(evaluation) {
     verdict,
     verdictLabel: displayVerdict(verdict),
     critique: cleanString(evaluation?.critique) || null,
-    reviewSignals: safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map(normalizeReviewSignal),
+    reviewSignals: safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map((record) => normalizeReviewSignal(record, trace)),
     judgeAlignment: normalizeAlignment(evaluation?.judge_alignment ?? evaluation?.judgeAlignment),
     evaluationLedger: normalizeLedger(evaluation?.evaluation_ledger ?? evaluation?.evaluationLedger),
   }
@@ -295,7 +359,7 @@ function normalizeEvaluation(evaluation) {
 export function normalizeSessionAnalysis(analysis, trace = {}) {
   const value = isObject(analysis) ? analysis : {}
   const annotation = normalizeAnnotation(value.annotation, trace)
-  const evaluation = normalizeEvaluation(value.evaluation)
+  const evaluation = normalizeEvaluation(value.evaluation, trace)
 
   return {
     recorded: annotation.recorded || evaluation.recorded,

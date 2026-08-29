@@ -8,6 +8,7 @@ const trace = {
     { event_id: 'prompt-2', role: 'user', content: 'Summarize the result.', turn_id: 'turn-2' },
   ],
   tool_calls: [{ tool_use_id: 'tool-1', tool_name: 'rg', input: { cmd: 'rg --files' } }, { tool_name: 'git' }],
+  timeline: [{ id: 'stop-1', hook_event_name: 'Stop' }],
   skill_invocations: [{ name: 'frontend-design' }],
 }
 
@@ -42,10 +43,10 @@ const analysis = {
     verdict: 'fail',
     critique: 'The result contains a recorded review concern.',
     review_signals: [{
-      name: 'instruction drift',
+      name: 'unmatched_tool_hook_pairs',
       count: 2,
       severity: 'warning',
-      detail: 'Two recorded turns required review.',
+      detail: 'Unmatched event: ObjectID("stop-1").',
     }],
     judge_alignment: {
       status: 'not_aligned',
@@ -101,7 +102,13 @@ describe('session analysis view model', () => {
       { value: 'no', count: 0 },
       { value: 'unclear', count: 0 },
     ])
-    expect(model.evaluation.reviewSignals[0]).toMatchObject({ name: 'instruction drift', count: 2, severity: 'warning' })
+    expect(model.evaluation.reviewSignals[0]).toMatchObject({
+      name: 'Unmatched tool hook pairs',
+      count: 2,
+      severity: 'warning',
+      severityMeaning: 'Review concern',
+      detail: expect.stringContaining('Codex response'),
+    })
     expect(model.evaluation.judgeAlignment).toMatchObject({ status: 'not_aligned', label: 'Not aligned', agreement: false })
     expect(model.evaluation.evaluationLedger.improvements[0]).toMatchObject({ path: 'AGENTS.md' })
   })

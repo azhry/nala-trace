@@ -261,12 +261,14 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-critique > span { display: block; color: var(--purple); font-family: var(--mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
 .analysis-critique p { margin: 6px 0 0; color: var(--text); font-size: 11px; line-height: 1.5; }
 .analysis-signal-list { display: grid; gap: 5px; }
+.analysis-signal-legend { margin: 7px 0 0; color: var(--faint); font-family: var(--mono); font-size: 9px; line-height: 1.4; }
 .analysis-signal-row { display: flex; align-items: start; justify-content: space-between; gap: 8px; padding: 8px; border: 1px solid rgba(131,198,245,.15); border-radius: 5px; background: rgba(131,198,245,.035); }
 .analysis-signal-row.warning, .analysis-signal-row.critical { border-color: rgba(239,182,110,.2); background: rgba(239,182,110,.035); }
 .analysis-signal-row > div { min-width: 0; }
-.analysis-signal-row > div > strong, .analysis-signal-row > div > span { display: block; }
+.analysis-signal-row > div > strong, .analysis-signal-row > div > span, .analysis-signal-row > div > em { display: block; }
 .analysis-signal-row > div > strong { color: var(--text); font-size: 10px; }
 .analysis-signal-row > div > span { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.analysis-signal-row > div > em { margin-top: 5px; color: var(--faint); font-family: var(--mono); font-size: 9px; font-style: normal; letter-spacing: .03em; text-transform: uppercase; }
 .analysis-alignment-grid { display: grid; gap: 7px; margin-top: 10px; }
 .analysis-alignment-grid > div { display: flex; justify-content: space-between; gap: 8px; }
 .analysis-alignment-grid span { color: var(--faint); font-size: 10px; }

@@ -73,7 +73,8 @@ function AnnotationPanel({ annotation }) {
 }
 
 function ReviewSignals({ signals }) {
-  return <div className="analysis-subsection"><div className="analysis-subsection-heading"><span>Review signals</span><strong>{signals.length ? `${signals.length} observed` : 'Not recorded'}</strong></div>{signals.length ? <ul className="analysis-signal-list">{signals.map((signal, index) => <li className={`analysis-signal-row ${signal.severity}`} key={`${signal.name}-${index}`}><div><strong>{signal.name}</strong><span>{signal.detail}</span></div><StatusPill tone={signal.severity}>{signal.count == null ? 'Count not recorded' : `${signal.count.toLocaleString()} · ${signal.severity}`}</StatusPill></li>)}</ul> : <p className="analysis-empty-copy">No review signals were recorded by the evaluator.</p>}</div>
+  const severityLabel = (severity) => severity.charAt(0).toUpperCase() + severity.slice(1)
+  return <div className="analysis-subsection"><div className="analysis-subsection-heading"><span>Review signals</span><strong>{signals.length ? `${signals.length} observed` : 'Not recorded'}</strong></div>{signals.length ? <><p className="analysis-signal-legend">Warning = a review concern. Info = context, not a failure.</p><ul className="analysis-signal-list">{signals.map((signal, index) => <li className={`analysis-signal-row ${signal.severity}`} key={`${signal.name}-${index}`}><div><strong>{signal.name}</strong><span>{signal.detail}</span><em>{signal.severityMeaning}</em></div><StatusPill tone={signal.severity}>{signal.count == null ? 'Count not recorded' : `${signal.count.toLocaleString()} ${signal.count === 1 ? 'occurrence' : 'occurrences'} · ${severityLabel(signal.severity)}`}</StatusPill></li>)}</ul></> : <p className="analysis-empty-copy">No review signals were recorded by the evaluator.</p>}</div>
 }
 
 function JudgeAlignment({ alignment }) {

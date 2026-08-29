@@ -48,28 +48,12 @@ function Breakdown({ breakdowns }) {
   return <div className="analysis-breakdown">{breakdowns.map((breakdown) => <div className="analysis-breakdown-row" key={breakdown.label}><span>{breakdown.label}</span><div>{breakdown.values.map(({ value, count }) => <span className="analysis-breakdown-value" key={value}><strong>{count}</strong> {evidenceValue(value)}</span>)}</div></div>)}</div>
 }
 
-function AnalysisGuide() {
-  return <details className="analysis-guide" open>
-    <summary>How to read these labels</summary>
-    <div className="analysis-guide-body">
-      <p className="analysis-guide-intro"><strong>Annotation coverage</strong> is the share of captured evidence with a label. It is not a pass rate.</p>
-      <dl className="analysis-definition-list">
-        <div><dt>Performance: Improved</dt><dd>The recorded action had an observable positive effect.</dd></div>
-        <div><dt>Performance: Neutral</dt><dd>No observable effect; the action neither helped nor hurt.</dd></div>
-        <div><dt>Performance: Worsened</dt><dd>The recorded action had an observable negative effect.</dd></div>
-        <div><dt>Performance: Unclear</dt><dd>The trace does not provide enough evidence to decide.</dd></div>
-        <div><dt>Necessary for tools and skills</dt><dd>Yes means the captured evidence supports that it was needed; No means it was not needed; Unclear means the trace cannot decide.</dd></div>
-      </dl>
-    </div>
-  </details>
-}
-
 function AnnotationCategory({ category }) {
-  return <article className="analysis-category-card"><div className="analysis-category-header"><div><span className="analysis-card-kicker">{category.label}</span><strong>{category.coverageValue}</strong><small>{category.coverageDetail}</small></div><StatusPill tone={annotationStatus(category)}>{category.annotatedCount ? 'Evidence recorded' : 'No annotations'}</StatusPill></div><Breakdown breakdowns={category.breakdowns} /><div className="analysis-evidence-heading"><span>Per-category evidence</span><strong>{category.annotatedCount.toLocaleString()} records</strong></div>{category.records.length ? <ul className="analysis-evidence-list">{category.records.map((record, index) => <EvidenceRecord category={category} record={record} key={`${record.eventId}-${index}`} />)}</ul> : <p className="analysis-empty-copy">No {category.label.toLowerCase()} annotations recorded. This is not a negative verdict.</p>}</article>
+  return <article className="analysis-category-card"><div className="analysis-category-header"><div><span className="analysis-card-kicker">{category.label}</span><strong>{category.coverageValue}</strong><small>{category.coverageDetail}</small></div><StatusPill tone={annotationStatus(category)}>{category.annotatedCount ? 'Evidence recorded' : 'No annotations'}</StatusPill></div><Breakdown breakdowns={category.breakdowns} /><div className="analysis-evidence-heading"><span>Per-category evidence</span><strong>{category.annotatedCount.toLocaleString()} records</strong></div>{category.records.length ? <ul className="analysis-evidence-list">{category.records.map((record, index) => <EvidenceRecord category={category} record={record} key={`${record.eventId}-${index}`} />)}</ul> : <p className="analysis-empty-copy">No {category.label.toLowerCase()} annotations recorded.</p>}</article>
 }
 
 function AnnotationPanel({ annotation }) {
-  return <section className="analysis-block annotation-block" aria-labelledby="annotation-title"><div className="analysis-block-heading"><div><span className="section-label">Annotation coverage</span><h3 id="annotation-title">Recorded decisions by category</h3><p>Coverage is the share of captured evidence with a label, not a pass rate. Unannotated evidence is not treated as a failure.</p></div><StatusPill tone={annotation.recorded ? 'positive' : 'unknown'}>{annotation.recorded ? 'Recorded' : 'Not recorded'}</StatusPill></div>{annotation.recorded ? <div className="analysis-category-list">{annotation.categories.map((category) => <AnnotationCategory key={category.key} category={category} />)}</div> : <div className="analysis-inline-empty"><strong>Annotation not recorded</strong><span>No turn, tool, or skill annotations were stored for this session.</span></div>}</section>
+  return <section className="analysis-block annotation-block" aria-labelledby="annotation-title"><div className="analysis-block-heading"><div><span className="section-label">Annotation coverage</span><h3 id="annotation-title">Recorded decisions by category</h3><p>Recorded labels and evidence by category.</p></div><StatusPill tone={annotation.recorded ? 'positive' : 'unknown'}>{annotation.recorded ? 'Recorded' : 'Not recorded'}</StatusPill></div>{annotation.recorded ? <div className="analysis-category-list">{annotation.categories.map((category) => <AnnotationCategory key={category.key} category={category} />)}</div> : <div className="analysis-inline-empty"><strong>Annotation not recorded</strong><span>No turn, tool, or skill annotations were stored for this session.</span></div>}</section>
 }
 
 function ReviewSignals({ signals }) {
@@ -84,7 +68,7 @@ function ImprovementActions({ ledger }) {
   const improvements = ledger?.improvements || []
   const hasActions = improvements.length > 0
 
-  return <section className={`analysis-block analysis-actions-block ${hasActions ? 'has-actions' : 'is-empty'}`} aria-labelledby="analysis-actions-title"><div className="analysis-block-heading"><div><span className="section-label">Evaluator guidance</span><h3 id="analysis-actions-title">What to improve</h3><p>Recorded improvement actions from the evaluator. This panel adds no recommendations of its own.</p></div><StatusPill tone={hasActions ? 'positive' : 'unknown'}>{hasActions ? `${improvements.length.toLocaleString()} recorded` : 'No actions recorded'}</StatusPill></div>{hasActions ? <ol className="analysis-actions-list">{improvements.map((improvement, index) => <li key={`${improvement.path}-${index}`}><div className="analysis-action-field"><span>Path</span><code>{improvement.path}</code></div><div className="analysis-action-field"><span>Concrete change</span><strong>{improvement.change}</strong></div><div className="analysis-action-field"><span>Reason</span><p>{improvement.reason}</p></div></li>)}</ol> : <div className="analysis-inline-empty"><strong>No improvement actions recorded</strong><span>The evaluator’s ledger is empty, so this panel makes no recommendations.</span></div>}</section>
+  return <section className={`analysis-block analysis-actions-block ${hasActions ? 'has-actions' : 'is-empty'}`} aria-labelledby="analysis-actions-title"><div className="analysis-block-heading"><div><span className="section-label">Evaluator actions</span><h3 id="analysis-actions-title">What to improve</h3><p>Recorded changes from the evaluator’s ledger.</p></div><StatusPill tone={hasActions ? 'positive' : 'unknown'}>{hasActions ? `${improvements.length.toLocaleString()} recorded` : 'No actions recorded'}</StatusPill></div>{hasActions ? <ol className="analysis-actions-list">{improvements.map((improvement, index) => <li key={`${improvement.path}-${index}`}><div className="analysis-action-field"><span>Path</span><code>{improvement.path}</code></div><div className="analysis-action-field"><span>Concrete change</span><strong>{improvement.change}</strong></div><div className="analysis-action-field"><span>Reason</span><p>{improvement.reason}</p></div></li>)}</ol> : <div className="analysis-inline-empty"><strong>No improvement actions recorded</strong><span>The evaluator’s ledger is empty.</span></div>}</section>
 }
 
 function EvaluationLedger({ ledger }) {
@@ -92,19 +76,30 @@ function EvaluationLedger({ ledger }) {
 }
 
 function EvaluationPanel({ evaluation }) {
-  return <section className="analysis-block evaluation-block" aria-labelledby="evaluation-title"><div className="analysis-block-heading"><div><span className="section-label">Evaluation result</span><h3 id="evaluation-title">Verdict and review evidence</h3><p>The evaluator’s recorded result is shown as-is. Unknown is distinct from a missing evaluation.</p></div><StatusPill tone={evaluation.verdict === 'pass' ? 'positive' : evaluation.verdict === 'fail' ? 'critical' : 'unknown'}>{evaluation.verdictLabel}</StatusPill></div>{evaluation.recorded ? <><div className="analysis-critique"><span>Critique</span><p>{evaluation.critique || 'Critique not recorded.'}</p></div><ReviewSignals signals={evaluation.reviewSignals} /><JudgeAlignment alignment={evaluation.judgeAlignment} /><EvaluationLedger ledger={evaluation.evaluationLedger} /></> : <div className="analysis-inline-empty"><strong>Evaluation not recorded</strong><span>No verdict, critique, review signals, alignment, or ledger were stored for this session.</span></div>}</section>
+  return <section className="analysis-block evaluation-block" aria-labelledby="evaluation-title"><div className="analysis-block-heading"><div><span className="section-label">Evaluation result</span><h3 id="evaluation-title">Verdict and review evidence</h3><p>Stored evaluator result and review evidence.</p></div><StatusPill tone={evaluation.verdict === 'pass' ? 'positive' : evaluation.verdict === 'fail' ? 'critical' : 'unknown'}>{evaluation.verdictLabel}</StatusPill></div>{evaluation.recorded ? <><div className="analysis-critique"><span>Critique</span><p>{evaluation.critique || 'Critique not recorded.'}</p></div><ReviewSignals signals={evaluation.reviewSignals} /><JudgeAlignment alignment={evaluation.judgeAlignment} /><EvaluationLedger ledger={evaluation.evaluationLedger} /></> : <div className="analysis-inline-empty"><strong>Evaluation not recorded</strong><span>No verdict, critique, review signals, alignment, or ledger were stored for this session.</span></div>}</section>
 }
 
 function NoAnalysisState() {
   return <div className="analysis-empty-state" role="status"><span className="analysis-empty-mark" aria-hidden="true">—</span><strong>No analysis recorded</strong><p>This session has captured trace data, but no annotation or evaluation result has been stored yet.</p><div className="analysis-not-recorded-grid"><div><span>Annotation</span><strong>Not recorded</strong></div><div><span>Evaluation</span><strong>Not recorded</strong></div></div></div>
 }
 
-function AnalysisCards({ analysis }) {
-  return <aside className={`insights-section analysis-insights analysis-scroll-region ${analysis.recorded ? '' : 'is-unrecorded'}`} aria-labelledby="insights-title" tabIndex={0}><div className="section-heading-row analysis-heading"><div><p className="section-label">Session analysis</p><h2 id="insights-title">What was actually reviewed</h2><p className="section-description">Stored annotation and evaluation evidence stays separate from the captured trace. Missing analysis is always shown as not recorded.</p></div><StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Analysis recorded' : 'Not recorded'}</StatusPill></div>{analysis.recorded ? <div className="analysis-content">{analysis.evaluation.recorded && <ImprovementActions ledger={analysis.evaluation.evaluationLedger} />}<AnalysisGuide /><AnnotationPanel annotation={analysis.annotation} /><EvaluationPanel evaluation={analysis.evaluation} /><p className="analysis-provenance">{[analysis.annotation.source && `annotation: ${analysis.annotation.source}`, analysis.evaluation.source && `evaluation: ${analysis.evaluation.source}`, formatUpdatedAt(analysis.updatedAt)].filter(Boolean).join(' · ') || 'Analysis provenance not recorded'}</p></div> : <NoAnalysisState />}</aside>
+function sessionEvaluationPath(sessionId) {
+  return `#/sessions/${encodeURIComponent(sessionId)}/evaluation`
 }
 
-export default function InsightCards({ analysis, trace, insights }) {
+function CompactAnalysisSummary({ analysis, sessionId }) {
+  const actionCount = analysis.evaluation.evaluationLedger.improvements.length
+  const evaluationHref = sessionId ? sessionEvaluationPath(sessionId) : null
+  return <aside className="insights-section analysis-insights analysis-summary-card" aria-labelledby="analysis-summary-title"><div className="section-heading-row analysis-heading"><div><p className="section-label">Session analysis</p><h2 id="analysis-summary-title">Evaluation summary</h2><p className="section-description">Open the evaluation page for the recorded decisions and review evidence.</p></div><StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Recorded' : 'Not recorded'}</StatusPill></div><div className="analysis-summary-metrics"><div><span>Annotation</span><strong>{analysis.annotation.recorded ? 'Recorded' : 'Not recorded'}</strong></div><div><span>Evaluation</span><strong>{analysis.evaluation.verdictLabel}</strong></div><div><span>Improvements</span><strong>{analysis.evaluation.recorded ? actionCount.toLocaleString() : 'Not recorded'}</strong></div></div>{evaluationHref && <a className="analysis-summary-link" href={evaluationHref}>Open full evaluation <span aria-hidden="true">↗</span></a>}</aside>
+}
+
+function AnalysisCards({ analysis, compact = false, sessionId }) {
+  if (compact) return <CompactAnalysisSummary analysis={analysis} sessionId={sessionId} />
+  return <aside className={`insights-section analysis-insights analysis-full-page ${analysis.recorded ? '' : 'is-unrecorded'}`} aria-labelledby="analysis-details-title"><div className="section-heading-row analysis-heading"><div><p className="section-label">Evaluation review</p><h2 id="analysis-details-title">Recorded evaluation evidence</h2><p className="section-description">Stored decisions, evaluator results, and improvement actions for this session.</p></div><StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Recorded' : 'Not recorded'}</StatusPill></div>{analysis.recorded ? <div className="analysis-content">{analysis.evaluation.recorded && <ImprovementActions ledger={analysis.evaluation.evaluationLedger} />}<AnnotationPanel annotation={analysis.annotation} /><EvaluationPanel evaluation={analysis.evaluation} /><p className="analysis-provenance">{[analysis.annotation.source && `annotation: ${analysis.annotation.source}`, analysis.evaluation.source && `evaluation: ${analysis.evaluation.source}`, formatUpdatedAt(analysis.updatedAt)].filter(Boolean).join(' · ') || 'Analysis provenance not recorded'}</p></div> : <NoAnalysisState />}</aside>
+}
+
+export default function InsightCards({ analysis, trace, insights, compact = false, sessionId, forceAnalysis = false }) {
   const isApiTrace = analysis !== undefined || Boolean(trace && (trace.schema_version || trace.conversation || trace.timeline))
-  if (!isApiTrace) return <LegacyInsightCards insights={insights} />
-  return <AnalysisCards analysis={normalizeSessionAnalysis(analysis, trace)} />
+  if (!isApiTrace && !forceAnalysis) return <LegacyInsightCards insights={insights} />
+  return <AnalysisCards analysis={normalizeSessionAnalysis(analysis, trace)} compact={compact} sessionId={sessionId} />
 }

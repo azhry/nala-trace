@@ -26,13 +26,22 @@ describe('InsightCards', () => {
   it('renders explicit not-recorded state for null API analysis', () => {
     render(<InsightCards analysis={null} trace={trace} />)
 
-    const panel = screen.getByRole('complementary', { name: 'What was actually reviewed' })
-    expect(screen.getByRole('heading', { name: 'What was actually reviewed' })).toBeInTheDocument()
-    expect(panel).toHaveClass('analysis-scroll-region')
-    expect(panel).toHaveAttribute('tabindex', '0')
+    const panel = screen.getByRole('complementary', { name: 'Recorded evaluation evidence' })
+    expect(screen.getByRole('heading', { name: 'Recorded evaluation evidence' })).toBeInTheDocument()
+    expect(panel).toHaveClass('analysis-full-page')
     expect(screen.getByText('No analysis recorded')).toBeInTheDocument()
     expect(screen.getAllByText('Not recorded')).toHaveLength(3)
     expect(screen.queryByText('Pass')).not.toBeInTheDocument()
+  })
+
+  it('keeps the detail summary compact and links to the dedicated evaluation page', () => {
+    render(<InsightCards analysis={{ annotation: null, evaluation }} trace={trace} compact sessionId="session-1" />)
+
+    expect(screen.getByRole('heading', { name: 'Evaluation summary' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open full evaluation' })).toHaveAttribute('href', '#/sessions/session-1/evaluation')
+    expect(screen.getByText('Pass')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'What to improve' })).not.toBeInTheDocument()
+    expect(screen.queryByText('The recorded workflow is complete.')).not.toBeInTheDocument()
   })
 
   it('renders annotation evidence, evaluation details, alignment, and ledger provenance', () => {
@@ -61,7 +70,7 @@ describe('InsightCards', () => {
     expect(screen.getByText('No improvement actions recorded')).toBeInTheDocument()
   })
 
-  it('explains annotation labels and promotes recorded improvement actions', () => {
+  it('promotes recorded improvement actions without adding documentation to the page', () => {
     render(<InsightCards analysis={{
       annotation: { schema_version: '1', source: 'session-annotator', turns: [], tools: [], skills: [] },
       evaluation: {
@@ -78,17 +87,11 @@ describe('InsightCards', () => {
     }} trace={trace} />)
 
     expect(screen.getByRole('heading', { name: 'What to improve' })).toBeInTheDocument()
-    expect(screen.getByText('Recorded improvement actions from the evaluator. This panel adds no recommendations of its own.')).toBeInTheDocument()
+    expect(screen.getByText('Recorded changes from the evaluator’s ledger.')).toBeInTheDocument()
     expect(screen.getByText('AGENTS.md')).toBeInTheDocument()
     expect(screen.getByText('Clarify the frontend handoff boundary.')).toBeInTheDocument()
     expect(screen.getByText('Reviewers need one unambiguous ownership rule.')).toBeInTheDocument()
-    const coverageIntro = screen.getByText('Annotation coverage', { selector: 'strong' }).closest('.analysis-guide-intro')
-    expect(coverageIntro).toHaveTextContent('Annotation coverage is the share of captured evidence with a label. It is not a pass rate.')
-    expect(screen.getByText('No observable effect; the action neither helped nor hurt.')).toBeInTheDocument()
-    expect(screen.getByText('The recorded action had an observable positive effect.')).toBeInTheDocument()
-    expect(screen.getByText('The recorded action had an observable negative effect.')).toBeInTheDocument()
-    expect(screen.getByText('The trace does not provide enough evidence to decide.')).toBeInTheDocument()
-    expect(screen.getByText('Necessary for tools and skills')).toBeInTheDocument()
+    expect(screen.queryByText('How to read these labels')).not.toBeInTheDocument()
     expect(screen.queryByText('No improvement actions recorded')).not.toBeInTheDocument()
   })
 

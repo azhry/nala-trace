@@ -20,6 +20,11 @@ const SIGNAL_SEVERITY_MEANINGS = {
   critical: 'Requires attention',
   unknown: 'Meaning not recorded',
 }
+const SIGNAL_FOLLOW_UPS = {
+  unmatched_tool_hook_pairs: 'Restore or verify completion-hook pairing for the listed tool calls before treating their necessity as known.',
+  unverified_authenticated_browser_flow: 'Run the authenticated desktop and mobile browser flow and record the result.',
+  delivery_branch_collision_recovered: 'Verify the final branch base, head, and PR after collision recovery.',
+}
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -345,27 +350,67 @@ function linkedToolCall(trace, record) {
   return toolCalls.find((call) => cleanString(call?.event_id ?? call?.eventId) === eventId) || null
 }
 
+function linkedSkillInvocation(trace, record) {
+  const invocations = safeArray(trace?.skill_invocations)
+  const eventId = cleanString(record.event_id ?? record.eventId)
+  if (eventId) {
+    const byEventId = invocations.find((invocation) => cleanString(invocation?.event_id ?? invocation?.eventId) === eventId)
+    if (byEventId) return byEventId
+  }
+
+  const skillName = cleanString(record.skill_name ?? record.skillName)
+  return invocations.find((invocation) => cleanString(invocation?.name ?? invocation?.skill_name ?? invocation?.skillName) === skillName) || null
+}
+
 function normalizeTool(record = {}, trace = {}) {
   const toolCall = linkedToolCall(trace, record)
   const toolName = cleanString(record.tool_name ?? record.toolName) || cleanString(toolCall?.tool_name ?? toolCall?.toolName) || null
   const toolUseId = cleanString(record.tool_use_id ?? record.toolUseId) || cleanString(toolCall?.tool_use_id ?? toolCall?.toolUseId) || null
   const input = record.input ?? record.tool_input ?? toolCall?.input
   const inputPreview = input == null ? null : getToolInputPreview(toolName || '', input)
+  const completionStatus = cleanString(record.completion_status ?? record.completionStatus ?? toolCall?.status ?? toolCall?.tool_status).toLowerCase() || null
+  const completionDetail = completionStatus === 'unmatched'
+    ? 'No matching completion hook was captured; the invocation is present but its completion evidence is incomplete.'
+    : completionStatus === 'completed'
+      ? 'Matching completion hook was captured.'
+      : completionStatus
+        ? `Captured completion status: ${completionStatus}.`
+        : 'Completion status not recorded.'
   return {
     eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
     toolUseId,
     toolName,
     inputPreview: inputPreview?.kind === 'missing' ? null : inputPreview?.text || null,
     inputPreviewLabel: inputPreview?.kind === 'missing' ? null : inputPreview?.label || null,
+    completionStatus,
+    completionDetail,
     necessary: validEnum(record.necessary, ANNOTATION_VERDICTS),
     rationale: cleanString(record.rationale) || 'Rationale not recorded',
   }
 }
 
-function normalizeSkill(record = {}) {
+function normalizeSkill(record = {}, trace = {}) {
+  const invocation = linkedSkillInvocation(trace, record)
+  const eventId = cleanString(record.event_id ?? record.eventId) || cleanString(invocation?.event_id ?? invocation?.eventId) || 'Event ID not recorded'
+  const skillName = cleanString(record.skill_name ?? record.skillName) || cleanString(invocation?.name ?? invocation?.skill_name ?? invocation?.skillName) || 'Skill name not recorded'
+  const toolName = cleanString(invocation?.tool_name ?? invocation?.toolName) || null
+  const toolUseId = cleanString(invocation?.tool_use_id ?? invocation?.toolUseId) || null
+  const confidence = cleanString(invocation?.confidence) || null
+  const invocationDetail = [
+    `skill: ${skillName}`,
+    toolName && `tool: ${toolName}`,
+    toolUseId && `tool use: ${toolUseId}`,
+    eventId !== 'Event ID not recorded' && `event id: ${eventId}`,
+    confidence && `confidence: ${confidence}`,
+  ].filter(Boolean).join(' · ') || 'Captured invocation details not recorded'
+
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
-    skillName: cleanString(record.skill_name ?? record.skillName) || 'Skill name not recorded',
+    eventId,
+    skillName,
+    toolName,
+    toolUseId,
+    confidence,
+    invocationDetail,
     necessary: validEnum(record.necessary, ANNOTATION_VERDICTS),
     rationale: cleanString(record.rationale) || 'Rationale not recorded',
   }
@@ -411,7 +456,7 @@ function normalizeAnnotation(annotation, trace) {
   const recorded = isObject(annotation)
   const turns = safeArray(annotation?.turns).map((record) => normalizeTurn(record, trace))
   const tools = safeArray(annotation?.tools).map((record) => normalizeTool(record, trace))
-  const skills = safeArray(annotation?.skills).map(normalizeSkill)
+  const skills = safeArray(annotation?.skills).map((record) => normalizeSkill(record, trace))
   const captured = capturedEvidenceCounts(trace)
   const performanceSummary = countVerdicts(turns, 'performance', ['improved', 'neutral', 'worsened', 'unclear']).map((item) => ({
     ...item,
@@ -467,6 +512,16 @@ function normalizeReviewSignal(record = {}, trace = {}, annotation) {
   }
 }
 
+function normalizeFollowUp(signal) {
+  return {
+    signalKey: signal.signalKey,
+    title: signal.name,
+    action: SIGNAL_FOLLOW_UPS[signal.signalKey] || 'Review this finding and record a concrete resolution.',
+    reason: signal.detail,
+    occurrenceCount: signal.count,
+  }
+}
+
 function normalizeAlignment(alignment) {
   const value = isObject(alignment) ? alignment : {}
   const status = validEnum(value.status, ALIGNMENT_STATUSES) || 'not_recorded'
@@ -496,6 +551,7 @@ function normalizeLedger(ledger) {
 function normalizeEvaluation(evaluation, trace, annotation) {
   const recorded = isObject(evaluation)
   const verdict = validEnum(evaluation?.verdict, EVALUATION_VERDICTS)
+  const reviewSignals = safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map((record) => normalizeReviewSignal(record, trace, annotation))
   return {
     recorded,
     schemaVersion: cleanString(evaluation?.schema_version ?? evaluation?.schemaVersion) || null,
@@ -503,7 +559,8 @@ function normalizeEvaluation(evaluation, trace, annotation) {
     verdict,
     verdictLabel: displayVerdict(verdict),
     critique: cleanString(evaluation?.critique) || null,
-    reviewSignals: safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map((record) => normalizeReviewSignal(record, trace, annotation)),
+    reviewSignals,
+    followUps: reviewSignals.filter((signal) => signal.severity === 'warning' || signal.severity === 'critical').map(normalizeFollowUp),
     judgeAlignment: normalizeAlignment(evaluation?.judge_alignment ?? evaluation?.judgeAlignment),
     evaluationLedger: normalizeLedger(evaluation?.evaluation_ledger ?? evaluation?.evaluationLedger),
   }

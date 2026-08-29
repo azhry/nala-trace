@@ -281,7 +281,7 @@ describe('authenticated sessions flow', () => {
     expect(await screen.findByRole('heading', { name: 'Session evaluation', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Recorded evaluation evidence' })).toBeInTheDocument()
     expect(await screen.findByText('The evaluator recorded a review concern.')).toBeInTheDocument()
-    expect(screen.getByText('review required')).toBeInTheDocument()
+    expect(screen.getAllByText('review required').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('heading', { name: 'Evaluation summary' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '← Session detail' }))
     await waitFor(() => expect(window.location.hash).toBe('#/sessions/authenticated-session'))

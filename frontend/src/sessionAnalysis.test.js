@@ -181,4 +181,99 @@ describe('session analysis view model', () => {
       ],
     })
   })
+
+  it('preserves captured invocation and completion evidence for annotation records', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '1',
+        source: 'session-annotator',
+        turns: [],
+        tools: [{
+          event_id: 'patch-pre-1',
+          tool_use_id: 'patch-use-1',
+          necessary: 'unclear',
+          rationale: 'The captured apply_patch call has no completed hook pair in this snapshot, so its necessity cannot be confirmed from complete evidence.',
+        }],
+        skills: [{
+          event_id: 'skill-pre-1',
+          skill_name: 'frontend-design',
+          necessary: 'yes',
+          rationale: 'The skill supported the required frontend design, responsive interaction, or browser verification work.',
+        }],
+      },
+      evaluation: null,
+    }, {
+      ...trace,
+      timeline: [{ id: 'patch-pre-1', hook_event_name: 'PreToolUse', tool_call_index: 0 }],
+      tool_calls: [{
+        tool_use_id: 'patch-use-1',
+        tool_name: 'apply_patch',
+        input: { patch: '*** Update File: frontend/src/App.jsx' },
+        status: 'unmatched',
+      }],
+      skill_invocations: [{
+        name: 'frontend-design',
+        event_id: 'skill-pre-1',
+        tool_use_id: 'skill-use-1',
+        tool_name: 'skill',
+        confidence: 'explicit',
+      }],
+    })
+
+    const tool = model.annotation.categories.find((category) => category.key === 'tools').records[0]
+    const skill = model.annotation.categories.find((category) => category.key === 'skills').records[0]
+
+    expect(tool).toMatchObject({
+      toolName: 'apply_patch',
+      inputPreview: expect.stringContaining('frontend/src/App.jsx'),
+      completionStatus: 'unmatched',
+      completionDetail: expect.stringContaining('No matching completion hook'),
+    })
+    expect(skill).toMatchObject({
+      skillName: 'frontend-design',
+      toolName: 'skill',
+      toolUseId: 'skill-use-1',
+      confidence: 'explicit',
+      invocationDetail: expect.stringContaining('frontend-design'),
+    })
+  })
+
+  it('derives one actionable follow-up per recorded warning signal', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: { schema_version: '1', source: 'session-annotator', turns: [], tools: [], skills: [] },
+      evaluation: {
+        schema_version: '1',
+        source: 'session-evaluator',
+        verdict: 'fail',
+        critique: 'The result has review findings.',
+        review_signals: [
+          { name: 'unmatched_tool_hook_pairs', count: 15, severity: 'warning', detail: 'Fifteen tool records have incomplete hook evidence.' },
+          { name: 'unverified_authenticated_browser_flow', count: 1, severity: 'warning', detail: 'Authenticated browser evidence is missing.' },
+          { name: 'delivery_branch_collision_recovered', count: 1, severity: 'warning', detail: 'A branch collision was recovered.' },
+          { name: 'environment_retry_without_regression', count: 1, severity: 'info', detail: 'A retry completed without regression.' },
+        ],
+        judge_alignment: { status: 'not_recorded' },
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [{ path: 'AGENTS.md', change: 'Clarify review ownership.', reason: 'The rule was ambiguous.' }],
+        },
+      },
+    }, trace)
+
+    expect(model.evaluation.followUps).toEqual([
+      expect.objectContaining({
+        signalKey: 'unmatched_tool_hook_pairs',
+        action: 'Restore or verify completion-hook pairing for the listed tool calls before treating their necessity as known.',
+        occurrenceCount: 15,
+      }),
+      expect.objectContaining({
+        signalKey: 'unverified_authenticated_browser_flow',
+        action: 'Run the authenticated desktop and mobile browser flow and record the result.',
+      }),
+      expect.objectContaining({
+        signalKey: 'delivery_branch_collision_recovered',
+        action: 'Verify the final branch base, head, and PR after collision recovery.',
+      }),
+    ])
+  })
 })

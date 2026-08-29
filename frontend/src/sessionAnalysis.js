@@ -1,6 +1,7 @@
 import { getToolInputPreview } from './traceViewModel'
 
 const EMPTY_LIST = []
+const TURN_PREVIEW_LIMIT = 240
 
 const ANNOTATION_VERDICTS = new Set(['yes', 'no', 'unclear'])
 const PERFORMANCE_VERDICTS = new Set(['improved', 'neutral', 'worsened', 'unclear'])
@@ -22,6 +23,28 @@ function safeArray(value) {
 function validEnum(value, allowed) {
   const normalized = cleanString(value).toLowerCase()
   return allowed.has(normalized) ? normalized : null
+}
+
+function contentText(value) {
+  if (typeof value === 'string') return value.trim()
+  if (Array.isArray(value)) return value.map(contentText).filter(Boolean).join(' ').trim()
+  if (!isObject(value)) return ''
+
+  for (const key of ['text', 'message', 'content', 'body', 'response', 'prompt']) {
+    const text = contentText(value[key])
+    if (text) return text
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return ''
+  }
+}
+
+function clipTurnPreview(value) {
+  const text = contentText(value).replace(/\s+/g, ' ').trim()
+  return text.length <= TURN_PREVIEW_LIMIT ? text : `${text.slice(0, TURN_PREVIEW_LIMIT).trimEnd()}…`
 }
 
 function numberOrNull(value) {
@@ -59,10 +82,36 @@ function capturedEvidenceCounts(trace = {}) {
   }
 }
 
-function normalizeTurn(record = {}) {
+function linkedConversationItem(trace, record) {
+  const conversation = safeArray(trace?.conversation)
+  const eventId = cleanString(record.event_id ?? record.eventId)
+  if (eventId) {
+    const byEventId = conversation.find((item) => cleanString(item?.event_id ?? item?.eventId) === eventId)
+    if (byEventId) return byEventId
+  }
+
+  let turnId = cleanString(record.turn_id ?? record.turnId)
+  if (!turnId && eventId) {
+    const timelineEvent = safeArray(trace?.timeline).find((event) => cleanString(event?.id) === eventId)
+    turnId = cleanString(timelineEvent?.turn_id ?? timelineEvent?.turnId)
+  }
+  if (!turnId) return null
+
+  const matching = conversation.filter((item) => cleanString(item?.turn_id ?? item?.turnId) === turnId)
+  return matching.find((item) => cleanString(item?.role).toLowerCase() === 'assistant' && contentText(item?.content))
+    || matching.find((item) => contentText(item?.content))
+    || matching[0]
+    || null
+}
+
+function normalizeTurn(record = {}, trace = {}) {
+  const conversationItem = linkedConversationItem(trace, record)
+  const turnId = cleanString(record.turn_id ?? record.turnId) || cleanString(conversationItem?.turn_id ?? conversationItem?.turnId) || null
   return {
     eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
-    turnId: cleanString(record.turn_id ?? record.turnId) || null,
+    turnId,
+    turnRole: cleanString(conversationItem?.role).toLowerCase() || null,
+    turnPreview: clipTurnPreview(conversationItem?.content) || null,
     followsInstructions: validEnum(record.follows_instructions ?? record.followsInstructions, ANNOTATION_VERDICTS),
     performance: validEnum(record.performance, PERFORMANCE_VERDICTS),
     rationale: cleanString(record.rationale) || 'Rationale not recorded',
@@ -150,13 +199,18 @@ function normalizeCategory(key, label, records, capturedCountValue, fields) {
 
 function normalizeAnnotation(annotation, trace) {
   const recorded = isObject(annotation)
-  const turns = safeArray(annotation?.turns).map(normalizeTurn)
+  const turns = safeArray(annotation?.turns).map((record) => normalizeTurn(record, trace))
   const tools = safeArray(annotation?.tools).map((record) => normalizeTool(record, trace))
   const skills = safeArray(annotation?.skills).map(normalizeSkill)
   const captured = capturedEvidenceCounts(trace)
   const performanceSummary = countVerdicts(turns, 'performance', ['improved', 'neutral', 'worsened', 'unclear']).map((item) => ({
     ...item,
     turnIds: turns.filter((turn) => turn.performance === item.value).map((turn) => turn.turnId || turn.eventId),
+    turns: turns.filter((turn) => turn.performance === item.value).map((turn) => ({
+      id: turn.turnId || turn.eventId,
+      role: turn.turnRole,
+      preview: turn.turnPreview,
+    })),
   }))
 
   return {

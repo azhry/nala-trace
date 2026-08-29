@@ -5,8 +5,8 @@ import InsightCards from './InsightCards'
 const trace = {
   schema_version: '1',
   conversation: [
-    { role: 'user', turn_id: 'turn-1' },
-    { role: 'assistant', turn_id: 'turn-1' },
+    { event_id: 'prompt-1', role: 'user', content: 'Please inspect the repository.', turn_id: 'turn-1' },
+    { event_id: 'stop-1', role: 'assistant', content: 'The assistant completed the requested inspection.', turn_id: 'turn-1' },
   ],
   tool_calls: [{ tool_use_id: 'tool-1', tool_name: 'rg', input: { cmd: 'rg --files' } }],
   skill_invocations: [],
@@ -60,7 +60,7 @@ describe('InsightCards', () => {
     expect(screen.getAllByText('1 labeled / 1 total')).toHaveLength(2)
     expect(screen.getByText('Turn performance')).toBeInTheDocument()
     expect(screen.getAllByText('Neutral').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('turn-1')).toBeInTheDocument()
+    expect(screen.getAllByText('The assistant completed the requested inspection.', { exact: false }).length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('rg')).toBeInTheDocument()
     expect(screen.getByText('tool use: tool-1')).toBeInTheDocument()
     expect(screen.getByText('rg --files', { exact: false })).toBeInTheDocument()

@@ -35,9 +35,16 @@ function evidenceValue(value) {
   return 'Unclear'
 }
 
+function turnRoleLabel(role) {
+  if (role === 'assistant') return 'Codex response'
+  if (role === 'user') return 'User prompt'
+  return 'Agent turn'
+}
+
 function EvidenceRecord({ category, record }) {
   if (category.key === 'turns') {
-    return <li className="analysis-evidence-record"><div className="analysis-evidence-record-heading"><strong>{record.turnId ? `Turn ${record.turnId}` : 'Agent turn'}</strong><code>{record.eventId}</code></div><div className="analysis-evidence-tags"><StatusPill tone={record.followsInstructions === 'no' ? 'critical' : record.followsInstructions === 'yes' ? 'positive' : 'unknown'}>Instructions: {evidenceValue(record.followsInstructions)}</StatusPill><StatusPill tone={record.performance === 'worsened' ? 'critical' : record.performance === 'improved' ? 'positive' : 'unknown'}>Performance: {evidenceValue(record.performance)}</StatusPill></div><p>{record.rationale}</p></li>
+    const identifier = record.turnId ? `turn id: ${record.turnId}` : `event id: ${record.eventId}`
+    return <li className="analysis-evidence-record"><div className="analysis-evidence-record-heading"><strong>{turnRoleLabel(record.turnRole)}</strong><code>{identifier}</code></div><div className="analysis-evidence-tags"><StatusPill tone={record.followsInstructions === 'no' ? 'critical' : record.followsInstructions === 'yes' ? 'positive' : 'unknown'}>Instructions: {evidenceValue(record.followsInstructions)}</StatusPill><StatusPill tone={record.performance === 'worsened' ? 'critical' : record.performance === 'improved' ? 'positive' : 'unknown'}>Performance: {evidenceValue(record.performance)}</StatusPill></div><div className="analysis-evidence-turn"><span>Captured content</span><p>{record.turnPreview || 'Turn content not recorded'}</p></div><p>{record.rationale}</p></li>
   }
 
   const label = category.key === 'skills' ? record.skillName : record.toolName || 'Tool name not recorded'
@@ -58,7 +65,7 @@ function AnnotationCategory({ category }) {
 }
 
 function PerformanceSummary({ annotation }) {
-  return <div className="analysis-performance-summary"><div className="analysis-subsection-heading"><span>Turn performance</span><strong>{annotation.performanceLabeledCount ? `${annotation.performanceLabeledCount} labeled` : 'Not recorded'}</strong></div><p className="analysis-performance-copy">Which annotated turns improved, stayed neutral, or worsened the result.</p>{annotation.performanceLabeledCount ? <div className="analysis-performance-values">{annotation.performanceSummary.map((item) => <div className={`analysis-performance-value ${item.value}`} key={item.value}><div><strong>{evidenceValue(item.value)}</strong><span>{item.count} {item.count === 1 ? 'turn' : 'turns'}</span></div>{item.count ? <code>{item.turnIds.join(', ')}</code> : <em>None recorded</em>}</div>)}</div> : <p className="analysis-empty-copy">No turn performance labels were recorded.</p>}</div>
+  return <div className="analysis-performance-summary"><div className="analysis-subsection-heading"><span>Turn performance</span><strong>{annotation.performanceLabeledCount ? `${annotation.performanceLabeledCount} labeled` : 'Not recorded'}</strong></div><p className="analysis-performance-copy">Which annotated turns improved, stayed neutral, or worsened the result.</p>{annotation.performanceLabeledCount ? <div className="analysis-performance-values">{annotation.performanceSummary.map((item) => <div className={`analysis-performance-value ${item.value}`} key={item.value}><div><strong>{evidenceValue(item.value)}</strong><span>{item.count} {item.count === 1 ? 'turn' : 'turns'}</span></div>{item.count ? <div className="analysis-performance-turns">{item.turns.map((turn, index) => <span className="analysis-performance-turn" key={`${turn.id}-${index}`} title={turn.id}><strong>{turnRoleLabel(turn.role)}</strong><span>{turn.preview || 'Turn content not recorded'}</span></span>)}</div> : <em>None recorded</em>}</div>)}</div> : <p className="analysis-empty-copy">No turn performance labels were recorded.</p>}</div>
 }
 
 function AnnotationPanel({ annotation }) {

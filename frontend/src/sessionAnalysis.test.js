@@ -3,9 +3,9 @@ import { normalizeSessionAnalysis } from './sessionAnalysis'
 
 const trace = {
   conversation: [
-    { role: 'user', turn_id: 'turn-1' },
-    { role: 'assistant', turn_id: 'turn-1' },
-    { role: 'user', turn_id: 'turn-2' },
+    { event_id: 'prompt-1', role: 'user', content: 'Please inspect the repository.', turn_id: 'turn-1' },
+    { event_id: 'stop-1', role: 'assistant', content: 'The assistant completed the requested inspection.', turn_id: 'turn-1' },
+    { event_id: 'prompt-2', role: 'user', content: 'Summarize the result.', turn_id: 'turn-2' },
   ],
   tool_calls: [{ tool_use_id: 'tool-1', tool_name: 'rg', input: { cmd: 'rg --files' } }, { tool_name: 'git' }],
   skill_invocations: [{ name: 'frontend-design' }],
@@ -81,11 +81,16 @@ describe('session analysis view model', () => {
       expect.objectContaining({ key: 'skills', coverageValue: '1 labeled / 1 total', coverageDetail: '100% labeled' }),
     ]))
     expect(model.annotation.performanceSummary).toEqual([
-      { value: 'improved', count: 1, turnIds: ['turn-1'] },
-      { value: 'neutral', count: 0, turnIds: [] },
-      { value: 'worsened', count: 0, turnIds: [] },
-      { value: 'unclear', count: 0, turnIds: [] },
+      { value: 'improved', count: 1, turnIds: ['turn-1'], turns: [{ id: 'turn-1', role: 'assistant', preview: 'The assistant completed the requested inspection.' }] },
+      { value: 'neutral', count: 0, turnIds: [], turns: [] },
+      { value: 'worsened', count: 0, turnIds: [], turns: [] },
+      { value: 'unclear', count: 0, turnIds: [], turns: [] },
     ])
+    expect(model.annotation.categories.find((category) => category.key === 'turns').records[0]).toMatchObject({
+      turnId: 'turn-1',
+      turnRole: 'assistant',
+      turnPreview: 'The assistant completed the requested inspection.',
+    })
     expect(model.annotation.categories.find((category) => category.key === 'tools').records[0]).toMatchObject({
       toolName: 'rg',
       toolUseId: 'tool-1',

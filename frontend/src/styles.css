@@ -217,6 +217,9 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-evidence-input { display: grid; gap: 3px; margin-top: 7px; padding: 6px; border: 1px solid var(--line); background: rgba(15,19,24,.5); }
 .analysis-evidence-input > span { color: var(--faint); font-family: var(--mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
 .analysis-evidence-input code { overflow-wrap: anywhere; color: var(--muted); font-family: var(--mono); font-size: 9px; line-height: 1.4; white-space: pre-wrap; }
+.analysis-evidence-turn { display: grid; gap: 3px; margin-top: 7px; padding: 7px; border: 1px solid var(--line); background: rgba(15,19,24,.5); }
+.analysis-evidence-turn > span { color: var(--faint); font-family: var(--mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.analysis-evidence-turn p { margin: 0; color: var(--text); font-size: 10px; line-height: 1.45; }
 .analysis-evidence-record p, .analysis-empty-copy { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .analysis-inline-empty { display: grid; gap: 4px; padding: 14px; background: var(--surface-soft); }
 .analysis-inline-empty strong { color: var(--muted); font-size: 12px; }
@@ -238,11 +241,15 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-performance-copy { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .analysis-performance-values { display: grid; gap: 5px; margin-top: 8px; }
 .analysis-performance-value { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 8px; border-left: 2px solid rgba(174,183,196,.35); background: rgba(174,183,196,.035); }
-.analysis-performance-value > div { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.analysis-performance-value > div:first-child { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .analysis-performance-value strong { color: var(--text); font-size: 10px; }
 .analysis-performance-value span { color: var(--muted); font-family: var(--mono); font-size: 9px; }
 .analysis-performance-value code, .analysis-performance-value em { min-width: 0; overflow-wrap: anywhere; color: var(--muted); font-family: var(--mono); font-size: 9px; text-align: right; }
 .analysis-performance-value em { color: var(--faint); font-style: normal; }
+.analysis-performance-turns { display: grid; gap: 4px; min-width: 0; }
+.analysis-performance-turn { display: grid; gap: 2px; min-width: 0; padding: 4px 6px; border: 1px solid var(--line); background: rgba(15,19,24,.36); }
+.analysis-performance-turn > strong { color: var(--faint); font-family: var(--mono); font-size: 8px; letter-spacing: .04em; text-align: right; text-transform: uppercase; }
+.analysis-performance-turn > span { overflow-wrap: anywhere; color: var(--muted); font-size: 9px; line-height: 1.35; text-align: right; }
 .analysis-performance-value.improved { border-left-color: rgba(117,224,168,.65); background: rgba(117,224,168,.05); }
 .analysis-performance-value.improved strong { color: var(--green); }
 .analysis-performance-value.worsened { border-left-color: rgba(239,182,110,.65); background: rgba(239,182,110,.05); }
@@ -292,8 +299,9 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
   .analysis-alignment-grid strong { display: block; margin-top: 3px; text-align: left; }
   .analysis-summary-metrics { grid-template-columns: 1fr; }
   .analysis-performance-value { display: block; }
-  .analysis-performance-value > div { display: flex; }
-  .analysis-performance-value code { display: block; margin-top: 4px; text-align: left; }
+  .analysis-performance-value > div:first-child { display: flex; }
+  .analysis-performance-value code, .analysis-performance-value em, .analysis-performance-turns { display: block; margin-top: 4px; text-align: left; }
+  .analysis-performance-turn > strong, .analysis-performance-turn > span { text-align: left; }
 }
 
 /* Session triage controls and explicit request states. */

@@ -26,7 +26,10 @@ describe('InsightCards', () => {
   it('renders explicit not-recorded state for null API analysis', () => {
     render(<InsightCards analysis={null} trace={trace} />)
 
+    const panel = screen.getByRole('complementary', { name: 'What was actually reviewed' })
     expect(screen.getByRole('heading', { name: 'What was actually reviewed' })).toBeInTheDocument()
+    expect(panel).toHaveClass('analysis-scroll-region')
+    expect(panel).toHaveAttribute('tabindex', '0')
     expect(screen.getByText('No analysis recorded')).toBeInTheDocument()
     expect(screen.getAllByText('Not recorded')).toHaveLength(3)
     expect(screen.queryByText('Pass')).not.toBeInTheDocument()
@@ -55,6 +58,37 @@ describe('InsightCards', () => {
     expect(screen.getByText('golden-set-v1')).toBeInTheDocument()
     expect(screen.getByText('nala-trace')).toBeInTheDocument()
     expect(screen.getByText('No instruction or workflow improvements were recorded.')).toBeInTheDocument()
+    expect(screen.getByText('No improvement actions recorded')).toBeInTheDocument()
+  })
+
+  it('explains annotation labels and promotes recorded improvement actions', () => {
+    render(<InsightCards analysis={{
+      annotation: { schema_version: '1', source: 'session-annotator', turns: [], tools: [], skills: [] },
+      evaluation: {
+        ...evaluation,
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [{
+            path: 'AGENTS.md',
+            change: 'Clarify the frontend handoff boundary.',
+            reason: 'Reviewers need one unambiguous ownership rule.',
+          }],
+        },
+      },
+    }} trace={trace} />)
+
+    expect(screen.getByRole('heading', { name: 'What to improve' })).toBeInTheDocument()
+    expect(screen.getByText('Recorded improvement actions from the evaluator. This panel adds no recommendations of its own.')).toBeInTheDocument()
+    expect(screen.getByText('AGENTS.md')).toBeInTheDocument()
+    expect(screen.getByText('Clarify the frontend handoff boundary.')).toBeInTheDocument()
+    expect(screen.getByText('Reviewers need one unambiguous ownership rule.')).toBeInTheDocument()
+    expect(screen.getByText('Annotation coverage is the share of captured evidence with a label. It is not a pass rate.')).toBeInTheDocument()
+    expect(screen.getByText('No observable effect; the action neither helped nor hurt.')).toBeInTheDocument()
+    expect(screen.getByText('The recorded action had an observable positive effect.')).toBeInTheDocument()
+    expect(screen.getByText('The recorded action had an observable negative effect.')).toBeInTheDocument()
+    expect(screen.getByText('The trace does not provide enough evidence to decide.')).toBeInTheDocument()
+    expect(screen.getByText('Necessary for tools and skills')).toBeInTheDocument()
+    expect(screen.queryByText('No improvement actions recorded')).not.toBeInTheDocument()
   })
 
   it('keeps an evaluator unknown verdict distinct from a missing evaluation', () => {

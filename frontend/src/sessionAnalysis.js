@@ -99,7 +99,7 @@ function coverageCopy(annotatedCount, capturedCountValue) {
   const percentage = Math.round((annotatedCount / capturedCountValue) * 100)
   return {
     value: `${annotated} / ${capturedCountValue.toLocaleString()} captured`,
-    detail: `${percentage}% of captured evidence annotated`,
+    detail: `${percentage}% of captured evidence labeled`,
   }
 }
 

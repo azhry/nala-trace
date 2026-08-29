@@ -76,9 +76,9 @@ describe('session analysis view model', () => {
       evaluation: { recorded: true, verdict: 'fail', verdictLabel: 'Fail' },
     })
     expect(model.annotation.categories).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'turns', coverageValue: '1 / 2 captured', coverageDetail: '50% of captured evidence annotated' }),
-      expect.objectContaining({ key: 'tools', coverageValue: '1 / 2 captured', coverageDetail: '50% of captured evidence annotated' }),
-      expect.objectContaining({ key: 'skills', coverageValue: '1 / 1 captured', coverageDetail: '100% of captured evidence annotated' }),
+      expect.objectContaining({ key: 'turns', coverageValue: '1 / 2 captured', coverageDetail: '50% of captured evidence labeled' }),
+      expect.objectContaining({ key: 'tools', coverageValue: '1 / 2 captured', coverageDetail: '50% of captured evidence labeled' }),
+      expect.objectContaining({ key: 'skills', coverageValue: '1 / 1 captured', coverageDetail: '100% of captured evidence labeled' }),
     ]))
     expect(model.annotation.categories[0].breakdowns[0].values).toEqual([
       { value: 'yes', count: 1 },

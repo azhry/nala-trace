@@ -165,6 +165,8 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 
 /* Session analysis: an evidence ledger alongside the captured trace. */
 .analysis-insights { min-width: 0; }
+.detail-layout .analysis-scroll-region { position: sticky; top: 18px; align-self: start; max-height: calc(100vh - 36px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.analysis-scroll-region:focus-visible { outline: 2px solid var(--purple); outline-offset: 4px; }
 .analysis-heading { align-items: start; }
 .analysis-heading .analysis-status-pill { margin-top: 2px; }
 .analysis-status-pill { display: inline-flex; width: fit-content; align-items: center; padding: 4px 6px; border: 1px solid rgba(174,183,196,.22); border-radius: 4px; color: var(--muted); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .03em; line-height: 1.2; text-transform: uppercase; white-space: nowrap; }
@@ -180,6 +182,17 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-block-heading .section-label { margin-bottom: 5px; }
 .analysis-block-heading h3 { margin: 0; color: var(--text); font-size: 15px; font-weight: 650; letter-spacing: -.02em; }
 .analysis-block-heading p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.analysis-guide { border: 1px solid rgba(131,198,245,.2); border-radius: 8px; background: rgba(131,198,245,.035); overflow: hidden; }
+.analysis-guide summary { padding: 11px 14px; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 650; }
+.analysis-guide summary::marker { color: var(--blue); }
+.analysis-guide summary:focus-visible { outline: 2px solid var(--purple); outline-offset: -3px; }
+.analysis-guide-body { padding: 0 14px 13px; border-top: 1px solid rgba(131,198,245,.15); }
+.analysis-guide-intro { margin: 10px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.analysis-guide-intro strong { color: var(--text); }
+.analysis-definition-list { display: grid; gap: 8px; margin: 11px 0 0; }
+.analysis-definition-list > div { display: grid; gap: 2px; }
+.analysis-definition-list dt { color: var(--text); font-size: 10px; font-weight: 650; }
+.analysis-definition-list dd { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .analysis-category-list { display: grid; gap: 1px; background: var(--line); }
 .analysis-category-card { min-width: 0; padding: 12px; background: var(--surface-soft); }
 .analysis-category-header { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
@@ -211,6 +224,16 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-subsection:last-child { border-bottom: 0; }
 .analysis-subsection-heading > span { color: var(--muted); font-size: 11px; font-weight: 650; }
 .analysis-subsection-heading > strong { color: var(--faint); font-family: var(--mono); font-size: 9px; font-weight: 500; }
+.analysis-actions-block { border-color: rgba(117,224,168,.3); box-shadow: inset 3px 0 rgba(117,224,168,.75); }
+.analysis-actions-block .analysis-block-heading { background: rgba(117,224,168,.045); }
+.analysis-actions-list { display: grid; gap: 8px; margin: 0; padding: 12px 14px 14px 34px; }
+.analysis-actions-list li { display: grid; gap: 9px; padding: 10px 10px 10px 12px; border-left: 2px solid rgba(117,224,168,.4); background: rgba(117,224,168,.035); }
+.analysis-action-field { display: grid; gap: 3px; min-width: 0; }
+.analysis-action-field > span { color: var(--faint); font-family: var(--mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.analysis-action-field code { overflow-wrap: anywhere; color: var(--purple); font-family: var(--mono); font-size: 10px; white-space: normal; }
+.analysis-action-field strong { color: var(--text); font-size: 10px; line-height: 1.4; }
+.analysis-action-field p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.analysis-ledger-reference { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .analysis-critique { margin: 12px 14px 0; padding: 10px; border-left: 2px solid var(--purple); background: rgba(187,165,255,.06); }
 .analysis-critique > span { display: block; color: var(--purple); font-family: var(--mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
 .analysis-critique p { margin: 6px 0 0; color: var(--text); font-size: 11px; line-height: 1.5; }
@@ -240,6 +263,7 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-not-recorded-grid strong { color: var(--muted); font-family: var(--mono); font-size: 9px; font-weight: 500; }
 
 @media (max-width: 1100px) {
+  .detail-layout .analysis-scroll-region { position: static; max-height: none; overflow: visible; overscroll-behavior: auto; scrollbar-gutter: auto; }
   .analysis-category-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 

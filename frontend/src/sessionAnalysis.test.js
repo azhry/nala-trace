@@ -134,4 +134,51 @@ describe('session analysis view model', () => {
     expect(model.annotation.categories.every((category) => category.annotatedCount === 0)).toBe(true)
     expect(model.evaluation.recorded).toBe(false)
   })
+
+  it('materializes individual unmatched-tool occurrences from annotation and trace evidence', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '1',
+        source: 'session-annotator',
+        turns: [],
+        tools: [
+          { event_id: 'pre-tool-1', tool_use_id: 'tool-1', necessary: 'unclear', rationale: 'Completion hook was unmatched.' },
+          { event_id: 'pre-tool-2', tool_use_id: 'tool-2', necessary: 'unclear', rationale: 'Completion hook was unmatched.' },
+        ],
+        skills: [],
+      },
+      evaluation: {
+        schema_version: '1',
+        source: 'session-evaluator',
+        verdict: 'fail',
+        critique: 'The trace contains unmatched tool hooks.',
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 2,
+          severity: 'warning',
+          detail: 'The persisted annotation marked two tool records unclear because their completion hooks were unmatched.',
+        }],
+        judge_alignment: { status: 'not_recorded' },
+        evaluation_ledger: { project: 'nala-trace', improvements: [] },
+      },
+    }, {
+      ...trace,
+      timeline: [
+        { id: 'pre-tool-1', hook_event_name: 'PreToolUse', tool_call_index: 0 },
+        { id: 'pre-tool-2', hook_event_name: 'PreToolUse', tool_call_index: 1 },
+      ],
+      tool_calls: [
+        { tool_use_id: 'tool-1', tool_name: 'view_image', input: { detail: 'high', path: 'one.svg' } },
+        { tool_use_id: 'tool-2', tool_name: 'rg', input: { cmd: 'rg --files' } },
+      ],
+    })
+
+    expect(model.evaluation.reviewSignals[0]).toMatchObject({
+      occurrenceCount: 2,
+      occurrences: [
+        expect.objectContaining({ label: 'view_image', toolUseId: 'tool-1', eventId: 'pre-tool-1' }),
+        expect.objectContaining({ label: 'rg', toolUseId: 'tool-2', eventId: 'pre-tool-2' }),
+      ],
+    })
+  })
 })

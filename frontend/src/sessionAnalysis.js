@@ -101,6 +101,154 @@ function traceEvidenceLabel(trace, reference) {
   return `${cleanString(timelineEvent.hook_event_name ?? timelineEvent.hookEventName) || 'Captured trace'} event`
 }
 
+function balancedJsonEnd(text, start) {
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (character === '"') {
+      inString = true
+    } else if (character === '{' || character === '[') {
+      depth += 1
+    } else if (character === '}' || character === ']') {
+      depth -= 1
+      if (depth === 0) return index
+    }
+  }
+
+  return -1
+}
+
+function parseSignalExamples(detail) {
+  const match = detail.match(/(?:example event ids?|example occurrences?|examples?)\s*:\s*(.*)$/i)
+  if (!match) return []
+
+  const source = match[1].trim().replace(/[.!?]+$/, '')
+  const examples = []
+  let cursor = 0
+  while (cursor < source.length) {
+    const objectStart = source.indexOf('{', cursor)
+    if (objectStart === -1) break
+    const labelEnd = source.lastIndexOf(':', objectStart)
+    if (labelEnd < cursor) break
+    const label = source.slice(cursor, labelEnd).replace(/^[\s,;]+|[\s,;]+$/g, '')
+    const objectEnd = balancedJsonEnd(source, objectStart)
+    if (objectEnd === -1) break
+
+    const rawInput = source.slice(objectStart, objectEnd + 1)
+    let input = null
+    try {
+      input = JSON.parse(rawInput)
+    } catch {
+      // Keep the raw evaluator detail when an example is not valid JSON.
+    }
+    examples.push({ label: label || 'Recorded occurrence', input, rawInput })
+    cursor = objectEnd + 1
+  }
+
+  return examples
+}
+
+function timelineEventForToolCall(trace, toolCall) {
+  const index = safeArray(trace?.tool_calls).indexOf(toolCall)
+  if (index === -1) return null
+  return safeArray(trace?.timeline).find((event) => (event?.tool_call_index ?? event?.toolCallIndex) === index) || null
+}
+
+function occurrenceFromToolCall(trace, toolCall, fallback = {}) {
+  const timelineEvent = timelineEventForToolCall(trace, toolCall)
+  const toolName = cleanString(toolCall?.tool_name ?? toolCall?.toolName) || cleanString(fallback.label) || 'Tool call'
+  const toolUseId = cleanString(toolCall?.tool_use_id ?? toolCall?.toolUseId) || null
+  const eventId = cleanString(timelineEvent?.id ?? toolCall?.event_id ?? toolCall?.eventId) || null
+  const input = toolCall?.input ?? toolCall?.tool_input ?? fallback.input
+  const inputPreview = input == null ? null : getToolInputPreview(toolName, input)
+  const location = [
+    eventId && `event id: ${eventId}`,
+    toolUseId && `tool use: ${toolUseId}`,
+    timelineEvent && cleanString(timelineEvent.hook_event_name ?? timelineEvent.hookEventName),
+  ].filter(Boolean).join(' · ') || 'Location not recorded'
+
+  return {
+    label: toolName,
+    toolName,
+    toolUseId,
+    eventId,
+    location,
+    inputLabel: inputPreview?.kind === 'missing' ? null : inputPreview?.label || null,
+    input: inputPreview?.kind === 'missing' ? null : inputPreview?.text || fallback.rawInput || null,
+    rationale: fallback.rationale || null,
+  }
+}
+
+function traceToolForExample(trace, example) {
+  const toolCalls = safeArray(trace?.tool_calls).filter((call) => cleanString(call?.tool_name ?? call?.toolName) === cleanString(example.label))
+  if (!toolCalls.length) return null
+  if (example.input == null) return toolCalls[0]
+
+  const serializedExample = JSON.stringify(example.input)
+  return toolCalls.find((call) => JSON.stringify(call?.input ?? call?.tool_input) === serializedExample) || toolCalls[0]
+}
+
+function annotationSignalOccurrences(signalName, annotation, trace) {
+  if (signalName !== 'unmatched_tool_hook_pairs') return []
+
+  const tools = safeArray(annotation?.tools).map((record) => normalizeTool(record, trace))
+  const unclear = tools.filter((record) => record.necessary === 'unclear')
+  const hookRelated = unclear.filter((record) => /unmatched|completion hook|hook pair/i.test(record.rationale))
+  const records = hookRelated.length ? hookRelated : unclear
+  return records.map((record) => occurrenceFromToolCall(trace, {
+    tool_name: record.toolName,
+    tool_use_id: record.toolUseId,
+    input: record.inputPreview,
+    event_id: record.eventId,
+  }, {
+    label: record.toolName,
+    rationale: record.rationale,
+  }))
+}
+
+function signalOccurrences(signalName, detail, trace, annotation) {
+  const annotatedOccurrences = annotationSignalOccurrences(signalName, annotation, trace)
+  if (annotatedOccurrences.length) return annotatedOccurrences
+
+  const examples = parseSignalExamples(detail)
+  if (examples.length) {
+    return examples.map((example) => {
+      const toolCall = traceToolForExample(trace, example)
+      return toolCall
+        ? occurrenceFromToolCall(trace, toolCall, example)
+        : occurrenceFromToolCall(trace, { tool_name: example.label, input: example.input }, example)
+    })
+  }
+
+  return Array.from(detail.matchAll(/ObjectI[Dd]\("([^"]+)"\)/g)).map((match) => {
+    const reference = `ObjectID("${match[1]}")`
+    return {
+      label: traceEvidenceLabel(trace, reference) || reference,
+      toolName: null,
+      toolUseId: null,
+      eventId: match[1],
+      location: reference,
+      inputLabel: null,
+      input: null,
+      rationale: null,
+    }
+  })
+}
+
 function readableSignalDetail(detail, trace) {
   return detail.replace(/ObjectI[Dd]\("([^"]+)"\)/g, (reference) => {
     const label = traceEvidenceLabel(trace, reference)
@@ -253,6 +401,7 @@ function normalizeCategory(key, label, records, capturedCountValue, fields) {
     coverageDetail: coverage.detail,
     breakdowns: fields.map(({ label: fieldLabel, key: fieldKey, values }) => ({
       label: fieldLabel,
+      key: fieldKey,
       values: countVerdicts(records, fieldKey, values),
     })),
   }
@@ -302,15 +451,19 @@ function displayVerdict(value) {
   return 'Not recorded'
 }
 
-function normalizeReviewSignal(record = {}, trace = {}) {
+function normalizeReviewSignal(record = {}, trace = {}, annotation) {
   const severity = validEnum(record.severity, new Set(['info', 'warning', 'critical', 'unknown'])) || 'unknown'
   const detail = cleanString(record.detail) || 'Signal detail not recorded'
+  const signalName = cleanString(record.name)
   return {
-    name: humanizeSignalName(record.name),
+    signalKey: signalName || null,
+    name: humanizeSignalName(signalName),
     count: numberOrNull(record.count),
     severity,
     severityMeaning: SIGNAL_SEVERITY_MEANINGS[severity],
     detail: readableSignalDetail(detail, trace),
+    occurrenceCount: numberOrNull(record.count),
+    occurrences: signalOccurrences(signalName, detail, trace, annotation),
   }
 }
 
@@ -340,7 +493,7 @@ function normalizeLedger(ledger) {
   }
 }
 
-function normalizeEvaluation(evaluation, trace) {
+function normalizeEvaluation(evaluation, trace, annotation) {
   const recorded = isObject(evaluation)
   const verdict = validEnum(evaluation?.verdict, EVALUATION_VERDICTS)
   return {
@@ -350,7 +503,7 @@ function normalizeEvaluation(evaluation, trace) {
     verdict,
     verdictLabel: displayVerdict(verdict),
     critique: cleanString(evaluation?.critique) || null,
-    reviewSignals: safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map((record) => normalizeReviewSignal(record, trace)),
+    reviewSignals: safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map((record) => normalizeReviewSignal(record, trace, annotation)),
     judgeAlignment: normalizeAlignment(evaluation?.judge_alignment ?? evaluation?.judgeAlignment),
     evaluationLedger: normalizeLedger(evaluation?.evaluation_ledger ?? evaluation?.evaluationLedger),
   }
@@ -359,7 +512,7 @@ function normalizeEvaluation(evaluation, trace) {
 export function normalizeSessionAnalysis(analysis, trace = {}) {
   const value = isObject(analysis) ? analysis : {}
   const annotation = normalizeAnnotation(value.annotation, trace)
-  const evaluation = normalizeEvaluation(value.evaluation, trace)
+  const evaluation = normalizeEvaluation(value.evaluation, trace, value.annotation)
 
   return {
     recorded: annotation.recorded || evaluation.recorded,

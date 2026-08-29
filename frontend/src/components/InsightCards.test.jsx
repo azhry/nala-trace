@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import InsightCards from './InsightCards'
 
@@ -71,6 +71,9 @@ describe('InsightCards', () => {
     expect(screen.getByText('files read before write')).toBeInTheDocument()
     expect(screen.getByText('Warning = a review concern. Info = context, not a failure.')).toBeInTheDocument()
     expect(screen.getByText('1 occurrence · Info')).toBeInTheDocument()
+    expect(screen.getAllByText('Follows instructions: Yes').some((element) => element.tagName === 'SPAN')).toBe(true)
+    expect(screen.getAllByText('Necessary for task: No').some((element) => element.tagName === 'SPAN')).toBe(true)
+    expect(screen.getByText(/Follows instructions means whether the captured turn followed/)).toBeInTheDocument()
     expect(screen.getByText('Aligned')).toBeInTheDocument()
     expect(screen.getByText('golden-set-v1')).toBeInTheDocument()
     expect(screen.getByText('No improvement actions recorded')).toBeInTheDocument()
@@ -119,6 +122,54 @@ describe('InsightCards', () => {
     expect(screen.getByText('Unmatched event: Codex response: The assistant completed the requested inspection.')).toBeInTheDocument()
     expect(screen.getByText('2 occurrences · Warning')).toBeInTheDocument()
     expect(screen.getByText('Review concern')).toBeInTheDocument()
+  })
+
+  it('shows individual signal examples and filters annotation evidence by decision', () => {
+    render(<InsightCards analysis={{
+      annotation: {
+        schema_version: '1',
+        source: 'session-annotator',
+        turns: [
+          { event_id: 'stop-1', turn_id: 'turn-1', follows_instructions: 'yes', performance: 'neutral', rationale: 'The turn followed instructions.' },
+          { event_id: 'stop-2', turn_id: 'turn-2', follows_instructions: 'no', performance: 'worsened', rationale: 'The turn broke an instruction.' },
+        ],
+        tools: [],
+        skills: [],
+      },
+      evaluation: {
+        ...evaluation,
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 2,
+          severity: 'warning',
+          detail: 'Example event IDs: mcp__codex_apps__linear__list_comments: {"issueId":"issue-1"}, view_image: {"detail":"high","path":"before.svg"}.',
+        }],
+      },
+    }} trace={{
+      ...trace,
+      conversation: [
+        ...trace.conversation,
+        { event_id: 'stop-2', role: 'assistant', content: 'The second captured response.', turn_id: 'turn-2' },
+      ],
+      tool_calls: [
+        { tool_name: 'mcp__codex_apps__linear__list_comments', input: { issueId: 'issue-1' } },
+        { tool_name: 'view_image', input: { detail: 'high', path: 'before.svg' } },
+      ],
+    }} />)
+
+    expect(screen.getByText('2 examples shown of 2 recorded occurrences')).toBeInTheDocument()
+    expect(screen.getByText('mcp__codex_apps__linear__list_comments')).toBeInTheDocument()
+    expect(screen.getAllByText(/issueId.*issue-1/).some((element) => element.tagName === 'CODE')).toBe(true)
+    expect(screen.getByText('view_image')).toBeInTheDocument()
+    expect(screen.getAllByText(/path.*before\.svg/).some((element) => element.tagName === 'CODE')).toBe(true)
+    expect(screen.getByLabelText('Evidence type')).toBeInTheDocument()
+    expect(screen.getByLabelText('Annotation decision')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Annotation decision'), { target: { value: 'followsInstructions:no' } })
+
+    expect(screen.getByText('Showing 1 of 2 labeled records')).toBeInTheDocument()
+    expect(screen.getByText('The turn broke an instruction.')).toBeInTheDocument()
+    expect(screen.queryByText('The turn followed instructions.')).not.toBeInTheDocument()
   })
 
   it('keeps an evaluator unknown verdict distinct from a missing evaluation', () => {

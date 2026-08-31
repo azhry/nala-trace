@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
 import { AuthHandoffError, readNalaLabsAuthCode, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import InsightCards from './components/InsightCards'
+import EvaluationPage from './components/EvaluationPage'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
 import ScrollToTopButton from './components/ScrollToTopButton'
@@ -10,6 +11,8 @@ import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries
 
 function parseRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '') || 'sessions'
+  const evaluationMatch = path.match(/^sessions\/([^/]+)\/evaluation$/)
+  if (evaluationMatch) return { view: 'evaluation', sessionId: decodeURIComponent(evaluationMatch[1]) }
   const match = path.match(/^sessions\/([^/]+)$/)
   return match ? { view: 'detail', sessionId: decodeURIComponent(match[1]) } : { view: 'sessions', sessionId: null }
 }
@@ -83,7 +86,8 @@ function AuthBoundary({ apiState, handoffState, onRetry }) {
 
 function Topbar({ route, session, apiState, onSignOut }) {
   const source = dataSourceCopy(apiState)
-  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}<button type="button" className="sign-out-button" onClick={() => onSignOut()}>Sign out</button></div></header>
+  const pageLabel = route.view === 'evaluation' ? 'Session evaluation' : route.view === 'detail' ? 'Session detail' : 'Sessions'
+  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{pageLabel}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{(route.view === 'detail' || route.view === 'evaluation') && <span className="topbar-session">{session?.id}</span>}<button type="button" className="sign-out-button" onClick={() => onSignOut()}>Sign out</button></div></header>
 }
 
 function SessionStats({ sessions }) {
@@ -95,7 +99,7 @@ function SessionStats({ sessions }) {
     if (!current || (session.lastEventTime || 0) > (current.lastEventTime || 0)) return session
     return current
   }, null)
-  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>available to this account</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div><div aria-label={`${mcpCalls} MCP calls across ${mcpServers.length} unique MCP servers`}><span>MCP calls</span><strong>{mcpCalls.toLocaleString()}</strong><small>{mcpServers.length ? `${mcpServers.length} unique servers` : 'No MCP servers recorded'}</small>{mcpServers.length > 0 && <span className="workspace-stat-server-list" title={mcpServers.join(', ')}>MCP: {mcpServers.join(' · ')}</span>}</div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>evaluation signal when available</small></div><div><span>Last captured</span><strong>{latest ? formatSessionDate(latest.lastEventAt) : '—'}</strong><small>most recent event</small></div></div>
+  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{sessions.length.toLocaleString()}</strong><small>available to this account</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div><div aria-label={`${mcpCalls} MCP calls across ${mcpServers.length} unique MCP servers`}><span>MCP calls</span><strong>{mcpCalls.toLocaleString()}</strong><small>{mcpServers.length ? `${mcpServers.length} unique servers` : 'No MCP servers recorded'}</small>{mcpServers.length > 0 && <span className="workspace-stat-server-list" title={mcpServers.join(', ')}>MCP: {mcpServers.join(' · ')}</span>}</div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{attention.toLocaleString()}</strong><small>evaluation signal when available</small></div><div><span>Last captured</span><strong>{latest ? formatSessionDate(latest.lastEventAt) : '—'}</strong><small>most recent event</small></div></div>
 }
 
 function DataSourceNotice({ apiState }) {
@@ -118,7 +122,7 @@ function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, fi
 function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry }) {
   const source = dataSourceCopy(apiState)
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} />{traceState === 'loading' && <TraceLoadingPanel />}<SessionMetadata session={session} />{traceState !== 'loading' && <div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards insights={session.insights || { metrics: [] }} /></div>}</section>
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || statusLabel}</span></div></div><DataSourceNotice apiState={apiState} />{traceState === 'loading' && <TraceLoadingPanel />}<SessionMetadata session={session} />{traceState !== 'loading' && <div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards analysis={session.analysis ?? null} trace={session} insights={session.insights} compact sessionId={session.id} /></div>}</section>
 }
 
 export default function App() {
@@ -212,7 +216,7 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true
-    if (apiState !== 'connected' || route.view !== 'detail' || !route.sessionId) {
+    if (apiState !== 'connected' || !['detail', 'evaluation'].includes(route.view) || !route.sessionId) {
       setRemoteTrace(null)
       setTraceSessionId(null)
       setTraceRequestSessionId(null)
@@ -238,5 +242,6 @@ export default function App() {
   if (apiState !== 'connected') return <AuthBoundary apiState={apiState} handoffState={handoffState} onRetry={loadSessions} />
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  const showEvaluation = route.view === 'evaluation' && apiState === 'connected' && detailSession
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} traceState={detailTraceState} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

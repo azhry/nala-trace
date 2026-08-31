@@ -106,8 +106,9 @@ curl --fail-with-body --silent --show-error http://127.0.0.1:3003/healthz
 The analysis endpoints use schema version `1`. The annotator records
 instruction-following, tool/skill necessity, and performance impact by trace
 event ID. The evaluator records `pass`, `fail`, or `unknown`, evidence-based
-review signals, optional real judge alignment, and a project-owned improvement
-ledger. The skills' `references/result-schema.md` files are the canonical
+review signals, optional real judge alignment, and an agent/instruction
+improvement ledger scoped to the evaluated project. The skills'
+`references/result-schema.md` files are the canonical
 request examples. Analysis is stored in the MongoDB `session_analysis`
 collection with an owner/session unique key; raw trace events remain
 append-only.

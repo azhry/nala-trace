@@ -25,7 +25,20 @@ const SIGNAL_FOLLOW_UPS = {
   unverified_authenticated_browser_flow: 'Run the authenticated desktop and mobile browser flow and record the result.',
   delivery_branch_collision_recovered: 'Verify the final branch base, head, and PR after collision recovery.',
 }
-const AGENT_BEHAVIOR_TARGETS = new Set(['agent', 'agent behavior', 'agent action', 'agent actions', 'agent_behavior', 'agent-action', 'agent-actions'])
+const AGENT_TARGET_LABELS = new Map([
+  ['agent', 'Agent behavior'],
+  ['agent behavior', 'Agent behavior'],
+  ['agent action', 'Agent behavior'],
+  ['agent actions', 'Agent behavior'],
+  ['instructions', 'Agent instructions'],
+  ['instruction', 'Agent instructions'],
+  ['agent instruction', 'Agent instructions'],
+  ['agent instructions', 'Agent instructions'],
+  ['skill', 'Skill instructions'],
+  ['skills', 'Skill instructions'],
+  ['workflow', 'Workflow instructions'],
+  ['workflows', 'Workflow instructions'],
+])
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -41,7 +54,9 @@ function normalizedPath(value) {
 
 function agentRelativePath(value) {
   const path = normalizedPath(value)
-  const markerIndex = path.toLowerCase().lastIndexOf('/.agents/')
+  const lowerPath = path.toLowerCase()
+  const markers = ['/.agents/', '/.codex/', '/.claude/', '/.cursor/']
+  const markerIndex = Math.max(...markers.map((marker) => lowerPath.lastIndexOf(marker)))
   return markerIndex === -1 ? path : path.slice(markerIndex + 1)
 }
 
@@ -49,28 +64,41 @@ function targetKey(value) {
   return cleanString(value).toLowerCase().replace(/[-_]+/g, ' ')
 }
 
+function instructionPathTarget(path) {
+  const relativePath = agentRelativePath(path)
+  const lowerPath = relativePath.toLowerCase()
+  if (lowerPath === 'agents.md' || lowerPath === 'claude.md' || lowerPath === 'codex.md') {
+    return { kind: 'instruction', label: 'Agent instructions', target: relativePath, path: relativePath }
+  }
+  if (/^(?:\.agents\/skills|\.codex\/skills|\.claude\/skills|\.cursor\/skills)\/.+\.md$/i.test(relativePath)) {
+    return { kind: 'skill', label: 'Skill instructions', target: relativePath, path: relativePath }
+  }
+  if (/^(?:\.agents\/workflows|\.codex\/workflows|\.claude\/workflows|\.cursor\/workflows)\/.+\.md$/i.test(relativePath)) {
+    return { kind: 'workflow', label: 'Workflow instructions', target: relativePath, path: relativePath }
+  }
+  if (/^(?:\.agents|\.codex|\.claude|\.cursor)\/.+\.md$/i.test(relativePath)) {
+    return { kind: 'instruction', label: 'Agent instructions', target: relativePath, path: relativePath }
+  }
+  return null
+}
+
 function classifyImprovementTarget(improvement = {}) {
   const path = normalizedPath(improvement.path ?? improvement.file ?? improvement.destination)
-  const relativePath = agentRelativePath(path)
   const explicitTarget = targetKey(improvement.target ?? improvement.target_type ?? improvement.targetType)
   const pathTarget = targetKey(path)
+  const explicitLabel = AGENT_TARGET_LABELS.get(explicitTarget)
+  const pathInstructionTarget = instructionPathTarget(path)
 
-  if (AGENT_BEHAVIOR_TARGETS.has(explicitTarget || pathTarget) && (!path || AGENT_BEHAVIOR_TARGETS.has(pathTarget))) {
-    return { valid: true, kind: 'agent', label: 'Agent behavior', target: 'Agent behavior', path: null }
+  if (explicitLabel && (!path || explicitTarget === 'agent' || explicitTarget === 'agent behavior' || explicitTarget === 'agent action' || explicitTarget === 'agent actions' || pathInstructionTarget)) {
+    if (pathInstructionTarget) return { valid: true, ...pathInstructionTarget }
+    return { valid: true, kind: explicitTarget === 'skill' || explicitTarget === 'skills' ? 'skill' : explicitTarget === 'workflow' || explicitTarget === 'workflows' ? 'workflow' : explicitLabel === 'Agent instructions' ? 'instruction' : 'agent', label: explicitLabel, target: explicitLabel, path: null }
   }
 
-  const lowerPath = relativePath.toLowerCase()
-  if (lowerPath === 'agents.md' || lowerPath === 'claude.md') {
-    return { valid: true, kind: 'instruction', label: 'Agent instructions', target: relativePath, path: relativePath }
-  }
-  if (/^\.agents\/skills\/.+\.md$/i.test(relativePath)) {
-    return { valid: true, kind: 'skill', label: 'Skill instructions', target: relativePath, path: relativePath }
-  }
-  if (/^\.agents\/workflows\/.+\.md$/i.test(relativePath)) {
-    return { valid: true, kind: 'workflow', label: 'Workflow instructions', target: relativePath, path: relativePath }
-  }
-  if (/^\.agents\/.+\.md$/i.test(relativePath)) {
-    return { valid: true, kind: 'instruction', label: 'Agent instructions', target: relativePath, path: relativePath }
+  if (pathInstructionTarget) return { valid: true, ...pathInstructionTarget }
+
+  if (AGENT_TARGET_LABELS.has(pathTarget)) {
+    const label = AGENT_TARGET_LABELS.get(pathTarget)
+    return { valid: true, kind: label === 'Skill instructions' ? 'skill' : label === 'Workflow instructions' ? 'workflow' : label === 'Agent instructions' ? 'instruction' : 'agent', label, target: label, path: null }
   }
 
   return {

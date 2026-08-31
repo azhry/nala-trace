@@ -143,6 +143,30 @@ describe('session analysis view model', () => {
     expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([])
   })
 
+  it('recognizes equivalent agent instruction locations and semantic targets', () => {
+    const model = normalizeSessionAnalysis({
+      evaluation: {
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [
+            { path: 'CODEX.md', change: 'Document the verification boundary.', reason: 'The agent did not know which evidence was required.' },
+            { path: '.codex/hooks.md', change: 'Require completed hook evidence.', reason: 'The evaluator found unmatched tool hooks.' },
+            { target: 'skill', change: 'Keep the skill selection rule explicit.', reason: 'The agent needs a reusable instruction.' },
+            { target: 'workflow', change: 'Require the authenticated browser check.', reason: 'The workflow omitted a required verification step.' },
+          ],
+        },
+      },
+    })
+
+    expect(model.evaluation.evaluationLedger.improvements).toEqual([
+      expect.objectContaining({ target: 'CODEX.md', targetKind: 'instruction', targetLabel: 'Agent instructions', targetValid: true }),
+      expect.objectContaining({ target: '.codex/hooks.md', targetKind: 'instruction', targetLabel: 'Agent instructions', targetValid: true }),
+      expect.objectContaining({ target: 'Skill instructions', targetKind: 'skill', targetLabel: 'Skill instructions', targetValid: true }),
+      expect.objectContaining({ target: 'Workflow instructions', targetKind: 'workflow', targetLabel: 'Workflow instructions', targetValid: true }),
+    ])
+    expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([])
+  })
+
   it('moves legacy project-source targets out of the actionable ledger', () => {
     const model = normalizeSessionAnalysis({
       evaluation: {

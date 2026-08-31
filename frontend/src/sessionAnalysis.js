@@ -25,6 +25,7 @@ const SIGNAL_FOLLOW_UPS = {
   unverified_authenticated_browser_flow: 'Run the authenticated desktop and mobile browser flow and record the result.',
   delivery_branch_collision_recovered: 'Verify the final branch base, head, and PR after collision recovery.',
 }
+const AGENT_BEHAVIOR_TARGETS = new Set(['agent', 'agent behavior', 'agent action', 'agent actions', 'agent_behavior', 'agent-action', 'agent-actions'])
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -32,6 +33,56 @@ function isObject(value) {
 
 function cleanString(value) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizedPath(value) {
+  return cleanString(value).replace(/\\/g, '/').replace(/^\.\//, '')
+}
+
+function agentRelativePath(value) {
+  const path = normalizedPath(value)
+  const markerIndex = path.toLowerCase().lastIndexOf('/.agents/')
+  return markerIndex === -1 ? path : path.slice(markerIndex + 1)
+}
+
+function targetKey(value) {
+  return cleanString(value).toLowerCase().replace(/[-_]+/g, ' ')
+}
+
+function classifyImprovementTarget(improvement = {}) {
+  const path = normalizedPath(improvement.path ?? improvement.file ?? improvement.destination)
+  const relativePath = agentRelativePath(path)
+  const explicitTarget = targetKey(improvement.target ?? improvement.target_type ?? improvement.targetType)
+  const pathTarget = targetKey(path)
+
+  if (AGENT_BEHAVIOR_TARGETS.has(explicitTarget || pathTarget) && (!path || AGENT_BEHAVIOR_TARGETS.has(pathTarget))) {
+    return { valid: true, kind: 'agent', label: 'Agent behavior', target: 'Agent behavior', path: null }
+  }
+
+  const lowerPath = relativePath.toLowerCase()
+  if (lowerPath === 'agents.md' || lowerPath === 'claude.md') {
+    return { valid: true, kind: 'instruction', label: 'Agent instructions', target: relativePath, path: relativePath }
+  }
+  if (/^\.agents\/skills\/.+\.md$/i.test(relativePath)) {
+    return { valid: true, kind: 'skill', label: 'Skill instructions', target: relativePath, path: relativePath }
+  }
+  if (/^\.agents\/workflows\/.+\.md$/i.test(relativePath)) {
+    return { valid: true, kind: 'workflow', label: 'Workflow instructions', target: relativePath, path: relativePath }
+  }
+  if (/^\.agents\/.+\.md$/i.test(relativePath)) {
+    return { valid: true, kind: 'instruction', label: 'Agent instructions', target: relativePath, path: relativePath }
+  }
+
+  return {
+    valid: false,
+    kind: 'legacy_out_of_scope',
+    label: 'Out of scope — project source',
+    target: path || 'Target not recorded',
+    path: path || null,
+    reason: path
+      ? 'This saved action points to project source, so it is shown for traceability only and excluded from agent improvements.'
+      : 'This saved action has no agent behavior or instruction Markdown target, so it is shown for traceability only and excluded from agent improvements.',
+  }
 }
 
 function safeArray(value) {
@@ -537,14 +588,25 @@ function normalizeAlignment(alignment) {
 
 function normalizeLedger(ledger) {
   const value = isObject(ledger) ? ledger : {}
+  const improvements = safeArray(value.improvements).map((improvement = {}) => {
+    const target = classifyImprovementTarget(improvement)
+    return {
+      path: target.path,
+      target: target.target,
+      targetKind: target.kind,
+      targetLabel: target.label,
+      targetValid: target.valid,
+      outOfScopeReason: target.reason || null,
+      change: cleanString(improvement.change) || 'Change not recorded',
+      reason: cleanString(improvement.reason) || 'Reason not recorded',
+    }
+  })
   return {
     recorded: isObject(ledger),
     project: cleanString(value.project) || null,
-    improvements: safeArray(value.improvements).map((improvement = {}) => ({
-      path: cleanString(improvement.path) || 'Path not recorded',
-      change: cleanString(improvement.change) || 'Change not recorded',
-      reason: cleanString(improvement.reason) || 'Reason not recorded',
-    })),
+    projectContextOnly: true,
+    improvements: improvements.filter((improvement) => improvement.targetValid),
+    legacyImprovements: improvements.filter((improvement) => !improvement.targetValid),
   }
 }
 

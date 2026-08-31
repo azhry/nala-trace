@@ -110,7 +110,60 @@ describe('session analysis view model', () => {
       detail: expect.stringContaining('Codex response'),
     })
     expect(model.evaluation.judgeAlignment).toMatchObject({ status: 'not_aligned', label: 'Not aligned', agreement: false })
-    expect(model.evaluation.evaluationLedger.improvements[0]).toMatchObject({ path: 'AGENTS.md' })
+    expect(model.evaluation.evaluationLedger).toMatchObject({ project: 'nala-trace', projectContextOnly: true })
+    expect(model.evaluation.evaluationLedger.improvements[0]).toMatchObject({
+      path: 'AGENTS.md',
+      target: 'AGENTS.md',
+      targetKind: 'instruction',
+      targetLabel: 'Agent instructions',
+      targetValid: true,
+    })
+    expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([])
+  })
+
+  it('keeps agent behavior and instruction Markdown targets in the actionable ledger', () => {
+    const model = normalizeSessionAnalysis({
+      evaluation: {
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [
+            { path: 'agent behavior', change: 'Use a bounded verification loop.', reason: 'The agent stopped before checking the rendered result.' },
+            { path: '.agents/skills/session-evaluator/references/result-schema.md', change: 'State the target boundary.', reason: 'The evaluation had no safe destination for its next step.' },
+            { path: '.agents/workflows/frontend.md', change: 'Require the mobile check.', reason: 'The responsive flow was not observed.' },
+          ],
+        },
+      },
+    })
+
+    expect(model.evaluation.evaluationLedger.improvements).toEqual([
+      expect.objectContaining({ target: 'Agent behavior', targetKind: 'agent', targetLabel: 'Agent behavior', targetValid: true }),
+      expect.objectContaining({ target: '.agents/skills/session-evaluator/references/result-schema.md', targetKind: 'skill', targetLabel: 'Skill instructions', targetValid: true }),
+      expect.objectContaining({ target: '.agents/workflows/frontend.md', targetKind: 'workflow', targetLabel: 'Workflow instructions', targetValid: true }),
+    ])
+    expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([])
+  })
+
+  it('moves legacy project-source targets out of the actionable ledger', () => {
+    const model = normalizeSessionAnalysis({
+      evaluation: {
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [{ path: 'frontend/src/App.jsx', change: 'Refactor the component.', reason: 'The page is hard to scan.' }],
+        },
+      },
+    })
+
+    expect(model.evaluation.evaluationLedger.improvements).toEqual([])
+    expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([
+      expect.objectContaining({
+        path: 'frontend/src/App.jsx',
+        target: 'frontend/src/App.jsx',
+        targetKind: 'legacy_out_of_scope',
+        targetLabel: 'Out of scope — project source',
+        targetValid: false,
+        outOfScopeReason: expect.stringContaining('shown for traceability only'),
+      }),
+    ])
   })
 
   it.each([

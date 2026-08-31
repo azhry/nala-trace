@@ -230,7 +230,10 @@ func (result EvaluationResult) Validate() error {
 		return &AnalysisValidationError{Field: "evaluation_ledger.improvements", Code: "too many records"}
 	}
 	for index, improvement := range result.EvaluationLedger.Improvements {
-		for field, value := range map[string]string{"path": improvement.Path, "change": improvement.Change, "reason": improvement.Reason} {
+		if err := validateImprovementTarget(improvement.Path, fmt.Sprintf("evaluation_ledger.improvements[%d].path", index)); err != nil {
+			return err
+		}
+		for field, value := range map[string]string{"change": improvement.Change, "reason": improvement.Reason} {
 			if err := validateShortString(value, fmt.Sprintf("evaluation_ledger.improvements[%d].%s", index, field), true); err != nil {
 				return err
 			}
@@ -268,6 +271,34 @@ func validateEventID(value, field string) error {
 
 func validateRationale(value, field string, optional bool) error {
 	return validateShortString(value, field, !optional, maxRationaleLength)
+}
+
+func validateImprovementTarget(value, field string) error {
+	if err := validateShortString(value, field, true); err != nil {
+		return err
+	}
+
+	target := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), `\`, "/"))
+	switch target {
+	case "agent", "agent behavior", "instructions", "skill", "workflow":
+		return nil
+	}
+
+	for _, prefix := range []string{".agents/", ".codex/", ".claude/", ".cursor/"} {
+		if strings.HasPrefix(target, prefix) && strings.HasSuffix(target, ".md") {
+			return nil
+		}
+	}
+
+	base := target
+	if separator := strings.LastIndexByte(base, '/'); separator >= 0 {
+		base = base[separator+1:]
+	}
+	if base == "agents.md" || base == "claude.md" || base == "codex.md" {
+		return nil
+	}
+
+	return &AnalysisValidationError{Field: field, Code: "must target agent behavior or an agent instruction file"}
 }
 
 func validateShortString(value, field string, required bool, limits ...int) error {

@@ -14,7 +14,7 @@ Evaluate a captured Nala Trace session after annotation. The evaluation must be 
 3. Set `pass` only when the session satisfies the applicable requirements with sufficient evidence. Set `fail` for a material defect or instruction violation. Set `unknown` when evidence is incomplete or contradictory.
 4. Record review signals as counted, named observations (for example, unnecessary tool use, missing verification, or a required skill not invoked). Keep each detail tied to event IDs or paths.
 5. Set judge alignment to `not_recorded` unless a real human/dataset label is present. Never invent a human label, agreement value, or benchmark result.
-6. Record the evaluating project and concrete local instruction/workflow improvements in the ledger. Use an empty improvements array when no evidence supports a change.
+6. Record the evaluating project as context, then record only concrete improvements to agent behavior or agent instruction artifacts in the ledger. Valid targets are agent behavior, `AGENTS.md`/equivalent agent guidance, or files under agent instruction/skill/workflow directories such as `.agents/`. Do not recommend changing product source, application behavior, or the evaluated project itself. Use an empty improvements array when no evidence supports an agent-facing change.
 7. Validate [result-schema.md](references/result-schema.md), persist with `POST /sessions/{session_id}/evaluation`, and re-read `GET /sessions/{session_id}` to verify the stored result.
 
 ## Boundaries

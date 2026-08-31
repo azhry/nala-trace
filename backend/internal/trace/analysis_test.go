@@ -65,3 +65,47 @@ func TestEvaluationValidateRequiresLedgerProject(t *testing.T) {
 		t.Fatalf("Validate() error = %v, want missing ledger project", err)
 	}
 }
+
+func TestEvaluationValidateRequiresAgentOrInstructionImprovementTargets(t *testing.T) {
+	result := EvaluationResult{
+		SchemaVersion: AnalysisSchemaVersion,
+		Source:        "session-evaluator",
+		Verdict:       EvaluationPass,
+		Critique:      "The trace meets the applicable requirements.",
+		EvaluationLedger: EvaluationLedger{
+			Project: "nala-trace",
+			Improvements: []Improvement{{
+				Path:   "backend/internal/server/handler.go",
+				Change: "Change the project implementation.",
+				Reason: "The code could be clearer.",
+			}},
+		},
+	}
+
+	if err := result.Validate(); err == nil || !strings.Contains(err.Error(), "must target agent behavior") {
+		t.Fatalf("Validate() error = %v, want agent-target restriction", err)
+	}
+}
+
+func TestEvaluationValidateAllowsAgentInstructionImprovementTargets(t *testing.T) {
+	for _, path := range []string{"agent behavior", "AGENTS.md", ".agents/workflows/frontend.md", `.codex\\hooks.md`} {
+		result := EvaluationResult{
+			SchemaVersion: AnalysisSchemaVersion,
+			Source:        "session-evaluator",
+			Verdict:       EvaluationPass,
+			Critique:      "The trace meets the applicable requirements.",
+			EvaluationLedger: EvaluationLedger{
+				Project: "nala-trace",
+				Improvements: []Improvement{{
+					Path:   path,
+					Change: "Make the agent workflow explicit.",
+					Reason: "The trace showed an avoidable workflow gap.",
+				}},
+			},
+		}
+
+		if err := result.Validate(); err != nil {
+			t.Fatalf("Validate() error for %q = %v", path, err)
+		}
+	}
+}

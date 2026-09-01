@@ -137,7 +137,7 @@ func TestSessionTraceHandlerReturnsCompleteFixtureResponse(t *testing.T) {
 	}
 	wantFields := map[string]bool{
 		"schema_version": true, "session_id": true, "user_id": true, "timeline": true,
-		"conversation": true, "tool_calls": true, "skill_invocations": true, "files": true, "summary": true, "runtime_metadata": true,
+		"conversation": true, "tool_calls": true, "skill_invocations": true, "files": true, "summary": true, "runtime_metadata": true, "analysis": true,
 	}
 	if len(fields) != len(wantFields) {
 		t.Fatalf("response field count = %d, want %d: %#v", len(fields), len(wantFields), fields)

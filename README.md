@@ -95,7 +95,22 @@ curl --fail-with-body --silent --show-error http://127.0.0.1:3003/healthz
 
 - `POST /ingest` — accept one authenticated Codex hook event.
 - `GET /sessions` — list owner-scoped session summaries.
-- `GET /sessions/:id` — read one reconstructed owner-scoped trace.
+- `GET /sessions/:id` — read one reconstructed owner-scoped trace with its
+  `analysis.annotation` and `analysis.evaluation` results. Both values are
+  `null` until the corresponding analysis is persisted.
+- `POST /sessions/:id/annotations` — persist the structured result produced by
+  `.agents/skills/session-annotator`.
+- `POST /sessions/:id/evaluation` — persist the structured result produced by
+  `.agents/skills/session-evaluator` after annotation.
+
+The analysis endpoints use schema version `1`. The annotator records
+instruction-following, tool/skill necessity, and performance impact by trace
+event ID. The evaluator records `pass`, `fail`, or `unknown`, evidence-based
+review signals, optional real judge alignment, and a project-owned improvement
+ledger. The skills' `references/result-schema.md` files are the canonical
+request examples. Analysis is stored in the MongoDB `session_analysis`
+collection with an owner/session unique key; raw trace events remain
+append-only.
 
 Session summaries expose a `token_usage` object with `input_tokens`,
 `cached_input_tokens`, `output_tokens`, `reasoning_tokens`, `total_tokens`,

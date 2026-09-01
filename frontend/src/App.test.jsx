@@ -91,11 +91,12 @@ describe('authenticated sessions flow', () => {
 
   it('automatically redirects an unauthorized entry to Nala Labs in the same tab', async () => {
     window.sessionStorage.removeItem(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)
+    resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
 
     render(<App />)
 
+    expect(await screen.findByRole('heading', { name: 'Sign in through Nala Labs' })).toBeInTheDocument()
     await waitFor(() => expect(redirectToNalaLabs).toHaveBeenCalledExactlyOnceWith())
-    expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
   })
 
   it('keeps the auth boundary for an invalid stored credential', async () => {
@@ -138,7 +139,7 @@ describe('authenticated sessions flow', () => {
     expect(signOutFromTrace).toHaveBeenCalledExactlyOnceWith()
   })
 
-  it('hides the dashboard shell while authentication and protected data are unresolved', async () => {
+  it('keeps the full sessions shell while authentication is unresolved', async () => {
     let resolveAuthentication
     resolveSession.mockImplementationOnce(() => new Promise((resolve) => {
       resolveAuthentication = resolve
@@ -146,15 +147,73 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'All captured sessions' })).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Sign in through Nala Labs')
+    expect(screen.getByRole('banner')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'All captured sessions' })).toBeInTheDocument()
+    const loadingStatus = document.querySelector('.trace-loading-panel')
+    expect(loadingStatus).toBeInTheDocument()
+    expect(loadingStatus).toHaveTextContent('Loading sessions…')
+    expect(loadingStatus).toHaveTextContent('Resolving your application session before reading Trace records.')
+    expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
+    expect(loadingStatus).toHaveClass('trace-loading-panel')
+    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+    expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
+    expect(document.querySelector('.auth-boundary')).not.toBeInTheDocument()
 
     await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
     resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
 
     expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
+  })
+
+  it('does not gate refresh entry on session storage before auth resolution', async () => {
+    window.sessionStorage.clear()
+    let resolveAuthentication
+    resolveSession.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveAuthentication = resolve
+    }))
+
+    render(<App />)
+
+    const loadingStatus = document.querySelector('.trace-loading-panel')
+    expect(loadingStatus).toHaveClass('trace-loading-panel')
+    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+    expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
+    expect(screen.getByRole('banner')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'All captured sessions' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
+    expect(redirectToNalaLabs).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
+    resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
+    expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
+  })
+
+  it('keeps the full detail shell while initial authentication is unresolved', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    getTrace.mockResolvedValueOnce(apiTracePayload)
+    let resolveAuthentication
+    resolveSession.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveAuthentication = resolve
+    }))
+
+    render(<App />)
+
+    expect(screen.getByRole('banner')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /All sessions/ })).toBeInTheDocument()
+    expect(screen.getByText('Session detail', { selector: 'p' })).toBeInTheDocument()
+    const loadingStatus = document.querySelector('.trace-loading-panel')
+    expect(loadingStatus).toBeInTheDocument()
+    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+    expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Recorded execution settings' })).not.toBeInTheDocument()
+    expect(getSessions).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
+    resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
+    expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
   })
 
   it('shows the sign-in boundary and retry when authentication is unauthorized', async () => {
@@ -239,7 +298,7 @@ describe('authenticated sessions flow', () => {
     expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
   })
 
-  it('puts the detail loader before expensive detail sections', async () => {
+  it('does not render completed detail sections while the trace is loading', async () => {
     window.history.replaceState({}, '', '/#/sessions/authenticated-session')
     let resolveTrace
     getTrace.mockImplementationOnce(() => new Promise((resolve) => {
@@ -250,9 +309,9 @@ describe('authenticated sessions flow', () => {
 
     await waitFor(() => expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session'))
     const loadingStatus = screen.getByRole('status')
-    const metadataHeading = screen.getByRole('heading', { name: 'Recorded execution settings' })
 
-    expect(loadingStatus.compareDocumentPosition(metadataHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(loadingStatus).toHaveClass('trace-loading-panel')
+    expect(screen.queryByRole('heading', { name: 'Recorded execution settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Session detail', level: 2 })).not.toBeInTheDocument()
 
     resolveTrace(apiTracePayload)

@@ -9,6 +9,19 @@
 - Do one task at a time. A task is complete only after implementation, verification, commit, push, PR handoff, and relevant tracker update are complete.
 - Preserve unrelated dirty files. Never stage, modify, discard, or overwrite another person's work.
 
+## Execution discipline
+
+- Treat the user's requested outcome and scope as the contract. Complete required workflow gates, but do not add unrelated review, refactoring, cleanup, generated artifacts, or product changes. When the user has approved the full task, proceed end-to-end without repeating optional questions; ask only when a missing decision would materially change scope or a safety boundary requires it.
+- Keep updates outcome-first, concise, and plain-language. Report only task-relevant progress, blockers, decisions, and evidence; avoid jargon and long narration.
+- Write manual verification directly in the issue or PR description as short, independently pasteable Bash steps. For HTTP behavior, use one simple request per step and a concise expected response. Keep setup separate, do not create or hand off a PowerShell/Bash verification script, helper script, or bulk runner, and never present an unrun response as observed.
+- Do not add helper scripts or generated diagnostics to a PR unless the task explicitly requires a maintained artifact. Keep temporary screenshots, logs, traces, and captures outside the repository or in ignored temporary storage, and remove task-owned leftovers.
+- Before changing behavior that may cross a repository boundary, read this repository's relevant `.agents/knowledge/` and the related repository knowledge. Nala Labs owns Casdoor/session JWT issuance; nala-svc consumes that JWT and does not mint a second login token; NalaGrow and Nala Trace use their documented shared-platform boundaries. Do not add duplicate authentication/provider behavior unless the issue explicitly requires it and the knowledge/code contract is updated.
+- Use session-audit or evaluation skills only when the user explicitly requests an audit/evaluation or the issue explicitly requires it. A bug fix, review, or delivery task alone is not an audit request.
+- Treat unit tests, mocks, fakes, stub servers, isolated protocol checks, and local fixtures as regression evidence only. They do not prove live API, authentication, persistence, Vault, or cross-service behavior. For live acceptance, use the actual documented boundary; if it is unavailable, record the exact blocker and do not call it passed.
+- Before any Vault mutation, show the human the exact intended diff, affected path/keys, impact, and reason, then wait for explicit confirmation for that Vault change. Keep credentials out of the diff and records.
+- Use project-documented run commands and environment names unchanged in manual verification unless the task explicitly changes them. Verify the actual running URL and port from authoritative project knowledge or the process before writing a command; do not guess or silently substitute ports.
+- Do not change an existing PR from ready for review back to draft. Use draft only when creating a new PR or when the user explicitly requests draft.
+
 ## Branches and publication
 
 - Start new work from `main` on a `task/<topic>` branch.

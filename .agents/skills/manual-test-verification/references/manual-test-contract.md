@@ -75,3 +75,13 @@ Classification: <pass | expected result | fail>
 Environment/fixture: <documented identity>
 Limitation: <none or exact live-boundary limitation>
 ```
+
+## Final response gate
+
+Before claiming completion, audit the response itself:
+
+- There is one record for every target request that ran.
+- Each record includes the exact runnable Bash command, including the actual curl invocation when applicable. Endpoint names, HTTP method/path labels, step names, or prose summaries are not commands.
+- Each record includes immediate exit status, sanitized observed response, expected outcome, classification, environment/fixture identity, and limitation.
+- Any intentionally nonzero result is classified as expected result only when the contract expected it. An unrun live request, missing fixture, or unavailable required boundary is fail/incomplete, never pass.
+- A compact summary table may follow the records, but it cannot replace them.

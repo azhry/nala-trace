@@ -14,7 +14,7 @@ Use this skill to produce reviewable evidence for manual test steps without over
 3. Execute the exact contract in Bash only. Make each numbered verification step one independently pasteable fenced Bash block containing one target request (normally one simple `curl`) plus its immediate status capture. Keep setup, authentication/fixture creation, assertions, and cleanup in separate blocks. Never create, execute, or hand off a helper script, full-flow script, bulk runner, loop, function, or block that runs multiple target requests; never replace the actual command with an endpoint label such as `POST /api/foo`.
 4. Capture the immediate exit status of every target command before running another command. A wrapper's final status is not evidence for a nested command.
 5. Compare the observed status and sanitized response with the stated expected result. Classify each step as pass, expected result, or fail; preserve unexpected nonzero statuses.
-6. Report the command, immediate status, sanitized response, expected outcome, classification, environment/fixture identity, and any live API, authentication, persistence, or external-service limitation.
+6. Build the final response from one complete evidence record per numbered target request. A summary table, endpoint list, or aggregate statement such as "all passed" is not a verification report. Every record must reproduce the exact independently runnable Bash command that ran—not an endpoint label such as "POST /api/apps"—followed by its immediate status, sanitized response, expected outcome, classification, environment/fixture identity, and limitation. If the exact command cannot be reproduced, mark the step incomplete or failed; never claim it passed.
 
 ## Audit-derived readiness checks
 
@@ -28,6 +28,7 @@ When the task includes a tracker or pull-request readiness artifact, apply these
 ## Guardrails
 
 - Keep each Bash command independently pasteable and leave the terminal open after failures. A verification block must not bundle health, login, create, replay, and cleanup requests into one copy-paste. In the report, reproduce the exact command that ran and its immediate status; do not report a prose endpoint name or a whole-script summary as the command.
+- Final-answer gate: count the target requests before replying and emit the same number of evidence records. Each record must contain the full request command and all required report fields. A table may summarize records only after those records are present; it may not replace them.
 - Never expose API keys, JWTs, cookies, Vault values, provider tokens, or other credentials in output or reports.
 - Unit tests, local fixtures, stub servers, and protocol checks are regression evidence only; they do not prove live API or authentication behavior.
 - If the live boundary was not run, say so explicitly and name the unavailable dependency or required human action. Do not call an unrun live flow passed.

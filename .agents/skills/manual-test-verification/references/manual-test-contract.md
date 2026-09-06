@@ -7,11 +7,11 @@ This reference defines the evidence required when a task or pull request asks fo
 - Treat the issue or PR's manual steps as the contract. Preserve its command text and expected result unless the task explicitly changes them.
 - Read `AGENTS.md`, the relevant `.agents/knowledge/` files, and any service-specific run instructions. Resolve the actual repository root, environment name, URL, and port from those sources or the running process.
 - Use documented accounts, providers, roles, tiers, endpoints, and fixtures. Do not invent a record or substitute a local fake for a live acceptance boundary.
-- If a command needs `.agents/.env`, load only the allowlisted key required for that command into the current process. Never print the file, source it wholesale, echo values, or place a secret in a command, report, commit, or handoff.
+- If a command needs `.agents/.env`, load only the allowlisted key required for that command into the current process with a non-printing lookup. Never dot-source/source the file, load it wholesale, print the file, echo values, or place a secret in a command, report, commit, or handoff.
 
 ## Bash execution
 
-Use Bash only for this contract. Keep setup separate from verification and run each target command independently. Do not use `set -e`, `set -Eeuo pipefail`, `set -o pipefail`, a trap that exits early, a helper script, or a bulk runner that can hide which command failed.
+Use Bash only for this contract. Keep setup separate from verification and make each numbered verification step one independently pasteable fenced Bash block containing one target request, normally one simple `curl`, plus its immediate status capture. Do not put health, login, fixture creation, the behavior under test, assertions, or cleanup into one block. Do not use `set -e`, `set -Eeuo pipefail`, `set -o pipefail`, a trap that exits early, a helper script, a full-flow script, a loop, a function, or a bulk runner that can hide which command failed. Never hand off an endpoint label such as `POST /api/apps` in place of the runnable command.
 
 For each target command, capture its immediate status before any assertion, formatter, cleanup, or follow-up command:
 
@@ -29,7 +29,7 @@ For every step, report all of these fields:
 
 | Field | Required value |
 | --- | --- |
-| Command | The exact Bash command that ran |
+| Command | The exact independently runnable Bash command or one-request block that ran; never an endpoint label or an all-in-one script |
 | Immediate status | The target command's captured exit status |
 | Sanitized response | Relevant output with credentials and sensitive identifiers removed |
 | Expected outcome | The task/PR contract, including an expected nonzero status when applicable |

@@ -80,3 +80,7 @@ For a request containing a Linear issue ID such as `AZH-385`:
 - Never report a check as passed, a build as successful, or a task as complete unless the recorded target command exited successfully. For compound command blocks, capture and report each target command's immediate exit status; the wrapper's final exit code is not evidence for an earlier command. State pre-existing failures separately with the exact command and affected path; do not describe a partial compile or filtered output as a successful build.
 - Before declaring Vault, Casdoor, PostgreSQL, or another configured runtime dependency unavailable, inspect the relevant project knowledge and configuration sources and use any available read-only infrastructure capability. Distinguish a rejected credential from an unavailable service and from an undeployed application endpoint.
 - Before staging and again before handoff, inspect `git status --short` and preserve unrelated files. Put generated screenshots, browser traces, lint captures, and other diagnostics outside the repository or in an ignored temporary directory; remove only artifacts created by the current task.
+
+## Log diagnostics
+
+When diagnosing Nala Trace API failures, inspect the active application log and compressed backups described in `.agents/knowledge/nala-trace/logging.md`. Check the process working directory and `NALA_LOG_FILE` if the default file is missing. Do not add tokens, authorization headers, command arguments, or request bodies to logs.

@@ -6,6 +6,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/jackc/pgx/v5 v5.7.4
 	go.mongodb.org/mongo-driver v1.17.4
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (

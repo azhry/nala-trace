@@ -3,23 +3,37 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/azhry/nala-trace/backend/internal/auth"
 	"github.com/azhry/nala-trace/backend/internal/config"
+	"github.com/azhry/nala-trace/backend/internal/logging"
 	"github.com/azhry/nala-trace/backend/internal/server"
 	"github.com/azhry/nala-trace/backend/internal/storage"
 )
 
 func main() {
-	if err := run(); err != nil {
-		slog.Error("api stopped", "error", err)
+	if err := runWithLogging(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func runWithLogging() error {
+	rotatingWriter := logging.NewWriter(filepath.Join("logs", "nala-trace.log"))
+	defer rotatingWriter.Close()
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.MultiWriter(os.Stderr, rotatingWriter), nil)))
+	if err := run(); err != nil {
+		slog.Error("api stopped", "error", err)
+		return err
+	}
+	return nil
 }
 
 func run() error {

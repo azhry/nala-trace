@@ -13,6 +13,7 @@ Read this index first, then open the knowledge file that matches the task.
 | [nala-labs/defaults.md](nala-labs/defaults.md) | Development service defaults, local access notes, database/cache topology, and configuration discovery guidance. It contains lab-only credentials; do not copy them into source, tests, tickets, or PRs. |
 | [nala-labs/architecture-final.svg](nala-labs/architecture-final.svg) | Visual companion to the Nala Labs platform architecture document. |
 | [nala-trace/configuration.md](nala-trace/configuration.md) | Nala Trace application environment names, local/Kubernetes defaults, Vault ownership, workload mapping, startup validation, and redaction rules. |
+| [nala-trace/logging.md](nala-trace/logging.md) | Nala Trace active log location, rotation settings, override, and diagnosis instructions. |
 | [nala-trace/casdoor.md](nala-trace/casdoor.md) | Nala Trace Casdoor application, scopes, grant, callback overrides, secret ownership, and pre-authentication validation checklist. |
 | [nala-trace/hooks.md](nala-trace/hooks.md) | Nala Trace Codex hook delivery, runtime configuration, manifest validation, trust guidance, and known coverage gaps. |
 

@@ -55,7 +55,7 @@ Apply the following matrix when the task includes the corresponding readiness ar
 
 | Finding | Required safeguard | Evidence to record |
 | --- | --- | --- |
-| F-1 | Visual references use the requested UML sequence semantics, including lifelines, directional messages, and return/activation markers. | Re-read the saved rendering; attachment and text counts alone are insufficient. |
+| F-1 | Visual references use the requested UML sequence semantics, including lifelines, directional messages, and return/activation markers. | Re-read the saved description through the tracker API and verify exact source content and image/source pairing; attachment and text counts alone are insufficient. Browser or visual verification of the tracker is not required. |
 | F-2 | Human descriptions use the exact closed heading schema from the repository template. | Compare the saved heading sequence with the template; do not import agent-comment headings. |
 | F-3 | Every target command has an immediate status captured before assertions or wrapper work. | Record the target status separately from the wrapper or assertion status. |
 | F-4 | Manual verification includes Steps 0–4, separate Bash blocks, per-step statuses, no fake records/placeholders, and live-flow limitations. | Re-read the saved issue/PR and record each step's observed result. |

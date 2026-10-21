@@ -38,9 +38,11 @@ type sessionSummaryRepository struct {
 	limit  int
 	rows   []storage.SessionSummary
 	err    error
+	calls  int
 }
 
 func (repository *sessionSummaryRepository) ListSessionSummariesForUser(_ context.Context, userID string, limit int) ([]storage.SessionSummary, error) {
+	repository.calls++
 	repository.userID = userID
 	repository.limit = limit
 	return repository.rows, repository.err
@@ -75,6 +77,67 @@ func TestSessionsHandlerReturnsTokenUsage(t *testing.T) {
 	usage := result.Sessions[0].TokenUsage
 	if usage.InputTokens != 10 || usage.OutputTokens != 4 || usage.TotalTokens != 14 {
 		t.Fatalf("session token usage = %#v", usage)
+	}
+}
+
+func TestSessionsHandlerReturnsEmptyList(t *testing.T) {
+	repository := &sessionSummaryRepository{}
+	request := authenticatedTraceRequest(http.MethodGet, "/sessions?limit=10")
+	response := httptest.NewRecorder()
+
+	NewSessionsHandler(repository).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var result struct {
+		Sessions []storage.SessionSummary `json:"sessions"`
+		Limit    int                      `json:"limit"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Sessions == nil || len(result.Sessions) != 0 || result.Limit != 10 {
+		t.Fatalf("response = %#v, want an empty session array with limit 10", result)
+	}
+}
+
+func TestSessionsHandlerMapsRepositoryFailure(t *testing.T) {
+	repository := &sessionSummaryRepository{err: errors.New("mongo unavailable")}
+	request := authenticatedTraceRequest(http.MethodGet, "/sessions?limit=1")
+	response := httptest.NewRecorder()
+
+	NewSessionsHandler(repository).ServeHTTP(response, request)
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusInternalServerError, response.Body.String())
+	}
+	var result struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if result.Error.Code != "sessions_failed" || result.Error.Message != "sessions could not be loaded" {
+		t.Fatalf("error response = %#v, want stable sessions_failed error", result.Error)
+	}
+}
+
+func TestSessionsHandlerRequiresAuthenticationBeforeReading(t *testing.T) {
+	repository := &sessionSummaryRepository{}
+	request := httptest.NewRequest(http.MethodGet, "/sessions?limit=1", nil)
+	response := httptest.NewRecorder()
+
+	NewSessionsHandler(repository).ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusUnauthorized, response.Body.String())
+	}
+	if repository.calls != 0 {
+		t.Fatalf("repository calls = %d, want 0", repository.calls)
 	}
 }
 

@@ -3,10 +3,27 @@ package storage
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+func TestHookEventIndexModelsSupportSessionSummaryRead(t *testing.T) {
+	models := hookEventIndexModels()
+	want := []bson.D{
+		{{Key: "session_id", Value: 1}, {Key: "received_at", Value: 1}},
+		{{Key: "user_id", Value: 1}, {Key: "received_at", Value: 1}, {Key: "_id", Value: 1}},
+	}
+	if len(models) != len(want) {
+		t.Fatalf("index model count = %d, want %d", len(models), len(want))
+	}
+	for index, model := range models {
+		if !reflect.DeepEqual(model.Keys, want[index]) {
+			t.Errorf("index %d keys = %#v, want %#v", index, model.Keys, want[index])
+		}
+	}
+}
 
 func TestHookEventFromDocumentHydratesLegacyPayloadFields(t *testing.T) {
 	payload, err := bson.Marshal(bson.M{

@@ -95,6 +95,17 @@ type HookEventRepository struct {
 	findForUser      func(context.Context, string, string) ([]HookEvent, error)
 }
 
+func hookEventIndexModels() []mongo.IndexModel {
+	return []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "session_id", Value: 1}, {Key: "received_at", Value: 1}},
+		},
+		{
+			Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "received_at", Value: 1}, {Key: "_id", Value: 1}},
+		},
+	}
+}
+
 func NewHookEventRepository(database *mongo.Database) (*HookEventRepository, error) {
 	if database == nil {
 		return nil, &RepositoryError{Operation: "missing_database"}
@@ -106,9 +117,7 @@ func NewHookEventRepository(database *mongo.Database) (*HookEventRepository, err
 			return err
 		},
 		createIndex: func(ctx context.Context) error {
-			_, err := collection.Indexes().CreateOne(ctx, mongo.IndexModel{
-				Keys: bson.D{{Key: "session_id", Value: 1}, {Key: "received_at", Value: 1}},
-			})
+			_, err := collection.Indexes().CreateMany(ctx, hookEventIndexModels())
 			return err
 		},
 		aggregate: func(ctx context.Context) ([]SessionSummary, error) {

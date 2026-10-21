@@ -20,7 +20,7 @@ Use this skill to produce reviewable evidence for manual test steps without over
 
 When the task includes a tracker or pull-request readiness artifact, apply these safeguards before execution:
 
-- F-1/F-2: confirm visual references use the requested UML sequence semantics and the saved human description follows the exact closed heading schema; do not treat attachment counts or top-level counts as sufficient.
+- F-1/F-2: re-read the saved human description through the tracker API and confirm the visual references use the requested UML sequence semantics in their source and the description follows the exact closed heading schema. Do not treat attachment counts or top-level counts as sufficient; browser or visual verification of the tracker is not required.
 - F-4: confirm `Implementation Manual Test and Verification` contains Steps 0–4, separate Bash blocks, per-step statuses, no fake records/placeholders, and an explicit live-boundary limitation.
 - F-5: inspect the active repository's `AGENTS.md`; do not assume a sibling repository's guardrails apply locally.
 - F-3: capture each target command's immediate status before assertions or wrapper work, even when the expected result is nonzero.

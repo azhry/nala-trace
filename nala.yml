@@ -1,0 +1,9 @@
+projects:
+    backend:
+        cwd: backend
+        run: go run .
+        port: 3003
+    frontend:
+        cwd: frontend
+        run: npm run dev
+        port: 5005

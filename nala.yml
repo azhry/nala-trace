@@ -1,4 +1,12 @@
 projects:
+    mongodb:
+        cwd: .
+        run: kubectl port-forward service/mongodb 27018:27017 --namespace nala-labs --address 127.0.0.1
+        port: 27018
+    postgresql:
+        cwd: .
+        run: kubectl port-forward service/postgresql 25432:5432 --namespace nala-labs --address 127.0.0.1
+        port: 25432
     backend:
         cwd: backend
         run: go run .

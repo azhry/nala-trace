@@ -149,6 +149,16 @@ func TestSessionSummaryFeatureFindQueryUsesIndexedOwnerSessionEventScope(t *test
 	if !ok || !reflect.DeepEqual(selectedIDs, bson.A{"session-1", "session-2"}) {
 		t.Fatalf("feature selected sessions = %#v", selectedIDs)
 	}
+	featureExpression, ok := documentField(filter, "$expr")
+	if !ok {
+		t.Fatalf("feature filter missing summary feature predicate: %#v", filter)
+	}
+	serializedExpression := fmt.Sprintf("%#v", featureExpression)
+	for _, expected := range []string{"tool_input.content", "tool_input.patch", "mcp__", "skill"} {
+		if !strings.Contains(serializedExpression, expected) {
+			t.Fatalf("feature predicate missing %q: %#v", expected, featureExpression)
+		}
+	}
 	findOptions := summaryPreToolFeatureFindOptions()
 	if findOptions.Hint != hookEventPreToolSummaryIndexName {
 		t.Fatalf("feature query hint = %#v, want %q", findOptions.Hint, hookEventPreToolSummaryIndexName)

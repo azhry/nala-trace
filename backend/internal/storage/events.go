@@ -602,7 +602,8 @@ func summaryPreToolEventFindFilter(userID string, sessionIDs []string) bson.D {
 
 func summaryPreToolFeatureFindFilter(userID string, sessionIDs []string) bson.D {
 	filter := summaryEventScopeFilter(userID, sessionIDs)
-	return append(filter, bson.E{Key: "hook_event_name", Value: "PreToolUse"})
+	filter = append(filter, bson.E{Key: "hook_event_name", Value: "PreToolUse"})
+	return append(filter, bson.E{Key: "$expr", Value: summaryPreToolFeatureExpression()})
 }
 
 func summaryPreToolFeatureFindOptions() *options.FindOptions {

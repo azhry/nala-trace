@@ -422,6 +422,11 @@ func fileSignalExpression() bson.D {
 }
 
 func fileSignalExpressionForPayloadRoots(payloadRoots []string) bson.D {
+	patchTextPaths := make([]string, 0, len(payloadRoots)*4)
+	for _, field := range []string{"tool_input.patch", "tool_input.patch_text", "tool_input.diff", "tool_input.content"} {
+		patchTextPaths = append(patchTextPaths, payloadFieldPathsForRoots(field, payloadRoots)...)
+	}
+	commandPaths := payloadFieldPathsForRoots("tool_input.command", payloadRoots)
 	return orExpression(
 		anyNonEmptyStringExpression(payloadFieldPathsForRoots("tool_input.file_path", payloadRoots)...),
 		anyNonEmptyStringExpression(payloadFieldPathsForRoots("tool_input.path", payloadRoots)...),
@@ -430,8 +435,9 @@ func fileSignalExpressionForPayloadRoots(payloadRoots []string) bson.D {
 		anyNonEmptyStringExpression(payloadFieldPathsForRoots("tool_input.file", payloadRoots)...),
 		anyNonEmptyStringExpression(payloadFieldPathsForRoots("tool_input.old_path", payloadRoots)...),
 		anyNonEmptyStringExpression(payloadFieldPathsForRoots("tool_input.new_path", payloadRoots)...),
-		anyRegexFieldExpression(payloadFieldPathsForRoots("tool_input", payloadRoots), `\*\*\* (Add|Update|Delete|Move to) File:`),
-		anyRegexFieldExpression(payloadFieldPathsForRoots("tool_input.command", payloadRoots), `(^|\s)(cat|head|tail|type|get-content|read|set-content|out-file|tee|remove-item|rm|del|delete)(\s|$)`),
+		anyRegexFieldExpression(patchTextPaths, `\*\*\* (Add|Update|Delete|Move to) File:`),
+		anyRegexFieldExpression(commandPaths, `(^|\s)(cat|head|tail|type|get-content|read|set-content|out-file|tee|remove-item|rm|del|delete)(\s|$)`),
+		anyRegexFieldExpression(commandPaths, `(-literalpath|-filepath|-path|>|cat|head|tail|type|get-content|read)\s*`),
 	)
 }
 

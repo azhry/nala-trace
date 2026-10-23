@@ -22,9 +22,7 @@ The frontend's `VITE_API_PROXY_TARGET` is a development-only proxy target. It is
 | `FRONTEND_URL` | ordinary | `http://localhost:5005/`; alternate `http://localhost:18081/` | deployment-supplied public origin | API CORS configuration | Required; must be an explicit origin and must not contain credentials. |
 | `AUTH_ALLOWED_ORIGIN` | ordinary | `http://localhost:5005`; alternate `http://localhost:18081` | same value as approved frontend origin | API CORS middleware | Required for browser-facing API responses. |
 | `DATABASE_URL` | secret connection string | local secret-store value | Nala Labs Vault `DATABASE_URL` | Nala Trace API-key validator | Required when machine API-key authentication is enabled; connects to the shared Nala Labs PostgreSQL `api_key` table. Never log or expose it. |
-| `DATABASE_HOST` | ordinary loopback host and port | optional; local Nala Ctrl uses `127.0.0.1:25432` through a Minikube port-forward | unset | Local API configuration | When set, replace only the loopback host and port in the resolved `DATABASE_URL`; preserve its credentials, database path, and query options. |
 | `MONGO_URI` | secret connection string | `mongodb://127.0.0.1:27017` when local Mongo is intentionally configured; Vault-supplied value when auth is enabled | Vault key `MONGO_URI` at `secret/data/nala-labs/nala-trace`, containing the complete connection string | API Mongo client | The presence of a resolved URI enables Mongo; pass the full URI directly to the Mongo driver and redact it from errors/logs. |
-| `MONGO_HOST` | ordinary loopback host and port | optional; local Nala Ctrl uses `127.0.0.1:27018` through a Minikube port-forward | unset | Local API configuration | When set, replace only the loopback host and port in the resolved `MONGO_URI`; preserve its credentials, database path, and query options. |
 | `MONGO_DATABASE` | ordinary | `nala_trace` | `nala_trace` unless deployment overrides it | API configuration | Used when a resolved Mongo URI enables Mongo. |
 | `MONGO_CONNECT_TIMEOUT` | ordinary duration | `5s` | `5s` | API configuration | Bounded; reject invalid or non-positive values. |
 | `MONGO_PING_TIMEOUT` | ordinary duration | `2s` | `2s` | API configuration | Bounded; reject invalid or non-positive values. |
@@ -54,8 +52,6 @@ The application workload is the owner of the following logical secret paths:
 - `auth/kubernetes/role/nala-trace-api`: preferred workload identity binding for reading the paths above. A static `VAULT_TOKEN` is a local-only fallback and has no checked-in value.
 
 For local development, copy the tracked root `.vault-config.example` to the ignored root `.vault-config` and fill the Vault transport credentials from a protected secret source. The presence of `VAULT_ADDR` activates the configured KV v2 read and health probe; no manual `VAULT_ENABLED` switch is required. Explicit process environment values take precedence.
-
-For local Nala Ctrl access to Minikube MongoDB and shared PostgreSQL, copy `backend/.env.minikube.example` to the ignored `backend/.env` (or add its `AUTH_LISTEN_ADDR`, `MONGO_HOST`, and `DATABASE_HOST` settings to an existing local file), then start the `mongodb` and `postgresql` services in root `nala.yml` before the backend. The API listens only on `127.0.0.1:3003`, and both `kubectl port-forward` services bind only to `127.0.0.1`. `MONGO_HOST` and `DATABASE_HOST` change the local backend's endpoints while preserving Vault-supplied URI credentials and options.
 
 Kubernetes deployment manifests must map ordinary names through a ConfigMap and secret names through the Vault injector or an equivalent Secret projection. The Go process must receive the same environment names listed above; manifest-specific key names must not silently diverge.
 

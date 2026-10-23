@@ -110,6 +110,13 @@ func LoadFrom(values map[string]string) (Config, error) {
 	}
 
 	databaseURL := strings.TrimSpace(values["DATABASE_URL"])
+	if host := strings.TrimSpace(values["DATABASE_HOST"]); host != "" {
+		uri, ok := postgresURIWithHost(databaseURL, host)
+		if !ok {
+			return Config{}, &ValidationError{Invalid: []string{"DATABASE_HOST"}}
+		}
+		databaseURL = uri
+	}
 	cfg := Config{
 		ListenAddr:      valueOr(lookup, "AUTH_LISTEN_ADDR", defaultListenAddr),
 		FrontendURL:     valueOr(lookup, "FRONTEND_URL", defaultFrontendURL),
@@ -144,8 +151,63 @@ func LoadFrom(values map[string]string) (Config, error) {
 			SecretID: values["VAULT_SECRET_ID"],
 		},
 	}
+	if host := strings.TrimSpace(values["MONGO_HOST"]); host != "" {
+		uri, ok := mongoURIWithHost(cfg.Mongo.URI, host)
+		if !ok {
+			return Config{}, &ValidationError{Invalid: []string{"MONGO_HOST"}}
+		}
+		cfg.Mongo.URI = uri
+	}
 
 	return cfg, validate(cfg, values, lookup)
+}
+
+func mongoURIWithHost(uri, host string) (string, bool) {
+	return uriWithHost(uri, host, "mongodb")
+}
+
+func postgresURIWithHost(uri, host string) (string, bool) {
+	return uriWithHost(uri, host, "postgres", "postgresql")
+}
+
+func uriWithHost(uri, host string, allowedSchemes ...string) (string, bool) {
+	parsedURI, err := url.Parse(strings.TrimSpace(uri))
+	if err != nil || parsedURI.Host == "" {
+		return "", false
+	}
+	allowed := false
+	for _, scheme := range allowedSchemes {
+		if strings.EqualFold(parsedURI.Scheme, scheme) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return "", false
+	}
+	if host == "" || strings.ContainsAny(host, "/?#@") {
+		return "", false
+	}
+	hostURL, err := url.Parse("//" + host)
+	if err != nil || hostURL.Host == "" || hostURL.User != nil || hostURL.Path != "" || hostURL.RawQuery != "" || hostURL.Fragment != "" {
+		return "", false
+	}
+	hostname := hostURL.Hostname()
+	if hostname == "" || hostURL.Port() == "" {
+		return "", false
+	}
+	if !strings.EqualFold(hostname, "localhost") {
+		ip := net.ParseIP(hostname)
+		if ip == nil || !ip.IsLoopback() {
+			return "", false
+		}
+	}
+	port, err := strconv.Atoi(hostURL.Port())
+	if err != nil || port < 1 || port > 65535 {
+		return "", false
+	}
+	parsedURI.Host = hostURL.Host
+	return parsedURI.String(), true
 }
 
 func validate(cfg Config, values map[string]string, lookup func(string) (string, bool)) error {
@@ -240,8 +302,8 @@ func Redact(value string) string {
 func knownKeys() []string {
 	return []string{
 		"AUTH_LISTEN_ADDR", "FRONTEND_URL", "AUTH_ALLOWED_ORIGIN", "SHUTDOWN_TIMEOUT",
-		"DATABASE_URL",
-		"MONGO_URI", "MONGO_DATABASE",
+		"DATABASE_URL", "DATABASE_HOST",
+		"MONGO_URI", "MONGO_HOST", "MONGO_DATABASE",
 		"MONGO_CONNECT_TIMEOUT", "MONGO_PING_TIMEOUT", "MONGO_DISCONNECT_TIMEOUT", "NALA_LABS_AUTH_URL",
 		"POSTGRESQL_ADDRESS", "REDIS_ADDRESS", "KAFKA_ADDRESS", "HEALTHCHECK_TIMEOUT", "AUTH_REQUEST_TIMEOUT", "VAULT_ENABLED", "VAULT_ADDR", "VAULT_KV_MOUNT", "VAULT_KV_PATH", "VAULT_SHARED_KV_PATH", "VAULT_TOKEN", "VAULT_ROLE_ID", "VAULT_SECRET_ID",
 	}
@@ -297,6 +359,9 @@ func loadVaultValues(values, processValues map[string]string, client *http.Clien
 		return err
 	}
 	for key, value := range secretValues {
+		if key == "MONGO_HOST" || key == "DATABASE_HOST" {
+			continue
+		}
 		if _, explicitlyConfigured := processValues[key]; !explicitlyConfigured {
 			values[key] = value
 		}

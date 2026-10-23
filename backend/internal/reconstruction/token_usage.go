@@ -41,7 +41,10 @@ func tokenUsageEvidenceFromPayload(payload bson.Raw) (tokenUsageEvidence, bool) 
 	if len(payload) == 0 || len(payload) > maxReconstructionPayloadBytes {
 		return tokenUsageEvidence{}, false
 	}
-	document := payloadDocument(payload)
+	return tokenUsageEvidenceFromDocument(payloadDocument(payload))
+}
+
+func tokenUsageEvidenceFromDocument(document map[string]any) (tokenUsageEvidence, bool) {
 	usage, ok := findTokenUsage(document, 0)
 	if !ok {
 		return tokenUsageEvidence{}, false

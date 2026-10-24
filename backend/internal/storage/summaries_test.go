@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -50,8 +51,8 @@ func TestSessionSummaryPipelineDerivesAndProjectsTitle(t *testing.T) {
 	if _, err := bson.Marshal(bson.D{{Key: "pipeline", Value: pipelineValue}}); err != nil {
 		t.Fatalf("marshal summary pipeline: %v", err)
 	}
-	if len(pipeline) != 6 {
-		t.Fatalf("pipeline stages = %d, want 6", len(pipeline))
+	if len(pipeline) != 9 {
+		t.Fatalf("pipeline stages = %d, want 9", len(pipeline))
 	}
 	if _, ok := stageDocument(pipeline[0], "$match"); !ok {
 		t.Fatalf("first stage = %#v, want owner match", pipeline[0])
@@ -60,19 +61,19 @@ func TestSessionSummaryPipelineDerivesAndProjectsTitle(t *testing.T) {
 		t.Fatalf("second stage = %#v, want chronological sort", pipeline[1])
 	}
 
-	group, ok := stageDocument(pipeline[2], "$group")
+	group, ok := stageDocument(pipeline[5], "$group")
 	if !ok {
-		t.Fatalf("group stage = %#v", pipeline[2])
+		t.Fatalf("group stage = %#v", pipeline[5])
 	}
-	for _, field := range []string{"explicit_title_candidates", "prompt_title_candidates"} {
+	for _, field := range []string{"explicit_title", "prompt_title"} {
 		if _, ok := documentField(group, field); !ok {
 			t.Fatalf("group stage missing %q: %#v", field, group)
 		}
 	}
 
-	project, ok := stageDocument(pipeline[3], "$project")
+	project, ok := stageDocument(pipeline[6], "$project")
 	if !ok {
-		t.Fatalf("project stage = %#v", pipeline[3])
+		t.Fatalf("project stage = %#v", pipeline[6])
 	}
 	title, ok := documentField(project, "title")
 	if !ok {
@@ -82,7 +83,7 @@ func TestSessionSummaryPipelineDerivesAndProjectsTitle(t *testing.T) {
 		t.Fatalf("title expression = %T, want bson.D", title)
 	}
 	serialized := fmt.Sprintf("%#v", pipeline)
-	for _, expected := range []string{"$payload.tool_input", "$payload.hook_event_name", "$payload.tool_name", "$payload.payload.tool_input", "$payload.payload.hook_event_name", "$payload.payload.tool_name", "$payload.skills", "$payload.tool_input.skills", "$isArray", "SKILL\\\\.md", "file_read_count", "mcp_call_count", "mcp_servers", "token_input_tokens", "token_cached_input_tokens", "token_output_tokens", "token_reasoning_tokens", "token_total_tokens", "token_cumulative_present", "token_cumulative_total_tokens", "token_usage", "$payload.usage.input_tokens", "$payload.usage_source", "$payload.response.usage.output_tokens", "$convert", "$max", "$cond", "^mcp__(?:codex_apps__(?!(?:node_repl)_)[^_\\\\s]+_.+|(?!(?:codex_apps|node_repl)__).+__.+)$", "PreToolUse"} {
+	for _, expected := range []string{"$addFields", "_summary_tool_event", "_summary_mcp_event", "_summary_file_read_event", "_summary_explicit_title_rank", "_summary_prompt_title_rank", "_summary_has_token_usage", "$top", "$payload.tool_input", "$payload.hook_event_name", "$payload.tool_name", "$payload.payload.tool_input", "$payload.payload.hook_event_name", "$payload.payload.tool_name", "$payload.skills", "$payload.tool_input.skills", "$isArray", "SKILL\\\\.md", "file_read_count", "mcp_call_count", "mcp_servers", "token_input_tokens", "token_cached_input_tokens", "token_output_tokens", "token_reasoning_tokens", "token_total_tokens", "token_cumulative_present", "token_cumulative_total_tokens", "token_usage", "$payload.usage.input_tokens", "$payload.usage_source", "$payload.response.usage.output_tokens", "$hook_event_name", "$convert", "$max", "$cond", "^mcp__(?:codex_apps__(?!(?:node_repl)_)[^_\\\\s]+_.+|(?!(?:codex_apps|node_repl)__).+__.+)$", "PreToolUse"} {
 		if !strings.Contains(serialized, expected) {
 			t.Fatalf("pipeline missing %q: %s", expected, serialized)
 		}
@@ -90,6 +91,137 @@ func TestSessionSummaryPipelineDerivesAndProjectsTitle(t *testing.T) {
 	for _, forbidden := range []string{"token_cost_usd", "token_cost_present", "token_cumulative_cost_usd", "token_cumulative_cost_present", "cost_usd", "cost_recorded"} {
 		if strings.Contains(serialized, forbidden) {
 			t.Fatalf("pipeline unexpectedly contains cost field %q", forbidden)
+		}
+	}
+}
+
+func TestSessionSummaryPipelineForSelectedSessionsUsesOwnerAndSessionScope(t *testing.T) {
+	pipeline := sessionSummaryPipelineForUserSessions("user-1", []string{"session-2", "session-1"}, 2)
+	pipelineValue := make(bson.A, 0, len(pipeline))
+	for _, stage := range pipeline {
+		pipelineValue = append(pipelineValue, stage)
+	}
+	if _, err := bson.Marshal(bson.D{{Key: "pipeline", Value: pipelineValue}}); err != nil {
+		t.Fatalf("marshal selected-session pipeline: %v", err)
+	}
+	match, ok := stageDocument(pipeline[0], "$match")
+	if !ok {
+		t.Fatalf("first stage = %#v, want owner and session match", pipeline[0])
+	}
+	if userID, ok := documentField(match, "user_id"); !ok || userID != "user-1" {
+		t.Fatalf("user match = %#v, want user-1", userID)
+	}
+	sessionFilterValue, ok := documentField(match, "session_id")
+	if !ok {
+		t.Fatalf("match stage missing selected session IDs: %#v", match)
+	}
+	sessionFilter, ok := sessionFilterValue.(bson.D)
+	if !ok {
+		t.Fatalf("session filter = %T, want bson.D", sessionFilterValue)
+	}
+	selectedIDs, ok := documentField(sessionFilter, "$in")
+	if !ok || !reflect.DeepEqual(selectedIDs, bson.A{"session-2", "session-1"}) {
+		t.Fatalf("selected session IDs = %#v, want the requested IDs", selectedIDs)
+	}
+	sort, ok := stageDocument(pipeline[1], "$sort")
+	if !ok || !reflect.DeepEqual(sort, bson.D{{Key: "session_id", Value: 1}, {Key: "received_at", Value: 1}, {Key: "_id", Value: 1}}) {
+		t.Fatalf("sort stage = %#v, want per-session chronological order", pipeline[1])
+	}
+	limit, ok := documentField(pipeline[len(pipeline)-1], "$limit")
+	if !ok || limit != 2 {
+		t.Fatalf("last stage limit = %#v, want 2", limit)
+	}
+}
+
+func TestFastSessionSummaryPipelineLimitsPayloadWorkToRelevantEvents(t *testing.T) {
+	pipeline := sessionSummaryPipelineForUserSessionsFast("user-1", []string{"session-1"}, 1)
+	pipelineValue := make(bson.A, 0, len(pipeline))
+	for _, stage := range pipeline {
+		pipelineValue = append(pipelineValue, stage)
+	}
+	if _, err := bson.Marshal(bson.D{{Key: "pipeline", Value: pipelineValue}}); err != nil {
+		t.Fatalf("marshal fast summary pipeline: %v", err)
+	}
+	serialized := fmt.Sprintf("%#v", pipeline)
+	for _, expected := range []string{"$hook_event_name", "PreToolUse", "SubagentStop", "Stop", "_summary_has_token_usage", "$payload.usage", "$payload.response.usage"} {
+		if !strings.Contains(serialized, expected) {
+			t.Fatalf("fast summary pipeline missing %q: %s", expected, serialized)
+		}
+	}
+	for _, unexpected := range []string{"$payload.payload", "$payload.raw", "$payload.data", "$payload.event"} {
+		if strings.Contains(serialized, unexpected) {
+			t.Fatalf("fast summary pipeline includes fallback payload path %q: %s", unexpected, serialized)
+		}
+	}
+}
+
+func TestSessionSummaryMetadataPipelineLimitsEventsAndKeepsOwnerScope(t *testing.T) {
+	pipeline := sessionSummaryMetadataPipelineForUserSessionsFast("user-1", []string{"session-1"})
+	pipelineValue := make(bson.A, 0, len(pipeline))
+	for _, stage := range pipeline {
+		pipelineValue = append(pipelineValue, stage)
+	}
+	if _, err := bson.Marshal(bson.D{{Key: "pipeline", Value: pipelineValue}}); err != nil {
+		t.Fatalf("marshal metadata summary pipeline: %v", err)
+	}
+	match, ok := stageDocument(pipeline[0], "$match")
+	if !ok {
+		t.Fatalf("metadata match stage = %#v", pipeline[0])
+	}
+	if userID, ok := documentField(match, "user_id"); !ok || userID != "user-1" {
+		t.Fatalf("metadata owner scope = %#v, want user-1", userID)
+	}
+	hookFilterValue, ok := documentField(match, "hook_event_name")
+	if !ok {
+		t.Fatalf("metadata match is missing event scope: %#v", match)
+	}
+	hookFilter, ok := hookFilterValue.(bson.D)
+	if !ok {
+		t.Fatalf("metadata event filter = %T, want bson.D", hookFilterValue)
+	}
+	if _, ok := documentField(hookFilter, "$in"); !ok {
+		t.Fatalf("metadata event filter = %#v, want indexed event names", hookFilter)
+	}
+	serialized := fmt.Sprintf("%#v", pipeline)
+	for _, expected := range []string{"SessionStart", "UserPromptSubmit", "Stop", "SubagentStop", "token_usage", "title"} {
+		if !strings.Contains(serialized, expected) {
+			t.Fatalf("metadata pipeline missing %q: %s", expected, serialized)
+		}
+	}
+	if strings.Contains(serialized, "PostToolUse") {
+		t.Fatalf("metadata pipeline should skip tool events without transcript usage: %s", serialized)
+	}
+}
+
+func TestSessionSummaryBasePipelineUsesOnlyIndexedEventFields(t *testing.T) {
+	pipeline := sessionSummaryBasePipelineForUserSessions("user-1", []string{"session-1", "session-2"}, 2)
+	pipelineValue := make(bson.A, 0, len(pipeline))
+	for _, stage := range pipeline {
+		pipelineValue = append(pipelineValue, stage)
+	}
+	if _, err := bson.Marshal(bson.D{{Key: "pipeline", Value: pipelineValue}}); err != nil {
+		t.Fatalf("marshal base summary pipeline: %v", err)
+	}
+	if len(pipeline) != 6 {
+		t.Fatalf("base pipeline stages = %d, want 6", len(pipeline))
+	}
+	match, ok := stageDocument(pipeline[0], "$match")
+	if !ok {
+		t.Fatalf("first stage = %#v, want owner and selected-session match", pipeline[0])
+	}
+	if userID, ok := documentField(match, "user_id"); !ok || userID != "user-1" {
+		t.Fatalf("user match = %#v, want user-1", userID)
+	}
+	if _, ok := documentField(match, "session_id"); !ok {
+		t.Fatalf("match stage missing selected session IDs: %#v", match)
+	}
+	serialized := fmt.Sprintf("%#v", pipeline)
+	if strings.Contains(serialized, "$payload") {
+		t.Fatalf("base pipeline reads event payloads: %s", serialized)
+	}
+	for _, field := range []string{"event_count", "tool_call_count", "first_event_at", "last_event_at"} {
+		if !strings.Contains(serialized, field) {
+			t.Fatalf("base pipeline missing %q: %s", field, serialized)
 		}
 	}
 }

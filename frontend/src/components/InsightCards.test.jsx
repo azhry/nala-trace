@@ -183,8 +183,10 @@ describe('InsightCards', () => {
 
   it('renders v2 turn, tool, skill, file, capture-gap, occurrence, and action evidence with filters', () => {
     render(<InsightCards forceAnalysis analysis={{
+      updated_at: '2026-10-24T10:00:00Z',
       annotation: {
         schema_version: '2',
+        source: 'session-annotator',
         coverage: {
           user_turns: { captured: 1, labeled: 1, unclear: 0 },
           agent_turns: { captured: 1, labeled: 1, unclear: 0 },
@@ -208,6 +210,7 @@ describe('InsightCards', () => {
       },
       evaluation: {
         schema_version: '2',
+        source: 'session-evaluator',
         verdict: 'fail',
         critique: 'A tool outcome could not be verified.',
         review_signals: [{
@@ -221,6 +224,12 @@ describe('InsightCards', () => {
       },
     }} />)
 
+    expect(screen.getByText('Current saved record')).toBeInTheDocument()
+    expect(screen.getAllByText('Schema v2')).toHaveLength(2)
+    expect(screen.getByText('Source: session-annotator')).toBeInTheDocument()
+    expect(screen.getByText('Source: session-evaluator')).toBeInTheDocument()
+    expect(screen.getByText('The current record; revision history is not stored.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Saved analysis record').querySelector('time')?.dateTime).toBe('2026-10-24T10:00:00Z')
     expect(screen.getAllByText('1 labeled / 1 captured')).toHaveLength(5)
     expect(screen.getByText('What the user said')).toBeInTheDocument()
     expect(screen.getByText('Only change the evaluation page.')).toBeInTheDocument()

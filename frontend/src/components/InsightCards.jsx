@@ -237,6 +237,22 @@ function overviewReadout(verdict) {
   return 'The evaluator did not record a definitive verdict.'
 }
 
+function formattedSavedTime(value) {
+  if (!value) return 'Not recorded'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
+function AnalysisRecordMetadata({ analysis }) {
+  const entries = [
+    { label: 'Annotation', schemaVersion: analysis.annotation.schemaVersion, source: analysis.annotation.source, recorded: analysis.annotation.recorded },
+    { label: 'Evaluation', schemaVersion: analysis.evaluation.schemaVersion, source: analysis.evaluation.source, recorded: analysis.evaluation.recorded },
+  ]
+
+  return <section className="analysis-record-metadata" aria-label="Saved analysis record"><div className="analysis-record-metadata-heading"><strong>Current saved record</strong><span>Stored analysis details</span></div><div className="analysis-record-metadata-grid">{entries.map((entry) => <div key={entry.label}><span>{entry.label}</span><strong>{entry.recorded ? `Schema v${entry.schemaVersion || 'unknown'}` : 'Not recorded'}</strong><small>{entry.recorded ? `Source: ${entry.source || 'Not recorded'}` : 'No saved record'}</small></div>)}<div><span>Last updated</span><strong><time dateTime={analysis.updatedAt || undefined}>{formattedSavedTime(analysis.updatedAt)}</time></strong><small>The current record; revision history is not stored.</small></div></div></section>
+}
+
 function EvaluationOverview({ analysis }) {
   const { annotation, evaluation } = analysis
   const concerns = reviewConcernSignals(evaluation.reviewSignals)
@@ -311,7 +327,7 @@ function CompactAnalysisSummary({ analysis, sessionId }) {
 
 function AnalysisCards({ analysis, compact = false, sessionId }) {
   if (compact) return <CompactAnalysisSummary analysis={analysis} sessionId={sessionId} />
-  return <aside className={`insights-section analysis-insights analysis-full-page ${analysis.recorded ? '' : 'is-unrecorded'}`} aria-labelledby="analysis-details-title"><div className="section-heading-row analysis-heading"><div><p className="section-label">Evaluation review</p><h2 id="analysis-details-title">Review details</h2><p className="section-description">Outcome and agent next steps appear first. Evidence records stay open below.</p></div><StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Recorded' : 'Not recorded'}</StatusPill></div>{analysis.recorded ? <div className="analysis-content">{analysis.evaluation.recorded && <EvaluationOverview analysis={analysis} />}{analysis.evaluation.recorded && <ImprovementActions ledger={analysis.evaluation.evaluationLedger} followUps={analysis.evaluation.followUps} />}{analysis.evaluation.recorded ? <EvidenceDisclosure annotation={analysis.annotation} evaluation={analysis.evaluation} /> : <><AnnotationPanel annotation={analysis.annotation} /><EvaluationPanel evaluation={analysis.evaluation} /></>}</div> : <NoAnalysisState />}</aside>
+  return <aside className={`insights-section analysis-insights analysis-full-page ${analysis.recorded ? '' : 'is-unrecorded'}`} aria-labelledby="analysis-details-title"><div className="section-heading-row analysis-heading"><div><p className="section-label">Evaluation review</p><h2 id="analysis-details-title">Review details</h2><p className="section-description">Outcome and agent next steps appear first. Evidence records stay open below.</p></div><StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Recorded' : 'Not recorded'}</StatusPill></div>{analysis.recorded ? <><AnalysisRecordMetadata analysis={analysis} /><div className="analysis-content">{analysis.evaluation.recorded && <EvaluationOverview analysis={analysis} />}{analysis.evaluation.recorded && <ImprovementActions ledger={analysis.evaluation.evaluationLedger} followUps={analysis.evaluation.followUps} />}{analysis.evaluation.recorded ? <EvidenceDisclosure annotation={analysis.annotation} evaluation={analysis.evaluation} /> : <><AnnotationPanel annotation={analysis.annotation} /><EvaluationPanel evaluation={analysis.evaluation} /></>}</div></> : <NoAnalysisState />}</aside>
 }
 
 export default function InsightCards({ analysis, trace, insights, compact = false, sessionId, forceAnalysis = false }) {

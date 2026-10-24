@@ -230,6 +230,7 @@ describe('InsightCards', () => {
     expect(screen.getByText('Scope: Deviation')).toBeInTheDocument()
     expect(screen.getAllByText('Claims: Unsupported').some((element) => element.tagName === 'SPAN')).toBe(true)
     expect(screen.getByText('Verification: Not Verified')).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Verification: Partial' })).not.toBeInTheDocument()
     expect(screen.getAllByText(/1 record has one or more unclear decisions/)).toHaveLength(1)
     expect(screen.getAllByText('No records have an unclear decision.')).toHaveLength(4)
     expect(screen.getByText('npm run build')).toBeInTheDocument()

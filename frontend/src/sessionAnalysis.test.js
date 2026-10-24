@@ -394,6 +394,21 @@ describe('session analysis view model', () => {
     ])
   })
 
+  it('does not normalize the noncanonical v2 verification value partial', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '2',
+        turns: [{ event_id: 'agent-event-partial-verification', verification: 'partial' }],
+        coverage: { agent_turns: { captured: 1, labeled: 1, unclear: 0 } },
+      },
+      evaluation: null,
+    })
+    const turns = model.annotation.categories.find((category) => category.key === 'turns')
+
+    expect(turns.records[0].verification).toBeNull()
+    expect(turns.breakdowns.find((breakdown) => breakdown.label === 'Verification').values.map(({ value }) => value)).not.toContain('partial')
+  })
+
   it('preserves captured invocation and completion evidence for annotation records', () => {
     const model = normalizeSessionAnalysis({
       annotation: {

@@ -26,7 +26,6 @@ const DECISION_OPTIONS = [
   { value: 'verification:verified', label: 'Verification: Verified' },
   { value: 'verification:not_verified', label: 'Verification: Not verified' },
   { value: 'verification:not_applicable', label: 'Verification: Not applicable' },
-  { value: 'verification:partial', label: 'Verification: Partial' },
   { value: 'performance:improved', label: 'Effect on result: Improved' },
   { value: 'performance:neutral', label: 'Effect on result: No outcome change recorded' },
   { value: 'performance:worsened', label: 'Effect on result: Worsened' },

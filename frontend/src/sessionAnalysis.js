@@ -8,7 +8,7 @@ const PERFORMANCE_VERDICTS = new Set(['improved', 'neutral', 'worsened', 'unclea
 const EVALUATION_VERDICTS = new Set(['pass', 'fail', 'unknown'])
 const ALIGNMENT_STATUSES = new Set(['aligned', 'not_aligned', 'not_recorded'])
 const SCOPE_ADHERENCE_VALUES = new Set(['within_scope', 'deviation', 'unclear'])
-const VERIFICATION_VALUES = new Set(['verified', 'not_verified', 'not_applicable', 'unclear', 'partial'])
+const VERIFICATION_VALUES = new Set(['verified', 'not_verified', 'not_applicable', 'unclear'])
 const USER_SIGNAL_TYPES = new Set(['request', 'constraint', 'clarification', 'correction', 'approval', 'rejection', 'feedback', 'other', 'unclear'])
 const SIGNAL_NAME_LABELS = {
   unverified_authenticated_browser_flow: 'Authenticated browser flow not verified',
@@ -503,7 +503,7 @@ function normalizeAnnotation(annotation, trace) {
         { label: 'Follows instructions', key: 'followsInstructions', values: ['yes', 'no', 'unclear'] },
         { label: 'Scope adherence', key: 'scopeAdherence', values: ['within_scope', 'deviation', 'unclear'] },
         { label: 'Grounding', key: 'groundedness', values: ['supported', 'unsupported', 'unclear'] },
-        { label: 'Verification', key: 'verification', values: ['verified', 'not_verified', 'not_applicable', 'partial', 'unclear'] },
+        { label: 'Verification', key: 'verification', values: ['verified', 'not_verified', 'not_applicable', 'unclear'] },
         { label: 'Performance', key: 'performance', values: ['improved', 'neutral', 'worsened', 'unclear'] },
       ], turnsRecorded, version === '1' ? null : 'Agent-turn records were not included.', version2 ? savedCoverage.agent_turns : null),
       normalizeCategory('tools', 'Tool calls', tools, captured.tools, [

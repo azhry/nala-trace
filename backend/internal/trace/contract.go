@@ -30,6 +30,15 @@ type Trace struct {
 	Files            []FileOperation    `json:"files"`
 	RuntimeMetadata  RuntimeMetadata    `json:"runtime_metadata"`
 	Summary          Summary            `json:"summary"`
+	Analysis         Analysis           `json:"analysis"`
+	Pagination       *Pagination        `json:"pagination,omitempty"`
+}
+
+type Pagination struct {
+	Offset  int  `json:"offset"`
+	Limit   int  `json:"limit"`
+	Total   int  `json:"total"`
+	HasMore bool `json:"has_more"`
 }
 
 type TimelineEvent struct {
@@ -145,5 +154,6 @@ func New(sessionID, userID string) Trace {
 		SkillInvocations: make([]SkillInvocation, 0),
 		Files:            make([]FileOperation, 0),
 		Summary:          Summary{MCPServers: make([]string, 0)},
+		Analysis:         NewAnalysis(),
 	}
 }

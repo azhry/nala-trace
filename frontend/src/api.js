@@ -124,3 +124,7 @@ export function getSessions() {
 export function getTrace(sessionId) {
   return fetchJSON(`/sessions/${encodeURIComponent(sessionId)}`)
 }
+
+export function getSessionAnalysis(sessionId) {
+  return fetchJSON(`/sessions/${encodeURIComponent(sessionId)}/analysis`)
+}

@@ -47,6 +47,7 @@ func run() error {
 		return err
 	}
 	var repository *storage.HookEventRepository
+	var analysisRepository *storage.SessionAnalysisRepository
 	if mongoStore != nil {
 		defer func() { _ = mongoStore.Close(context.Background()) }()
 		repository, err = storage.NewHookEventRepository(mongoStore.Database())
@@ -58,6 +59,16 @@ func run() error {
 		cancelIndex()
 		if indexErr != nil {
 			return indexErr
+		}
+		analysisRepository, err = storage.NewSessionAnalysisRepository(mongoStore.Database())
+		if err != nil {
+			return err
+		}
+		analysisCtx, cancelAnalysisIndex := context.WithTimeout(context.Background(), cfg.Mongo.ConnectTimeout)
+		analysisIndexErr := analysisRepository.EnsureIndexes(analysisCtx)
+		cancelAnalysisIndex()
+		if analysisIndexErr != nil {
+			return analysisIndexErr
 		}
 	}
 	var apiKeyStore *auth.APIKeyStore
@@ -72,6 +83,12 @@ func run() error {
 	if mongoStore != nil {
 		mongoProbe = mongoStore.Ping
 	}
+	var analysisReader storage.SessionAnalysisReader
+	var analysisWriter storage.SessionAnalysisWriter
+	if analysisRepository != nil {
+		analysisReader = analysisRepository
+		analysisWriter = analysisRepository
+	}
 	health := server.NewHealthChecker(cfg, mongoProbe)
 	iamClient := auth.NewIAMClient(cfg.Auth)
 	middleware := auth.NewMiddleware(cfg, iamClient, apiKeyStore)
@@ -80,7 +97,10 @@ func run() error {
 		{Pattern: server.TraceHandoffRedeemPath, Handler: server.NewTraceHandoffRedeemHandler(iamClient, cfg.AllowedOrigin)},
 		server.ProtectedRoute("/ingest", server.NewIngestHandler(repository), middleware),
 		server.ProtectedRoute("/sessions", server.NewSessionsHandler(repository), middleware),
-		server.ProtectedRoute("/sessions/:id", server.NewSessionTraceHandler(repository), middleware),
+		server.ProtectedRoute("/sessions/:id/annotations", server.NewSessionAnnotationHandler(analysisWriter), middleware),
+		server.ProtectedRoute("/sessions/:id/evaluation", server.NewSessionEvaluationHandler(analysisWriter), middleware),
+		server.ProtectedRoute("/sessions/:id/analysis", server.NewSessionAnalysisHandler(analysisReader), middleware),
+		server.ProtectedRoute("/sessions/:id", server.NewSessionTraceHandler(repository, analysisReader), middleware),
 	}
 	api := server.New(cfg, routes...)
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

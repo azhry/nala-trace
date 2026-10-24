@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, getSessions, getTrace, resolveSession } from './api'
+import { ApiError, getSessionAnalysis, getSessions, getTrace, resolveSession } from './api'
 import { AuthHandoffError, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import InsightCards from './components/InsightCards'
+import EvaluationPage from './components/EvaluationPage'
 import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
 import ScrollToTopButton from './components/ScrollToTopButton'
@@ -10,6 +11,8 @@ import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries
 
 function parseRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '') || 'sessions'
+  const evaluationMatch = path.match(/^sessions\/([^/]+)\/evaluation$/)
+  if (evaluationMatch) return { view: 'evaluation', sessionId: decodeURIComponent(evaluationMatch[1]) }
   const match = path.match(/^sessions\/([^/]+)$/)
   return match ? { view: 'detail', sessionId: decodeURIComponent(match[1]) } : { view: 'sessions', sessionId: null }
 }
@@ -64,7 +67,8 @@ function AuthBoundary({ handoffState, onRetry }) {
 
 function Topbar({ route, session, apiState, onSignOut }) {
   const source = dataSourceCopy(apiState)
-  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{route.view === 'detail' ? 'Session detail' : 'Sessions'}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{route.view === 'detail' && <span className="topbar-session">{session?.id}</span>}<button type="button" className="sign-out-button" onClick={() => onSignOut()}>Sign out</button></div></header>
+  const pageLabel = route.view === 'evaluation' ? 'Session evaluation' : route.view === 'detail' ? 'Session detail' : 'Sessions'
+  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{pageLabel}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{(route.view === 'detail' || route.view === 'evaluation') && <span className="topbar-session">{session?.id}</span>}<button type="button" className="sign-out-button" onClick={() => onSignOut()}>Sign out</button></div></header>
 }
 
 function SessionStats({ sessions }) {
@@ -99,7 +103,7 @@ function DetailPage({ session, onBack, apiState, traceState, traceError, onTrace
   const source = dataSourceCopy(apiState)
   const isLoading = traceState === 'loading'
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span></div></div><DataSourceNotice apiState={apiState} />{isLoading ? <TraceLoadingPanel /> : <><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards insights={session.insights || { metrics: [] }} /></div></>}</section>
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span></div></div><DataSourceNotice apiState={apiState} />{isLoading ? <TraceLoadingPanel /> : <><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards analysis={session.analysis ?? null} trace={session} insights={session.insights} compact sessionId={session.id} /></div></>}</section>
 }
 
 export default function App() {
@@ -115,6 +119,10 @@ export default function App() {
   const [traceRequestSessionId, setTraceRequestSessionId] = useState(null)
   const [traceState, setTraceState] = useState('idle')
   const [traceError, setTraceError] = useState(null)
+  const [analysisPayload, setAnalysisPayload] = useState(null)
+  const [analysisSessionId, setAnalysisSessionId] = useState(null)
+  const [analysisState, setAnalysisState] = useState('idle')
+  const [analysisError, setAnalysisError] = useState(null)
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute())
     window.addEventListener('hashchange', onHashChange)
@@ -181,6 +189,27 @@ export default function App() {
     }))
   }, [])
 
+  const loadAnalysis = useCallback((sessionId, isActive = () => true) => {
+    if (!sessionId) return Promise.resolve(null)
+    setAnalysisPayload(null)
+    setAnalysisSessionId(null)
+    setAnalysisError(null)
+    setAnalysisState('loading')
+    return getSessionAnalysis(sessionId).then((payload) => {
+      if (!isActive()) return payload
+      setAnalysisPayload(payload?.analysis ?? null)
+      setAnalysisSessionId(sessionId)
+      setAnalysisState('ready')
+      return payload
+    }).catch((error) => {
+      if (!isActive()) return null
+      setAnalysisError(error)
+      setAnalysisSessionId(sessionId)
+      setAnalysisState(error instanceof ApiError && error.status === 404 ? 'missing' : 'error')
+      return null
+    })
+  }, [])
+
   useEffect(() => {
     let mounted = true
     if (apiState !== 'connected' || route.view !== 'detail' || !route.sessionId) {
@@ -195,11 +224,24 @@ export default function App() {
     return () => { mounted = false }
   }, [apiState, loadTrace, route.sessionId, route.view])
 
+  useEffect(() => {
+    let mounted = true
+    if (apiState !== 'connected' || route.view !== 'evaluation' || !route.sessionId) {
+      setAnalysisPayload(null)
+      setAnalysisSessionId(null)
+      setAnalysisError(null)
+      setAnalysisState('idle')
+      return () => { mounted = false }
+    }
+    loadAnalysis(route.sessionId, () => mounted)
+    return () => { mounted = false }
+  }, [apiState, loadAnalysis, route.sessionId, route.view])
+
   const hasCurrentTrace = Boolean(remoteTrace && traceSessionId === route.sessionId)
   const detailTraceState = traceRequestSessionId !== route.sessionId ? 'loading' : traceState
   const detailSession = hasCurrentTrace
     ? { ...(selectedSession || { id: route.sessionId, title: route.sessionId, status: 'captured' }), ...remoteTrace }
-    : selectedSession || (route.view === 'detail' && route.sessionId ? { id: route.sessionId, title: route.sessionId, status: 'captured' } : null)
+    : selectedSession || (['detail', 'evaluation'].includes(route.view) && route.sessionId ? { id: route.sessionId, title: route.sessionId, status: 'captured' } : null)
 
   function selectSession(id) {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
@@ -209,5 +251,6 @@ export default function App() {
   if (apiState === 'error') return <div className="app-shell"><main className="main-content"><section className="page-section" aria-label="Session loading error"><SessionStatePanel state="error" onRetry={loadSessions} /></section></main></div>
 
   const showDetail = route.view === 'detail' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={detailSession || selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={apiState === 'loading' ? 'loading' : detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  const showEvaluation = route.view === 'evaluation' && apiState === 'connected' && detailSession
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={detailSession || selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} analysis={analysisSessionId === route.sessionId ? analysisPayload : null} analysisState={analysisSessionId === route.sessionId ? analysisState : 'loading'} analysisError={analysisError} onAnalysisRetry={() => loadAnalysis(route.sessionId)} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={apiState === 'loading' ? 'loading' : detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

@@ -3,6 +3,7 @@ import {
   bootstrapAuthFromSessionStorage,
   clearAuthConfiguration,
   configureAuth,
+  getSessionAnalysis,
   getSessions,
   getTrace,
   NALA_LABS_ACCESS_TOKEN_STORAGE_KEY,
@@ -62,6 +63,53 @@ describe('API auth configuration', () => {
     expect(fetch).not.toHaveBeenCalledWith('/api/auth/session', expect.anything())
   })
 
+  it('returns the persisted analysis sections from the session-detail response', async () => {
+    configureAuth({ jwt: 'jwt-token' })
+    const analysis = {
+      annotation: null,
+      evaluation: {
+        schema_version: '1',
+        source: 'session-evaluator',
+        verdict: 'unknown',
+        critique: '',
+        review_signals: [],
+        judge_alignment: { status: 'not_recorded' },
+        evaluation_ledger: { project: 'nala-trace', improvements: [] },
+      },
+    }
+    fetch.mockResolvedValueOnce(jsonResponse({ schema_version: '1', session_id: 'session-analysis', analysis }))
+
+    await expect(getTrace('session-analysis')).resolves.toMatchObject({
+      session_id: 'session-analysis',
+      analysis,
+    })
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('/sessions/session-analysis', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer jwt-token',
+      },
+    })
+  })
+
+  it('reads saved analysis from its independent compact endpoint', async () => {
+    configureAuth({ jwt: 'jwt-token' })
+    const payload = {
+      session_id: 'session/analysis',
+      analysis: {
+        updated_at: '2026-10-24T12:00:00Z',
+        annotation: { schema_version: '2', user_turns: [], turns: [], tools: [], skills: [], files: [], capture_gaps: [] },
+        evaluation: { schema_version: '2', verdict: 'unknown', review_signals: [] },
+      },
+    }
+    fetch.mockResolvedValueOnce(jsonResponse(payload))
+
+    await expect(getSessionAnalysis('session/analysis')).resolves.toEqual(payload)
+
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('/sessions/session%2Fanalysis/analysis', {
+      headers: { Accept: 'application/json', Authorization: 'Bearer jwt-token' },
+    })
+  })
+
   it('bootstraps the approved same-origin session token into JWT mode', async () => {
     const storage = { getItem: vi.fn(() => 'stored-jwt') }
     expect(bootstrapAuthFromSessionStorage(storage)).toBe(true)
@@ -115,9 +163,11 @@ describe('API auth configuration', () => {
 
     fetch.mockResolvedValueOnce(jsonResponse({ sessions: [], limit: 100 }))
     fetch.mockResolvedValueOnce(jsonResponse({ eventsList: [] }))
+    fetch.mockResolvedValueOnce(jsonResponse({ session_id: 'session-3', analysis: {} }))
 
     await getSessions()
     await getTrace('session-3')
+    await getSessionAnalysis('session-3')
 
     expect(fetch).toHaveBeenNthCalledWith(1, '/sessions?limit=100', {
       headers: {
@@ -126,6 +176,12 @@ describe('API auth configuration', () => {
       },
     })
     expect(fetch).toHaveBeenNthCalledWith(2, '/sessions/session-3', {
+      headers: {
+        Accept: 'application/json',
+        'X-Nala-Labs-API-Key': 'api-token',
+      },
+    })
+    expect(fetch).toHaveBeenNthCalledWith(3, '/sessions/session-3/analysis', {
       headers: {
         Accept: 'application/json',
         'X-Nala-Labs-API-Key': 'api-token',

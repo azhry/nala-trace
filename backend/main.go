@@ -99,6 +99,7 @@ func run() error {
 		server.ProtectedRoute("/sessions", server.NewSessionsHandler(repository), middleware),
 		server.ProtectedRoute("/sessions/:id/annotations", server.NewSessionAnnotationHandler(analysisWriter), middleware),
 		server.ProtectedRoute("/sessions/:id/evaluation", server.NewSessionEvaluationHandler(analysisWriter), middleware),
+		server.ProtectedRoute("/sessions/:id/analysis", server.NewSessionAnalysisHandler(analysisReader), middleware),
 		server.ProtectedRoute("/sessions/:id", server.NewSessionTraceHandler(repository, analysisReader), middleware),
 	}
 	api := server.New(cfg, routes...)

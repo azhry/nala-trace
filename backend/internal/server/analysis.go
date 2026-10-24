@@ -13,6 +13,38 @@ import (
 
 const maxAnalysisBodyBytes int64 = 2 << 20
 
+func NewSessionAnalysisHandler(repository storage.SessionAnalysisReader) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			WriteError(response, http.StatusMethodNotAllowed, "method_not_allowed", "method is not allowed")
+			return
+		}
+		user, ok := auth.UserFromContext(request.Context())
+		if !ok {
+			WriteError(response, http.StatusUnauthorized, "unauthenticated", "authentication required")
+			return
+		}
+		sessionID := sessionIDForAnalysisPath(request.URL.Path, "/analysis")
+		if sessionID == "" {
+			WriteError(response, http.StatusNotFound, "analysis_not_found", "session analysis was not found")
+			return
+		}
+		if repository == nil {
+			WriteError(response, http.StatusServiceUnavailable, "analysis_unavailable", "session analysis is unavailable")
+			return
+		}
+		analysis, err := repository.GetSessionAnalysisForUser(request.Context(), user.ID, sessionID)
+		if err != nil {
+			WriteError(response, http.StatusInternalServerError, "analysis_failed", "session analysis could not be loaded")
+			return
+		}
+		WriteJSON(response, http.StatusOK, map[string]any{
+			"session_id": sessionID,
+			"analysis":   analysis,
+		})
+	})
+}
+
 func NewSessionAnnotationHandler(repository storage.SessionAnalysisWriter) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {

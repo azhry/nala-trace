@@ -304,6 +304,11 @@ func (result AnnotationResult) Validate() error {
 			return err
 		}
 	}
+	if v2 {
+		if err := validateUniqueEventIDs(userTurnEventIDs(result.UserTurns), "user_turns.event_id"); err != nil {
+			return err
+		}
+	}
 	for index, annotation := range result.Turns {
 		field := fmt.Sprintf("turns[%d]", index)
 		if err := validateEventID(annotation.EventID, fmt.Sprintf("turns[%d].event_id", index)); err != nil {
@@ -342,6 +347,11 @@ func (result AnnotationResult) Validate() error {
 			return err
 		}
 	}
+	if v2 {
+		if err := validateUniqueEventIDs(turnEventIDs(result.Turns), "turns.event_id"); err != nil {
+			return err
+		}
+	}
 	for index, annotation := range result.Tools {
 		field := fmt.Sprintf("tools[%d]", index)
 		if err := validateEventID(annotation.EventID, fmt.Sprintf("tools[%d].event_id", index)); err != nil {
@@ -373,6 +383,11 @@ func (result AnnotationResult) Validate() error {
 			}
 		}
 	}
+	if v2 {
+		if err := validateUniqueEventIDs(toolEventIDs(result.Tools), "tools.event_id"); err != nil {
+			return err
+		}
+	}
 	for index, annotation := range result.Skills {
 		field := fmt.Sprintf("skills[%d]", index)
 		if err := validateEventID(annotation.EventID, fmt.Sprintf("skills[%d].event_id", index)); err != nil {
@@ -393,6 +408,11 @@ func (result AnnotationResult) Validate() error {
 			}
 		}
 	}
+	if v2 {
+		if err := validateUniqueEventIDs(skillEventIDs(result.Skills), "skills.event_id"); err != nil {
+			return err
+		}
+	}
 	for index, annotation := range result.Files {
 		field := fmt.Sprintf("files[%d]", index)
 		if err := validateEventID(annotation.EventID, field+".event_id"); err != nil {
@@ -411,6 +431,11 @@ func (result AnnotationResult) Validate() error {
 			return &AnalysisValidationError{Field: field + ".necessary", Code: "unsupported value"}
 		}
 		if err := validateRationale(annotation.Rationale, field+".rationale", false); err != nil {
+			return err
+		}
+	}
+	if v2 {
+		if err := validateUniqueEventIDs(fileEventIDs(result.Files), "files.event_id"); err != nil {
 			return err
 		}
 	}
@@ -652,6 +677,57 @@ func validateEventIDList(values []string, field string) error {
 		}
 	}
 	return nil
+}
+
+func validateUniqueEventIDs(values []string, field string) error {
+	seen := make(map[string]struct{}, len(values))
+	for index, value := range values {
+		if _, duplicate := seen[value]; duplicate {
+			return &AnalysisValidationError{Field: fmt.Sprintf("%s[%d]", field, index), Code: "duplicate event ID"}
+		}
+		seen[value] = struct{}{}
+	}
+	return nil
+}
+
+func userTurnEventIDs(records []UserTurnAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func turnEventIDs(records []TurnAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func toolEventIDs(records []ToolAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func skillEventIDs(records []SkillAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func fileEventIDs(records []FileAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
 }
 
 func isAgentInstructionPath(value string) bool {

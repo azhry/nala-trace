@@ -199,6 +199,21 @@ func TestAnnotationV2ValidatesForensicEvidenceCategories(t *testing.T) {
 	}
 }
 
+func TestAnnotationV2RejectsDuplicateCategoryEventIDs(t *testing.T) {
+	result := AnnotationResult{
+		SchemaVersion: AnalysisSchemaVersion,
+		Source:        "session-annotator",
+		UserTurns: []UserTurnAnnotation{
+			{EventID: "user-1", SignalType: UserSignalRequest, Summary: "First request.", Rationale: "The event contains the user's request."},
+			{EventID: "user-1", SignalType: UserSignalCorrection, Summary: "Correction.", Rationale: "The event corrects earlier instructions."},
+		},
+		Coverage: emptyAnnotationCoverage(),
+	}
+	if err := result.Validate(); err == nil || !strings.Contains(err.Error(), "duplicate event ID") {
+		t.Fatalf("Validate() error = %v, want duplicate category event rejection", err)
+	}
+}
+
 func TestEvaluationV2RejectsDuplicateOccurrenceEventIDs(t *testing.T) {
 	result := EvaluationResult{
 		SchemaVersion: AnalysisSchemaVersion,

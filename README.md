@@ -95,8 +95,13 @@ curl --fail-with-body --silent --show-error http://127.0.0.1:3003/healthz
 
 - `POST /ingest` — accept one authenticated Codex hook event.
 - `GET /sessions` — list owner-scoped session summaries.
-- `GET /sessions/:id` — read one reconstructed owner-scoped trace with its
-  `analysis.annotation` and `analysis.evaluation` results. Both values are
+- `GET /sessions/:id?offset=0&limit=100` — read one page of the reconstructed,
+  owner-scoped trace with its `analysis.annotation` and
+  `analysis.evaluation` results. `limit` defaults to 100 and is capped at 200;
+  `offset` defaults to 0. The response includes `pagination.offset`,
+  `pagination.limit`, `pagination.total`, and `pagination.has_more`. Session
+  summary counts and saved analysis describe the full session, while the trace
+  collections contain only the requested page. Both analysis values are
   `null` until the corresponding analysis is persisted.
 - `GET /sessions/:id/analysis` — read only the owner-scoped saved annotation and
   evaluation, without reconstructing or transferring the full trace. Missing

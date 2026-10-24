@@ -474,6 +474,57 @@ func TestSessionTraceHandlerReconstructsOwnerScopedTrace(t *testing.T) {
 	}
 }
 
+func TestSessionTraceHandlerPaginatesWithoutBreakingToolPairs(t *testing.T) {
+	base := time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC)
+	repository := &traceEventRepository{events: []storage.HookEvent{
+		testHookEvent("prompt", "UserPromptSubmit", "turn-1", "", base, map[string]any{"prompt": "inspect the file"}),
+		testHookEvent("pre-tool", "PreToolUse", "turn-1", "tool-1", base.Add(time.Second), map[string]any{
+			"tool_name":  "Bash",
+			"tool_input": map[string]any{"command": "Get-ChildItem"},
+		}),
+		testHookEvent("post-tool", "PostToolUse", "turn-1", "tool-1", base.Add(2*time.Second), map[string]any{"tool_response": "file.txt"}),
+		testHookEvent("stop", "Stop", "turn-1", "", base.Add(3*time.Second), map[string]any{"response": "done"}),
+	}}
+
+	firstResponse := httptest.NewRecorder()
+	NewSessionTraceHandler(repository).ServeHTTP(firstResponse, authenticatedTraceRequest(http.MethodGet, "/sessions/session-1?offset=0&limit=2"))
+	if firstResponse.Code != http.StatusOK {
+		t.Fatalf("first page status = %d, want %d: %s", firstResponse.Code, http.StatusOK, firstResponse.Body.String())
+	}
+	var first trace.Trace
+	if err := json.Unmarshal(firstResponse.Body.Bytes(), &first); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(first.Timeline) != 2 || first.Timeline[0].ID != "prompt" || first.Timeline[1].ID != "pre-tool" {
+		t.Fatalf("first timeline page = %#v", first.Timeline)
+	}
+	if len(first.ToolCalls) != 1 || first.ToolCalls[0].Status != trace.ToolCallCompleted || string(first.ToolCalls[0].Output) != `"file.txt"` {
+		t.Fatalf("first page tool call = %#v, want completed pair across page boundary", first.ToolCalls)
+	}
+	if first.Pagination.Offset != 0 || first.Pagination.Limit != 2 || first.Pagination.Total != 4 || !first.Pagination.HasMore || first.Summary.EventCount != 4 {
+		t.Fatalf("first page metadata = pagination %#v, summary %#v", first.Pagination, first.Summary)
+	}
+
+	secondResponse := httptest.NewRecorder()
+	NewSessionTraceHandler(repository).ServeHTTP(secondResponse, authenticatedTraceRequest(http.MethodGet, "/sessions/session-1?offset=2&limit=2"))
+	if secondResponse.Code != http.StatusOK {
+		t.Fatalf("second page status = %d, want %d: %s", secondResponse.Code, http.StatusOK, secondResponse.Body.String())
+	}
+	var second trace.Trace
+	if err := json.Unmarshal(secondResponse.Body.Bytes(), &second); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(second.Timeline) != 2 || second.Timeline[0].ID != "post-tool" || second.Timeline[1].ID != "stop" {
+		t.Fatalf("second timeline page = %#v", second.Timeline)
+	}
+	if second.Pagination.Offset != 2 || second.Pagination.HasMore || second.Summary.EventCount != 4 {
+		t.Fatalf("second page metadata = pagination %#v, summary %#v", second.Pagination, second.Summary)
+	}
+	if first.Timeline[1].ID == second.Timeline[0].ID {
+		t.Fatal("adjacent pages duplicated a timeline event")
+	}
+}
+
 func TestSessionTraceHandlerReturnsCompleteFixtureResponse(t *testing.T) {
 	events, err := testfixtures.Load(testfixtures.CompleteSession)
 	if err != nil {
@@ -495,6 +546,7 @@ func TestSessionTraceHandlerReturnsCompleteFixtureResponse(t *testing.T) {
 	wantFields := map[string]bool{
 		"schema_version": true, "session_id": true, "user_id": true, "timeline": true,
 		"conversation": true, "tool_calls": true, "skill_invocations": true, "files": true, "summary": true, "runtime_metadata": true, "analysis": true,
+		"pagination": true,
 	}
 	if len(fields) != len(wantFields) {
 		t.Fatalf("response field count = %d, want %d: %#v", len(fields), len(wantFields), fields)
@@ -511,6 +563,9 @@ func TestSessionTraceHandlerReturnsCompleteFixtureResponse(t *testing.T) {
 	if result.SchemaVersion != trace.SchemaVersion || result.SessionID != "fixture-session-1" || result.UserID != "user-1" {
 		t.Fatalf("trace identity = %#v", result)
 	}
+	if result.Pagination == nil || result.Pagination.Offset != 0 || result.Pagination.Limit != defaultTracePageSize || result.Pagination.Total != 14 || result.Pagination.HasMore {
+		t.Fatalf("default page metadata = %#v", result.Pagination)
+	}
 	if len(result.Timeline) != 14 || result.Timeline[0].ID != "session-start-01" || result.Timeline[13].ID != "stop-01" {
 		t.Fatalf("timeline boundary = %#v", result.Timeline)
 	}
@@ -523,6 +578,29 @@ func TestSessionTraceHandlerReturnsCompleteFixtureResponse(t *testing.T) {
 	wantSummary := trace.Summary{EventCount: 14, MessageCount: 2, ToolCallCount: 4, MCPCallCount: 0, MCPServers: []string{}, SkillInvocationCount: 1, FileOperationCount: 2, FileReadCount: 1}
 	if !reflect.DeepEqual(result.Summary, wantSummary) {
 		t.Fatalf("summary = %#v, want %#v", result.Summary, wantSummary)
+	}
+}
+
+func TestSessionTraceHandlerRejectsInvalidPaginationQuery(t *testing.T) {
+	for _, path := range []string{
+		"/sessions/session-1?limit=0",
+		"/sessions/session-1?limit=201",
+		"/sessions/session-1?limit=1&limit=2",
+		"/sessions/session-1?offset=-1",
+		"/sessions/session-1?offset=1&offset=2",
+		"/sessions/session-1?page=2",
+	} {
+		t.Run(path, func(t *testing.T) {
+			repository := &traceEventRepository{}
+			response := httptest.NewRecorder()
+			NewSessionTraceHandler(repository).ServeHTTP(response, authenticatedTraceRequest(http.MethodGet, path))
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
+			}
+			if repository.calls != 0 {
+				t.Fatalf("repository calls = %d, want 0 for invalid pagination", repository.calls)
+			}
+		})
 	}
 }
 

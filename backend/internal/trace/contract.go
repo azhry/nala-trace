@@ -31,6 +31,14 @@ type Trace struct {
 	RuntimeMetadata  RuntimeMetadata    `json:"runtime_metadata"`
 	Summary          Summary            `json:"summary"`
 	Analysis         Analysis           `json:"analysis"`
+	Pagination       *Pagination        `json:"pagination,omitempty"`
+}
+
+type Pagination struct {
+	Offset  int  `json:"offset"`
+	Limit   int  `json:"limit"`
+	Total   int  `json:"total"`
+	HasMore bool `json:"has_more"`
 }
 
 type TimelineEvent struct {

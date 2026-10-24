@@ -29,7 +29,7 @@ describe('InsightCards', () => {
     const panel = screen.getByRole('complementary', { name: 'Review details' })
     expect(screen.getByRole('heading', { name: 'Review details' })).toBeInTheDocument()
     expect(panel).toHaveClass('analysis-full-page')
-    expect(screen.getByText('No analysis recorded')).toBeInTheDocument()
+    expect(screen.getByText('No analysis saved')).toBeInTheDocument()
     expect(screen.getAllByText('Not recorded')).toHaveLength(3)
     expect(screen.queryByText('Pass')).not.toBeInTheDocument()
   })
@@ -57,10 +57,10 @@ describe('InsightCards', () => {
       updated_at: '2026-08-19T08:10:00Z',
     }} trace={trace} />)
 
-    expect(screen.getAllByText('1 labeled / 1 total')).toHaveLength(2)
-    expect(screen.getByText('Turn performance')).toBeInTheDocument()
-    expect(screen.getAllByText('Neutral').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('Improved means the turn moved the result forward; neutral means no observable effect; worsened means it added rework, risk, or regression.')).toBeInTheDocument()
+    expect(screen.getAllByText('1 labeled / 1 captured')).toHaveLength(2)
+    expect(screen.getByText('Effect on the result')).toBeInTheDocument()
+    expect(screen.getAllByText('No outcome change recorded').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('“No outcome change recorded” means the evaluator did not see this turn change the result. It does not mean the response was good or bad.')).toBeInTheDocument()
     expect(screen.getAllByText('The assistant completed the requested inspection.', { exact: false }).length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('rg')).toBeInTheDocument()
     expect(screen.getByText('tool use: tool-1')).toBeInTheDocument()
@@ -70,11 +70,11 @@ describe('InsightCards', () => {
     expect(screen.getAllByText('Pass')).toHaveLength(2)
     expect(screen.getByText('The recorded workflow is complete.')).toBeInTheDocument()
     expect(screen.getByText('files read before write')).toBeInTheDocument()
-    expect(screen.getByText('Warnings need attention. Info items explain context and are not failures.')).toBeInTheDocument()
+    expect(screen.getByText('Warning and critical labels need review. Info labels provide context. Each listed occurrence is an explicit saved event, not an example parsed from the description.')).toBeInTheDocument()
     expect(screen.getByText('1 occurrence · Info')).toBeInTheDocument()
-    expect(screen.getAllByText('Instruction following: Followed').some((element) => element.tagName === 'SPAN')).toBe(true)
+    expect(screen.getAllByText('Instruction adherence: Followed').some((element) => element.tagName === 'SPAN')).toBe(true)
     expect(screen.getAllByText('Needed for task: Not needed').some((element) => element.tagName === 'SPAN')).toBe(true)
-    expect(screen.getByText(/Follows instructions means whether the captured turn followed/)).toBeInTheDocument()
+    expect(screen.queryByText(/Follows instructions means whether the captured turn followed/)).not.toBeInTheDocument()
     expect(screen.getByText('Aligned')).toBeInTheDocument()
     expect(screen.getByText('golden-set-v1')).toBeInTheDocument()
     expect(screen.getByText('No improvement actions recorded')).toBeInTheDocument()
@@ -97,9 +97,9 @@ describe('InsightCards', () => {
     }} trace={trace} />)
 
     expect(screen.getByRole('heading', { name: 'What to improve' })).toBeInTheDocument()
-    expect(screen.getByText('Use this plan to change agent behavior or its instruction Markdown. The project field is context only, never an improvement target.')).toBeInTheDocument()
+    expect(screen.getByText('Every action targets agent behavior or agent instruction Markdown. The project name is context only.')).toBeInTheDocument()
     expect(screen.getByText('Project context')).toBeInTheDocument()
-    expect(screen.getByText('This identifies the evaluated project; it is not a valid improvement target.')).toBeInTheDocument()
+    expect(screen.getByText('This is the evaluated project, not an improvement target.')).toBeInTheDocument()
     expect(screen.getByText('Agent instructions')).toBeInTheDocument()
     expect(screen.getByText('AGENTS.md')).toBeInTheDocument()
     expect(screen.getByText('Clarify the frontend handoff boundary.')).toBeInTheDocument()
@@ -123,12 +123,13 @@ describe('InsightCards', () => {
     }} trace={trace} />)
 
     expect(screen.getAllByText('Unmatched tool hook pairs').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Unmatched event: Codex response: The assistant completed the requested inspection.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Unmatched event: ObjectID("stop-1").').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('No event locations saved')).toBeInTheDocument()
     expect(screen.getByText('2 occurrences · Warning')).toBeInTheDocument()
     expect(screen.getByText('Review concern')).toBeInTheDocument()
   })
 
-  it('shows individual signal examples and filters annotation evidence by decision', () => {
+  it('shows only explicit signal occurrences and filters annotation evidence by decision', () => {
     render(<InsightCards analysis={{
       annotation: {
         schema_version: '1',
@@ -146,7 +147,11 @@ describe('InsightCards', () => {
           name: 'unmatched_tool_hook_pairs',
           count: 2,
           severity: 'warning',
-          detail: 'Example event IDs: mcp__codex_apps__linear__list_comments: {"issueId":"issue-1"}, view_image: {"detail":"high","path":"before.svg"}.',
+          detail: 'The evaluator saved two locations for follow-up.',
+          occurrences: [
+            { event_id: 'signal-event-1', event_kind: 'PreToolUse', summary: 'Tool started without a completion.', impact: 'Its result is not verifiable.' },
+            { event_id: 'signal-event-2', event_kind: 'PreToolUse', summary: 'Another tool started without a completion.', impact: 'Its result is not verifiable.' },
+          ],
         }],
       },
     }} trace={{
@@ -161,19 +166,99 @@ describe('InsightCards', () => {
       ],
     }} />)
 
-    expect(screen.getByText('2 examples shown of 2 recorded occurrences')).toBeInTheDocument()
-    expect(screen.getByText('mcp__codex_apps__linear__list_comments')).toBeInTheDocument()
-    expect(screen.getAllByText(/issueId.*issue-1/).some((element) => element.tagName === 'CODE')).toBe(true)
-    expect(screen.getByText('view_image')).toBeInTheDocument()
-    expect(screen.getAllByText(/path.*before\.svg/).some((element) => element.tagName === 'CODE')).toBe(true)
+    expect(screen.getByText('2 located of 2 recorded')).toBeInTheDocument()
+    expect(screen.getByText('event id: signal-event-1')).toBeInTheDocument()
+    expect(screen.getAllByText('PreToolUse').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Tool started without a completion.')).toBeInTheDocument()
+    expect(screen.queryByText('mcp__codex_apps__linear__list_comments')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Evidence type')).toBeInTheDocument()
-    expect(screen.getByLabelText('Annotation decision')).toBeInTheDocument()
+    expect(screen.getByLabelText('Decision or label')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Annotation decision'), { target: { value: 'followsInstructions:no' } })
+    fireEvent.change(screen.getByLabelText('Decision or label'), { target: { value: 'followsInstructions:no' } })
 
-    expect(screen.getByText('Showing 1 of 2 labeled records')).toBeInTheDocument()
+    expect(screen.getByText('Showing 1 of 2 saved records')).toBeInTheDocument()
     expect(screen.getByText('The turn broke an instruction.')).toBeInTheDocument()
     expect(screen.queryByText('The turn followed instructions.')).not.toBeInTheDocument()
+  })
+
+  it('renders v2 turn, tool, skill, file, capture-gap, occurrence, and action evidence with filters', () => {
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: {
+        schema_version: '2',
+        coverage: {
+          user_turns: { captured: 1, labeled: 1, unclear: 0 },
+          agent_turns: { captured: 1, labeled: 1, unclear: 0 },
+          tool_calls: { captured: 1, labeled: 1, unclear: 1 },
+          skill_invocations: { captured: 1, labeled: 1, unclear: 0 },
+          file_operations: { captured: 1, labeled: 1, unclear: 0 },
+        },
+        user_turns: [{ event_id: 'user-event-1', signal_type: 'clarification', summary: 'Only change the evaluation page.', rationale: 'The user narrowed the requested implementation scope.' }],
+        turns: [{
+          event_id: 'agent-event-1',
+          response_summary: 'Updated the evaluation interface.',
+          scope_adherence: 'deviation',
+          groundedness: 'unsupported',
+          verification: 'not_verified',
+          related_event_ids: ['tool-event-1'],
+        }],
+        tools: [{ event_id: 'tool-event-1', tool_name: 'Bash', input_summary: 'npm run build', output_summary: 'Vite built the frontend.', completion_status: 'incomplete', necessary: 'unclear' }],
+        skills: [{ event_id: 'skill-event-1', skill_name: 'frontend-design', summary: 'Improved the forensic evidence layout.' }],
+        files: [{ event_id: 'file-event-1', path: '.agents/AGENTS.md', operation: 'read', summary: 'Read the agent instructions.' }],
+        capture_gaps: [{ category: 'Tool calls', event_ids: ['gap-event-1'], summary: 'A tool completion was not captured.', impact: 'The tool result cannot be confirmed.' }],
+      },
+      evaluation: {
+        schema_version: '2',
+        verdict: 'fail',
+        critique: 'A tool outcome could not be verified.',
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 1,
+          severity: 'warning',
+          detail: 'A completion event is missing.',
+          occurrences: [{ event_id: 'gap-event-1', event_kind: 'PreToolUse', occurred_at: '2026-10-24T10:00:00Z', summary: 'The tool invocation has no completion event.', impact: 'Its outcome cannot be verified.' }],
+        }],
+        evaluation_ledger: { improvements: [{ target_type: 'agent_instructions', change: 'Require a completion-event check.', reason: 'The previous review could not verify the tool outcome.', evidence_event_ids: ['gap-event-1'] }] },
+      },
+    }} />)
+
+    expect(screen.getAllByText('1 labeled / 1 captured')).toHaveLength(5)
+    expect(screen.getByText('What the user said')).toBeInTheDocument()
+    expect(screen.getByText('Only change the evaluation page.')).toBeInTheDocument()
+    expect(screen.getByText('Why this message was classified this way')).toBeInTheDocument()
+    expect(screen.getByText('The user narrowed the requested implementation scope.')).toBeInTheDocument()
+    expect(screen.getByText('Updated the evaluation interface.')).toBeInTheDocument()
+    expect(screen.getByText('Scope: Deviation')).toBeInTheDocument()
+    expect(screen.getAllByText('Claims: Unsupported').some((element) => element.tagName === 'SPAN')).toBe(true)
+    expect(screen.getByText('Verification: Not Verified')).toBeInTheDocument()
+    expect(screen.getAllByText(/1 record has one or more unclear decisions/)).toHaveLength(1)
+    expect(screen.getAllByText('No records have an unclear decision.')).toHaveLength(4)
+    expect(screen.getByText('npm run build')).toBeInTheDocument()
+    expect(screen.getByText('Vite built the frontend.')).toBeInTheDocument()
+    expect(screen.getByText('The tool call was recorded, but its completion evidence is incomplete.')).toBeInTheDocument()
+    expect(screen.getByText('Improved the forensic evidence layout.')).toBeInTheDocument()
+    expect(screen.getByText('.agents/AGENTS.md')).toBeInTheDocument()
+    expect(screen.getByText('A tool completion was not captured.')).toBeInTheDocument()
+    expect(screen.getByText('The tool result cannot be confirmed.')).toBeInTheDocument()
+    expect(screen.getByText('event id: gap-event-1')).toBeInTheDocument()
+    expect(screen.getByText('PreToolUse')).toBeInTheDocument()
+    expect(screen.getByText('2026-10-24T10:00:00Z')).toBeInTheDocument()
+    expect(screen.getByText('The tool invocation has no completion event.')).toBeInTheDocument()
+    expect(screen.getByText('Its outcome cannot be verified.')).toBeInTheDocument()
+    expect(screen.getByText('Require a completion-event check.')).toBeInTheDocument()
+    expect(screen.getByText('Agent instructions')).toBeInTheDocument()
+    expect(screen.getAllByText('gap-event-1').length).toBeGreaterThanOrEqual(2)
+
+    fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'turns' } })
+    fireEvent.change(screen.getByLabelText('Decision or label'), { target: { value: 'scopeAdherence:deviation' } })
+    expect(screen.getByText('Showing 1 of 1 saved records')).toBeInTheDocument()
+    expect(screen.getByText('Updated the evaluation interface.')).toBeInTheDocument()
+    expect(screen.queryByText('Only change the evaluation page.')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'capture_gaps' } })
+    expect(screen.getByLabelText('Decision or label')).toBeDisabled()
+    expect(screen.getByText('Showing 1 of 1 saved records')).toBeInTheDocument()
+    expect(screen.getByText('A tool completion was not captured.')).toBeInTheDocument()
+    expect(screen.queryByText('Updated the evaluation interface.')).not.toBeInTheDocument()
   })
 
   it('shows the captured context behind unclear tools and necessary skills', () => {
@@ -217,9 +302,8 @@ describe('InsightCards', () => {
     expect(screen.getByText('apply_patch')).toBeInTheDocument()
     expect(screen.getByText('Completion evidence')).toBeInTheDocument()
     expect(screen.getByText('No matching completion hook was captured; the invocation is present but its completion evidence is incomplete.')).toBeInTheDocument()
-    expect(screen.getByText('Captured invocation')).toBeInTheDocument()
-    expect(screen.getByText(/tool: skill.*skill-use-1.*confidence: explicit/)).toBeInTheDocument()
-    expect(screen.getByText('The skill supported the required frontend design, responsive interaction, or browser verification work.')).toBeInTheDocument()
+    expect(screen.getByText('Summary not included in this analysis version.')).toBeInTheDocument()
+    expect(screen.getAllByText('Why this label was applied')).toHaveLength(2)
   })
 
   it('turns warning findings into visible next steps alongside stored evaluator actions', () => {
@@ -243,10 +327,10 @@ describe('InsightCards', () => {
 
     expect(screen.getByText('1 valid agent action')).toBeInTheDocument()
     expect(screen.getByText('3 follow-ups from warning findings')).toBeInTheDocument()
-    expect(screen.getByText('Restore or verify completion-hook pairing for the listed tool calls before treating their necessity as known.')).toBeInTheDocument()
-    expect(screen.getByText('Run the authenticated desktop and mobile browser flow and record the result.')).toBeInTheDocument()
-    expect(screen.getByText('Verify the final branch base, head, and PR after collision recovery.')).toBeInTheDocument()
-    expect(screen.getAllByText('Derived from warning finding')).toHaveLength(3)
+    expect(screen.getByText('Keep tool necessity marked unknown when the completion event is missing, and verify the event pair before relying on that tool result.')).toBeInTheDocument()
+    expect(screen.getByText('For browser-dependent work, run the authenticated desktop and mobile checks and record what each one showed.')).toBeInTheDocument()
+    expect(screen.getByText('Before handoff, verify that the final branch and pull request use the requested base and contain the intended changes.')).toBeInTheDocument()
+    expect(screen.getAllByText('Suggested from a saved warning or critical finding')).toHaveLength(3)
     expect(screen.getByText('Clarify review ownership.')).toBeInTheDocument()
   })
 
@@ -263,10 +347,10 @@ describe('InsightCards', () => {
     }} trace={trace} />)
 
     expect(screen.queryByText('Recorded changes')).not.toBeInTheDocument()
-    expect(screen.getByText('Legacy targets excluded')).toBeInTheDocument()
+    expect(screen.getAllByText('1 legacy target excluded').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Out of scope — project source')).toBeInTheDocument()
     expect(screen.getByText('Excluded from agent improvements')).toBeInTheDocument()
-    expect(screen.getByText('No valid agent improvement actions recorded')).toBeInTheDocument()
+    expect(screen.getByText('No agent improvement actions recorded')).toBeInTheDocument()
     expect(screen.getByText('frontend/src/App.jsx')).toBeInTheDocument()
   })
 

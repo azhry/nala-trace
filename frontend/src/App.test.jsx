@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, clearAuthConfiguration, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
+import { ApiError, clearAuthConfiguration, getSessionAnalysis, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
 import { redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import App, { TRACE_LOADING_MIN_DURATION_MS } from './App'
 
@@ -8,6 +8,7 @@ vi.mock('./api', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
+    getSessionAnalysis: vi.fn(),
     getSessions: vi.fn(),
     getTrace: vi.fn(),
     resolveSession: vi.fn(),
@@ -86,6 +87,7 @@ describe('authenticated sessions flow', () => {
     redeemNalaLabsAuthCode.mockResolvedValue({ attempted: false, authenticated: false })
     resolveSession.mockResolvedValue({ authenticated: true, user: { id: 'user-1' } })
     getSessions.mockResolvedValue(sessionPayload)
+    getSessionAnalysis.mockResolvedValue({ session_id: 'authenticated-session', analysis: null })
     getTrace.mockResolvedValue({})
   })
 
@@ -254,8 +256,8 @@ describe('authenticated sessions flow', () => {
 
   it('opens the full evaluation review on its dedicated route', async () => {
     window.history.replaceState({}, '', '/#/sessions/authenticated-session/evaluation')
-    getTrace.mockResolvedValueOnce({
-      ...apiTracePayload,
+    getSessionAnalysis.mockResolvedValueOnce({
+      session_id: 'authenticated-session',
       analysis: {
         annotation: {
           schema_version: '1',
@@ -283,8 +285,27 @@ describe('authenticated sessions flow', () => {
     expect(await screen.findByText('The evaluator recorded a review concern.')).toBeInTheDocument()
     expect(screen.getAllByText('review required').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('heading', { name: 'Evaluation summary' })).not.toBeInTheDocument()
+    expect(getSessionAnalysis).toHaveBeenCalledExactlyOnceWith('authenticated-session')
+    expect(getTrace).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '← Session detail' }))
     await waitFor(() => expect(window.location.hash).toBe('#/sessions/authenticated-session'))
+  })
+
+  it('shows separate loading, failure, retry, and empty states without requesting the full trace', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session/evaluation')
+    let rejectAnalysis
+    getSessionAnalysis.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectAnalysis = reject }))
+
+    render(<App />)
+
+    await waitFor(() => expect(getSessionAnalysis).toHaveBeenCalledExactlyOnceWith('authenticated-session'))
+    expect(await screen.findByText('Loading saved evaluation')).toBeInTheDocument()
+    await act(async () => rejectAnalysis(new ApiError('analysis failed', 500)))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Saved evaluation could not be loaded')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry analysis request' }))
+    expect(await screen.findByText('No analysis saved')).toBeInTheDocument()
+    expect(getSessionAnalysis).toHaveBeenCalledTimes(2)
+    expect(getTrace).not.toHaveBeenCalled()
   })
 
   it('shows an accessible stable loader during the initial detail request', async () => {

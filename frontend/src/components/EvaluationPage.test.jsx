@@ -33,7 +33,7 @@ const session = {
 describe('EvaluationPage', () => {
   it('shows the full review without the detail-page guide', () => {
     const onBack = vi.fn()
-    render(<EvaluationPage session={session} onBack={onBack} />)
+    render(<EvaluationPage session={session} analysis={session.analysis} onBack={onBack} />)
 
     expect(screen.getByRole('heading', { name: 'Session evaluation', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Review details' })).toBeInTheDocument()
@@ -47,16 +47,31 @@ describe('EvaluationPage', () => {
   })
 
   it('leads with a human summary and progressively discloses forensic evidence', () => {
-    render(<EvaluationPage session={session} onBack={vi.fn()} />)
+    render(<EvaluationPage session={session} analysis={session.analysis} onBack={vi.fn()} />)
 
     expect(screen.getByRole('heading', { name: 'Review at a glance' })).toBeInTheDocument()
     expect(screen.getByText('The evaluator recorded a complete review.')).toBeInTheDocument()
     expect(screen.getByText('What to improve')).toBeInTheDocument()
 
     const evidenceDetails = screen.getByText('Evidence details').closest('details')
-    expect(evidenceDetails).not.toHaveAttribute('open')
-
-    fireEvent.click(screen.getByText('Evidence details'))
     expect(evidenceDetails).toHaveAttribute('open')
+    fireEvent.click(screen.getByText('Evidence details'))
+    expect(evidenceDetails).not.toHaveAttribute('open')
+  })
+
+  it('distinguishes loading, missing, failed, and empty analysis states', () => {
+    const retry = vi.fn()
+    const { rerender } = render(<EvaluationPage session={session} analysisState="loading" onAnalysisRetry={retry} onBack={vi.fn()} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Loading saved evaluation')
+
+    rerender(<EvaluationPage session={session} analysisState="missing" onAnalysisRetry={retry} onBack={vi.fn()} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Session analysis was not found')
+
+    rerender(<EvaluationPage session={session} analysisState="error" analysisError={{ status: 500 }} onAnalysisRetry={retry} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Retry analysis request' }))
+    expect(retry).toHaveBeenCalledOnce()
+
+    rerender(<EvaluationPage session={session} analysisState="ready" analysis={null} onBack={vi.fn()} />)
+    expect(screen.getByRole('status')).toHaveTextContent('No analysis saved')
   })
 })

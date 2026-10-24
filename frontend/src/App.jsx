@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
+import { ApiError, getSessionAnalysis, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
 import { AuthHandoffError, readNalaLabsAuthCode, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import InsightCards from './components/InsightCards'
 import EvaluationPage from './components/EvaluationPage'
@@ -138,6 +138,10 @@ export default function App() {
   const [traceRequestSessionId, setTraceRequestSessionId] = useState(null)
   const [traceState, setTraceState] = useState('idle')
   const [traceError, setTraceError] = useState(null)
+  const [analysisPayload, setAnalysisPayload] = useState(null)
+  const [analysisSessionId, setAnalysisSessionId] = useState(null)
+  const [analysisState, setAnalysisState] = useState('idle')
+  const [analysisError, setAnalysisError] = useState(null)
   const [redirectOnEntry] = useState(() => shouldRedirectOnEntry())
   const redirectedOnEntryRef = useRef(false)
 
@@ -214,9 +218,30 @@ export default function App() {
     }))
   }, [])
 
+  const loadAnalysis = useCallback((sessionId, isActive = () => true) => {
+    if (!sessionId) return Promise.resolve(null)
+    setAnalysisPayload(null)
+    setAnalysisSessionId(null)
+    setAnalysisError(null)
+    setAnalysisState('loading')
+    return getSessionAnalysis(sessionId).then((payload) => {
+      if (!isActive()) return payload
+      setAnalysisPayload(payload?.analysis ?? null)
+      setAnalysisSessionId(sessionId)
+      setAnalysisState('ready')
+      return payload
+    }).catch((error) => {
+      if (!isActive()) return null
+      setAnalysisError(error)
+      setAnalysisSessionId(sessionId)
+      setAnalysisState(error instanceof ApiError && error.status === 404 ? 'missing' : 'error')
+      return null
+    })
+  }, [])
+
   useEffect(() => {
     let mounted = true
-    if (apiState !== 'connected' || !['detail', 'evaluation'].includes(route.view) || !route.sessionId) {
+    if (apiState !== 'connected' || route.view !== 'detail' || !route.sessionId) {
       setRemoteTrace(null)
       setTraceSessionId(null)
       setTraceRequestSessionId(null)
@@ -228,11 +253,24 @@ export default function App() {
     return () => { mounted = false }
   }, [apiState, loadTrace, route.sessionId, route.view])
 
+  useEffect(() => {
+    let mounted = true
+    if (apiState !== 'connected' || route.view !== 'evaluation' || !route.sessionId) {
+      setAnalysisPayload(null)
+      setAnalysisSessionId(null)
+      setAnalysisError(null)
+      setAnalysisState('idle')
+      return () => { mounted = false }
+    }
+    loadAnalysis(route.sessionId, () => mounted)
+    return () => { mounted = false }
+  }, [apiState, loadAnalysis, route.sessionId, route.view])
+
   const hasCurrentTrace = Boolean(remoteTrace && traceSessionId === route.sessionId)
   const detailTraceState = traceRequestSessionId !== route.sessionId ? 'loading' : traceState
   const detailSession = hasCurrentTrace
     ? { ...(selectedSession || { id: route.sessionId, title: route.sessionId, status: 'captured' }), ...remoteTrace }
-    : selectedSession || (route.view === 'detail' && route.sessionId ? { id: route.sessionId, title: route.sessionId, status: 'captured' } : null)
+    : selectedSession || (['detail', 'evaluation'].includes(route.view) && route.sessionId ? { id: route.sessionId, title: route.sessionId, status: 'captured' } : null)
 
   function selectSession(id) {
     navigateTo(`sessions/${encodeURIComponent(id)}`)
@@ -243,5 +281,5 @@ export default function App() {
 
   const showDetail = route.view === 'detail' && apiState === 'connected' && detailSession
   const showEvaluation = route.view === 'evaluation' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} traceState={detailTraceState} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} analysis={analysisSessionId === route.sessionId ? analysisPayload : null} analysisState={analysisSessionId === route.sessionId ? analysisState : 'loading'} analysisError={analysisSessionId === route.sessionId ? analysisError : null} onAnalysisRetry={() => loadAnalysis(route.sessionId)} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

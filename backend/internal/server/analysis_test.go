@@ -181,6 +181,29 @@ func TestSessionAnalysisHandlerReturnsOwnerScopedAnalysisWithoutTrace(t *testing
 	}
 }
 
+func TestSessionAnalysisHandlerReturnsNullSectionsWhenNoResultIsStored(t *testing.T) {
+	reader := &scopedAnalysisReader{analysis: trace.NewAnalysis()}
+	request := authenticatedTraceRequest(http.MethodGet, "/sessions/session-without-analysis/analysis")
+	response := httptest.NewRecorder()
+	NewSessionAnalysisHandler(reader).ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		SessionID string `json:"session_id"`
+		Analysis  struct {
+			Annotation *trace.AnnotationResult `json:"annotation"`
+			Evaluation *trace.EvaluationResult `json:"evaluation"`
+		} `json:"analysis"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode analysis: %v", err)
+	}
+	if body.SessionID != "session-without-analysis" || body.Analysis.Annotation != nil || body.Analysis.Evaluation != nil {
+		t.Fatalf("empty analysis response = %#v", body)
+	}
+}
+
 func TestSessionAnalysisHandlerRequiresAuthenticationAndReader(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/sessions/session-1/analysis", nil)
 	response := httptest.NewRecorder()

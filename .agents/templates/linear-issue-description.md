@@ -56,7 +56,7 @@ Legend: the pale-yellow region and annotation identify where the implementation 
 
 Replace both diagrams with the real before and after paths. Keep the same actors and services where they are unchanged, and make the changed sequence visibly distinct.
 
-After saving, reopen the issue in Linear and visually verify that all three images render inline, each source block is collapsed by default, and expanding a source shows literal SVG/XML text rather than a rendered diagram. API text counts alone do not establish this acceptance criterion.
+After saving, re-read the saved description through the tracker API and verify that all three image tags are present, each paired with a native collapsible carrying the exact SVG source in an `xml` fence. Exact structure and pairing are the acceptance criterion; heading or text-presence counts alone do not establish it, and browser or visual verification of the tracker is not required.
 
 ## Implementation Manual Test and Verification
 

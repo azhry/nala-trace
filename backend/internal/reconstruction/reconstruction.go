@@ -263,6 +263,10 @@ var (
 func detectSkillInvocations(event storage.HookEvent, eventID string, raw json.RawMessage, files []trace.FileOperation) []trace.SkillInvocation {
 	input := toolInputDocument(event.Payload)
 	payload := payloadDocument(event.Payload)
+	return detectSkillInvocationsFromDocuments(event, eventID, raw, files, payload, input)
+}
+
+func detectSkillInvocationsFromDocuments(event storage.HookEvent, eventID string, raw json.RawMessage, files []trace.FileOperation, payload, input map[string]any) []trace.SkillInvocation {
 	toolName := toolNameForEvent(event, raw)
 	if name, ok := stringField(input, "skill_name", "skill"); ok {
 		return []trace.SkillInvocation{newSkillInvocation(name, event, eventID, raw, confidenceExplicit)}
@@ -399,10 +403,13 @@ func skillNameFromToolName(toolName string) string {
 
 func detectFileOperations(event storage.HookEvent, eventID string, raw json.RawMessage) []trace.FileOperation {
 	input := toolInputDocument(event.Payload)
+	return detectFileOperationsFromDocument(event, eventID, raw, input, toolInputText(event.Payload))
+}
+
+func detectFileOperationsFromDocument(event storage.HookEvent, eventID string, raw json.RawMessage, input map[string]any, inputText string) []trace.FileOperation {
 	toolName := toolNameForEvent(event, raw)
 	toolNameLower := strings.ToLower(toolName)
-	toolInputText := toolInputText(event.Payload)
-	patchText := toolInputText
+	patchText := inputText
 	if value, ok := stringField(input, "patch", "patch_text", "diff"); ok {
 		patchText = value
 	}
@@ -516,6 +523,18 @@ func toolInputDocument(payload bson.Raw) map[string]any {
 	return documentValue(payloadField(payload, "tool_input"))
 }
 
+func toolInputDocumentFromDocument(payload map[string]any) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	value, ok := nestedPayloadField(bson.M(payload), "tool_input", 0)
+	if !ok {
+		return nil
+	}
+	input, _ := nestedDocument(value)
+	return input
+}
+
 func toolInputText(payload bson.Raw) string {
 	value := payloadField(payload, "tool_input")
 	if len(value) == 0 {
@@ -526,6 +545,24 @@ func toolInputText(payload bson.Raw) string {
 		return text
 	}
 	return string(value)
+}
+
+func toolInputTextFromDocument(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	value, ok := nestedPayloadField(bson.M(payload), "tool_input", 0)
+	if !ok {
+		return ""
+	}
+	if text, ok := value.(string); ok {
+		return text
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 func payloadDocument(payload bson.Raw) map[string]any {

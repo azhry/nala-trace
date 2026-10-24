@@ -18,7 +18,18 @@ func validAnnotation() trace.AnnotationResult {
 			FollowsInstructions: trace.AnnotationYes,
 			Performance:         trace.PerformanceNeutral,
 			Rationale:           "The turn followed the visible task constraints.",
+			ResponseSummary:     "The assistant completed the requested action.",
+			ScopeAdherence:      trace.ScopeWithin,
+			Groundedness:        trace.GroundedSupported,
+			Verification:        trace.VerificationVerified,
 		}},
+		Coverage: &trace.AnnotationCoverage{
+			UserTurns:        &trace.CoverageCategory{},
+			AgentTurns:       &trace.CoverageCategory{Captured: 1, Labeled: 1},
+			ToolCalls:        &trace.CoverageCategory{},
+			SkillInvocations: &trace.CoverageCategory{},
+			FileOperations:   &trace.CoverageCategory{},
+		},
 	}
 }
 

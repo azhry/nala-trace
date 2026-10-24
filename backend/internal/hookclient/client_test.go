@@ -125,6 +125,41 @@ func TestSendEnrichesReasoningEffortWhenTranscriptHasNoUsage(t *testing.T) {
 	}
 }
 
+func TestSendEnrichesReasoningEffortOnNonTerminalEvent(t *testing.T) {
+	transcriptPath := filepath.Join(t.TempDir(), "rollout.jsonl")
+	transcript := `{"type":"turn_context","payload":{"effort":"xhigh"}}` + "\n"
+	if err := os.WriteFile(transcriptPath, []byte(transcript), 0600); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ = io.ReadAll(request.Body)
+		writer.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	input := `{"session_id":"session-1","hook_event_name":"UserPromptSubmit","transcript_path":` + mustJSONString(t, transcriptPath) + `}`
+	if err := Send(context.Background(), strings.NewReader(input), Config{URL: server.URL, Token: "api-key-test", Timeout: time.Second}); err != nil {
+		t.Fatalf("Send() error: %v", err)
+	}
+
+	var captured map[string]any
+	if err := json.Unmarshal(body, &captured); err != nil {
+		t.Fatalf("decode captured body: %v", err)
+	}
+	runtimeMetadata, ok := captured["runtime_metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime_metadata = %#v, want transcript metadata", captured["runtime_metadata"])
+	}
+	if got, want := runtimeMetadata["reasoning_effort"], "xhigh"; got != want {
+		t.Fatalf("runtime_metadata.reasoning_effort = %#v, want %q", got, want)
+	}
+	if _, ok := captured["usage"]; ok {
+		t.Fatalf("usage = %#v, want omitted on non-terminal event", captured["usage"])
+	}
+}
+
 func TestSendAddsReasoningEffortWithoutOverwritingProviderUsage(t *testing.T) {
 	transcriptPath := filepath.Join(t.TempDir(), "rollout.jsonl")
 	transcript := `{"type":"turn_context","payload":{"effort":"xhigh"}}` + "\n"

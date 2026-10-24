@@ -2,11 +2,13 @@ package trace
 
 import (
 	"fmt"
+	"path"
 	"strings"
 	"time"
 )
 
-const AnalysisSchemaVersion = "1"
+const AnalysisSchemaVersion = "2"
+const LegacyAnalysisSchemaVersion = "1"
 
 type AnnotationVerdict string
 
@@ -25,12 +27,96 @@ const (
 	PerformanceUnclear  PerformanceVerdict = "unclear"
 )
 
+type UserSignalType string
+
+const (
+	UserSignalRequest       UserSignalType = "request"
+	UserSignalConstraint    UserSignalType = "constraint"
+	UserSignalClarification UserSignalType = "clarification"
+	UserSignalCorrection    UserSignalType = "correction"
+	UserSignalApproval      UserSignalType = "approval"
+	UserSignalRejection     UserSignalType = "rejection"
+	UserSignalFeedback      UserSignalType = "feedback"
+	UserSignalOther         UserSignalType = "other"
+	UserSignalUnclear       UserSignalType = "unclear"
+)
+
+type ScopeAdherence string
+
+const (
+	ScopeWithin    ScopeAdherence = "within_scope"
+	ScopeDeviation ScopeAdherence = "deviation"
+	ScopeUnclear   ScopeAdherence = "unclear"
+)
+
+type Groundedness string
+
+const (
+	GroundedSupported   Groundedness = "supported"
+	GroundedUnsupported Groundedness = "unsupported"
+	GroundedUnclear     Groundedness = "unclear"
+)
+
+type VerificationStatus string
+
+const (
+	VerificationVerified      VerificationStatus = "verified"
+	VerificationNotVerified   VerificationStatus = "not_verified"
+	VerificationNotApplicable VerificationStatus = "not_applicable"
+	VerificationUnclear       VerificationStatus = "unclear"
+)
+
+type ToolCompletionStatus string
+
+const (
+	ToolCompleted  ToolCompletionStatus = "completed"
+	ToolIncomplete ToolCompletionStatus = "incomplete"
+	ToolFailed     ToolCompletionStatus = "failed"
+	ToolUnknown    ToolCompletionStatus = "unknown"
+)
+
+type ImprovementTarget string
+
+const (
+	ImprovementAgentBehavior        ImprovementTarget = "agent_behavior"
+	ImprovementAgentInstructions    ImprovementTarget = "agent_instructions"
+	ImprovementSkillInstructions    ImprovementTarget = "skill_instructions"
+	ImprovementWorkflowInstructions ImprovementTarget = "workflow_instructions"
+)
+
+type CoverageCategory struct {
+	Captured int `bson:"captured" json:"captured"`
+	Labeled  int `bson:"labeled" json:"labeled"`
+	Unclear  int `bson:"unclear" json:"unclear"`
+}
+
+type AnnotationCoverage struct {
+	UserTurns        *CoverageCategory `bson:"user_turns,omitempty" json:"user_turns,omitempty"`
+	AgentTurns       *CoverageCategory `bson:"agent_turns,omitempty" json:"agent_turns,omitempty"`
+	ToolCalls        *CoverageCategory `bson:"tool_calls,omitempty" json:"tool_calls,omitempty"`
+	SkillInvocations *CoverageCategory `bson:"skill_invocations,omitempty" json:"skill_invocations,omitempty"`
+	FileOperations   *CoverageCategory `bson:"file_operations,omitempty" json:"file_operations,omitempty"`
+}
+
 type AnnotationResult struct {
-	SchemaVersion string            `bson:"schema_version" json:"schema_version"`
-	Source        string            `bson:"source" json:"source"`
-	Turns         []TurnAnnotation  `bson:"turns" json:"turns"`
-	Tools         []ToolAnnotation  `bson:"tools" json:"tools"`
-	Skills        []SkillAnnotation `bson:"skills" json:"skills"`
+	SchemaVersion string               `bson:"schema_version" json:"schema_version"`
+	Source        string               `bson:"source" json:"source"`
+	UserTurns     []UserTurnAnnotation `bson:"user_turns,omitempty" json:"user_turns,omitempty"`
+	Turns         []TurnAnnotation     `bson:"turns" json:"turns"`
+	Tools         []ToolAnnotation     `bson:"tools" json:"tools"`
+	Skills        []SkillAnnotation    `bson:"skills" json:"skills"`
+	Files         []FileAnnotation     `bson:"files,omitempty" json:"files,omitempty"`
+	CaptureGaps   []CaptureGap         `bson:"capture_gaps,omitempty" json:"capture_gaps,omitempty"`
+	Coverage      *AnnotationCoverage  `bson:"coverage,omitempty" json:"coverage,omitempty"`
+}
+
+type UserTurnAnnotation struct {
+	EventID        string         `bson:"event_id" json:"event_id"`
+	TurnID         *string        `bson:"turn_id,omitempty" json:"turn_id,omitempty"`
+	SignalType     UserSignalType `bson:"signal_type" json:"signal_type"`
+	Summary        string         `bson:"summary" json:"summary"`
+	Rationale      string         `bson:"rationale" json:"rationale"`
+	LinkedEventIDs []string       `bson:"linked_event_ids,omitempty" json:"linked_event_ids,omitempty"`
 }
 
 type TurnAnnotation struct {
@@ -39,20 +125,46 @@ type TurnAnnotation struct {
 	FollowsInstructions AnnotationVerdict  `bson:"follows_instructions" json:"follows_instructions"`
 	Performance         PerformanceVerdict `bson:"performance" json:"performance"`
 	Rationale           string             `bson:"rationale" json:"rationale"`
+	ResponseSummary     string             `bson:"response_summary,omitempty" json:"response_summary,omitempty"`
+	ScopeAdherence      ScopeAdherence     `bson:"scope_adherence,omitempty" json:"scope_adherence,omitempty"`
+	Groundedness        Groundedness       `bson:"groundedness,omitempty" json:"groundedness,omitempty"`
+	Verification        VerificationStatus `bson:"verification,omitempty" json:"verification,omitempty"`
+	RelatedEventIDs     []string           `bson:"related_event_ids,omitempty" json:"related_event_ids,omitempty"`
 }
 
 type ToolAnnotation struct {
-	EventID   string            `bson:"event_id" json:"event_id"`
-	ToolUseID *string           `bson:"tool_use_id" json:"tool_use_id"`
-	Necessary AnnotationVerdict `bson:"necessary" json:"necessary"`
-	Rationale string            `bson:"rationale" json:"rationale"`
+	EventID          string               `bson:"event_id" json:"event_id"`
+	ToolUseID        *string              `bson:"tool_use_id" json:"tool_use_id"`
+	ToolName         string               `bson:"tool_name,omitempty" json:"tool_name,omitempty"`
+	InputSummary     string               `bson:"input_summary,omitempty" json:"input_summary,omitempty"`
+	OutputSummary    string               `bson:"output_summary,omitempty" json:"output_summary,omitempty"`
+	CompletionStatus ToolCompletionStatus `bson:"completion_status,omitempty" json:"completion_status,omitempty"`
+	Necessary        AnnotationVerdict    `bson:"necessary" json:"necessary"`
+	Rationale        string               `bson:"rationale" json:"rationale"`
 }
 
 type SkillAnnotation struct {
 	EventID   string            `bson:"event_id" json:"event_id"`
 	SkillName string            `bson:"skill_name" json:"skill_name"`
+	Summary   string            `bson:"summary,omitempty" json:"summary,omitempty"`
 	Necessary AnnotationVerdict `bson:"necessary" json:"necessary"`
 	Rationale string            `bson:"rationale" json:"rationale"`
+}
+
+type FileAnnotation struct {
+	EventID   string            `bson:"event_id" json:"event_id"`
+	Path      string            `bson:"path" json:"path"`
+	Operation string            `bson:"operation" json:"operation"`
+	Summary   string            `bson:"summary" json:"summary"`
+	Necessary AnnotationVerdict `bson:"necessary" json:"necessary"`
+	Rationale string            `bson:"rationale" json:"rationale"`
+}
+
+type CaptureGap struct {
+	Category string   `bson:"category" json:"category"`
+	EventIDs []string `bson:"event_ids" json:"event_ids"`
+	Summary  string   `bson:"summary" json:"summary"`
+	Impact   string   `bson:"impact" json:"impact"`
 }
 
 type EvaluationVerdict string
@@ -82,10 +194,19 @@ type EvaluationResult struct {
 }
 
 type ReviewSignal struct {
-	Name     string `bson:"name" json:"name"`
-	Count    int    `bson:"count" json:"count"`
-	Severity string `bson:"severity" json:"severity"`
-	Detail   string `bson:"detail" json:"detail"`
+	Name        string                   `bson:"name" json:"name"`
+	Count       int                      `bson:"count" json:"count"`
+	Severity    string                   `bson:"severity" json:"severity"`
+	Detail      string                   `bson:"detail" json:"detail"`
+	Occurrences []ReviewSignalOccurrence `bson:"occurrences,omitempty" json:"occurrences,omitempty"`
+}
+
+type ReviewSignalOccurrence struct {
+	EventID    string     `bson:"event_id" json:"event_id"`
+	EventKind  string     `bson:"event_kind,omitempty" json:"event_kind,omitempty"`
+	OccurredAt *time.Time `bson:"occurred_at,omitempty" json:"occurred_at,omitempty"`
+	Summary    string     `bson:"summary" json:"summary"`
+	Impact     string     `bson:"impact" json:"impact"`
 }
 
 type JudgeAlignment struct {
@@ -102,9 +223,11 @@ type EvaluationLedger struct {
 }
 
 type Improvement struct {
-	Path   string `bson:"path" json:"path"`
-	Change string `bson:"change" json:"change"`
-	Reason string `bson:"reason" json:"reason"`
+	TargetType       ImprovementTarget `bson:"target_type,omitempty" json:"target_type,omitempty"`
+	Path             string            `bson:"path" json:"path"`
+	Change           string            `bson:"change" json:"change"`
+	Reason           string            `bson:"reason" json:"reason"`
+	EvidenceEventIDs []string          `bson:"evidence_event_ids,omitempty" json:"evidence_event_ids,omitempty"`
 }
 
 type Analysis struct {
@@ -127,6 +250,9 @@ func (e *AnalysisValidationError) Error() string {
 }
 
 func (result *AnnotationResult) Normalize() {
+	if result.UserTurns == nil {
+		result.UserTurns = make([]UserTurnAnnotation, 0)
+	}
 	if result.Turns == nil {
 		result.Turns = make([]TurnAnnotation, 0)
 	}
@@ -136,21 +262,62 @@ func (result *AnnotationResult) Normalize() {
 	if result.Skills == nil {
 		result.Skills = make([]SkillAnnotation, 0)
 	}
+	if result.Files == nil {
+		result.Files = make([]FileAnnotation, 0)
+	}
+	if result.CaptureGaps == nil {
+		result.CaptureGaps = make([]CaptureGap, 0)
+	}
 }
 
 func (result AnnotationResult) Validate() error {
-	if strings.TrimSpace(result.SchemaVersion) != AnalysisSchemaVersion {
+	if !validAnalysisSchemaVersion(result.SchemaVersion) {
 		return &AnalysisValidationError{Field: "schema_version", Code: "unsupported value"}
 	}
+	v2 := result.SchemaVersion == AnalysisSchemaVersion
 	if err := validateSource(result.Source); err != nil {
 		return err
 	}
-	if len(result.Turns) > maxAnalysisRecords || len(result.Tools) > maxAnalysisRecords || len(result.Skills) > maxAnalysisRecords {
+	if len(result.UserTurns) > maxAnalysisRecords || len(result.Turns) > maxAnalysisRecords || len(result.Tools) > maxAnalysisRecords || len(result.Skills) > maxAnalysisRecords || len(result.Files) > maxAnalysisRecords || len(result.CaptureGaps) > maxAnalysisRecords {
 		return &AnalysisValidationError{Field: "records", Code: "too many records"}
 	}
+	for index, annotation := range result.UserTurns {
+		field := fmt.Sprintf("user_turns[%d]", index)
+		if err := validateEventID(annotation.EventID, field+".event_id"); err != nil {
+			return err
+		}
+		if v2 {
+			if err := validateOptionalEventID(annotation.TurnID, field+".turn_id"); err != nil {
+				return err
+			}
+		}
+		if !validUserSignalType(annotation.SignalType) {
+			return &AnalysisValidationError{Field: field + ".signal_type", Code: "unsupported value"}
+		}
+		if err := validateRationale(annotation.Summary, field+".summary", false); err != nil {
+			return err
+		}
+		if err := validateRationale(annotation.Rationale, field+".rationale", false); err != nil {
+			return err
+		}
+		if err := validateEventIDList(annotation.LinkedEventIDs, field+".linked_event_ids"); err != nil {
+			return err
+		}
+	}
+	if v2 {
+		if err := validateUniqueEventIDs(userTurnEventIDs(result.UserTurns), "user_turns.event_id"); err != nil {
+			return err
+		}
+	}
 	for index, annotation := range result.Turns {
+		field := fmt.Sprintf("turns[%d]", index)
 		if err := validateEventID(annotation.EventID, fmt.Sprintf("turns[%d].event_id", index)); err != nil {
 			return err
+		}
+		if v2 {
+			if err := validateOptionalEventID(annotation.TurnID, field+".turn_id"); err != nil {
+				return err
+			}
 		}
 		if !validAnnotationVerdict(annotation.FollowsInstructions) {
 			return &AnalysisValidationError{Field: fmt.Sprintf("turns[%d].follows_instructions", index), Code: "unsupported value"}
@@ -161,10 +328,39 @@ func (result AnnotationResult) Validate() error {
 		if err := validateRationale(annotation.Rationale, fmt.Sprintf("turns[%d].rationale", index), false); err != nil {
 			return err
 		}
+		if annotation.ScopeAdherence != "" && !validScopeAdherence(annotation.ScopeAdherence) {
+			return &AnalysisValidationError{Field: field + ".scope_adherence", Code: "unsupported value"}
+		}
+		if annotation.Groundedness != "" && !validGroundedness(annotation.Groundedness) {
+			return &AnalysisValidationError{Field: field + ".groundedness", Code: "unsupported value"}
+		}
+		if annotation.Verification != "" && !validVerificationStatus(annotation.Verification) {
+			return &AnalysisValidationError{Field: field + ".verification", Code: "unsupported value"}
+		}
+		if err := validateRationale(annotation.ResponseSummary, field+".response_summary", !v2); err != nil {
+			return err
+		}
+		if v2 && (annotation.ScopeAdherence == "" || annotation.Groundedness == "" || annotation.Verification == "") {
+			return &AnalysisValidationError{Field: field, Code: "schema version 2 requires scope, groundedness, and verification labels"}
+		}
+		if err := validateEventIDList(annotation.RelatedEventIDs, field+".related_event_ids"); err != nil {
+			return err
+		}
+	}
+	if v2 {
+		if err := validateUniqueEventIDs(turnEventIDs(result.Turns), "turns.event_id"); err != nil {
+			return err
+		}
 	}
 	for index, annotation := range result.Tools {
+		field := fmt.Sprintf("tools[%d]", index)
 		if err := validateEventID(annotation.EventID, fmt.Sprintf("tools[%d].event_id", index)); err != nil {
 			return err
+		}
+		if v2 {
+			if err := validateOptionalEventID(annotation.ToolUseID, field+".tool_use_id"); err != nil {
+				return err
+			}
 		}
 		if !validAnnotationVerdict(annotation.Necessary) {
 			return &AnalysisValidationError{Field: fmt.Sprintf("tools[%d].necessary", index), Code: "unsupported value"}
@@ -172,9 +368,32 @@ func (result AnnotationResult) Validate() error {
 		if err := validateRationale(annotation.Rationale, fmt.Sprintf("tools[%d].rationale", index), false); err != nil {
 			return err
 		}
+		if v2 {
+			if err := validateShortString(annotation.ToolName, field+".tool_name", true); err != nil {
+				return err
+			}
+			if err := validateRationale(annotation.InputSummary, field+".input_summary", false); err != nil {
+				return err
+			}
+			if err := validateRationale(annotation.OutputSummary, field+".output_summary", false); err != nil {
+				return err
+			}
+			if !validToolCompletionStatus(annotation.CompletionStatus) {
+				return &AnalysisValidationError{Field: field + ".completion_status", Code: "unsupported value"}
+			}
+		}
+	}
+	if v2 {
+		if err := validateUniqueEventIDs(toolEventIDs(result.Tools), "tools.event_id"); err != nil {
+			return err
+		}
 	}
 	for index, annotation := range result.Skills {
+		field := fmt.Sprintf("skills[%d]", index)
 		if err := validateEventID(annotation.EventID, fmt.Sprintf("skills[%d].event_id", index)); err != nil {
+			return err
+		}
+		if err := validateShortString(annotation.SkillName, field+".skill_name", v2); err != nil {
 			return err
 		}
 		if !validAnnotationVerdict(annotation.Necessary) {
@@ -183,14 +402,74 @@ func (result AnnotationResult) Validate() error {
 		if err := validateRationale(annotation.Rationale, fmt.Sprintf("skills[%d].rationale", index), false); err != nil {
 			return err
 		}
+		if v2 {
+			if err := validateRationale(annotation.Summary, field+".summary", false); err != nil {
+				return err
+			}
+		}
+	}
+	if v2 {
+		if err := validateUniqueEventIDs(skillEventIDs(result.Skills), "skills.event_id"); err != nil {
+			return err
+		}
+	}
+	for index, annotation := range result.Files {
+		field := fmt.Sprintf("files[%d]", index)
+		if err := validateEventID(annotation.EventID, field+".event_id"); err != nil {
+			return err
+		}
+		if err := validateShortString(annotation.Path, field+".path", true); err != nil {
+			return err
+		}
+		if err := validateShortString(annotation.Operation, field+".operation", true); err != nil {
+			return err
+		}
+		if err := validateRationale(annotation.Summary, field+".summary", false); err != nil {
+			return err
+		}
+		if !validAnnotationVerdict(annotation.Necessary) {
+			return &AnalysisValidationError{Field: field + ".necessary", Code: "unsupported value"}
+		}
+		if err := validateRationale(annotation.Rationale, field+".rationale", false); err != nil {
+			return err
+		}
+	}
+	if v2 {
+		if err := validateUniqueEventIDs(fileEventIDs(result.Files), "files.event_id"); err != nil {
+			return err
+		}
+	}
+	for index, gap := range result.CaptureGaps {
+		field := fmt.Sprintf("capture_gaps[%d]", index)
+		if err := validateShortString(gap.Category, field+".category", true); err != nil {
+			return err
+		}
+		if len(gap.EventIDs) == 0 {
+			return &AnalysisValidationError{Field: field + ".event_ids", Code: "at least one observed event is required"}
+		}
+		if err := validateEventIDList(gap.EventIDs, field+".event_ids"); err != nil {
+			return err
+		}
+		if err := validateRationale(gap.Summary, field+".summary", false); err != nil {
+			return err
+		}
+		if err := validateRationale(gap.Impact, field+".impact", false); err != nil {
+			return err
+		}
+	}
+	if v2 {
+		if err := validateCoverage(result); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (result EvaluationResult) Validate() error {
-	if strings.TrimSpace(result.SchemaVersion) != AnalysisSchemaVersion {
+	if !validAnalysisSchemaVersion(result.SchemaVersion) {
 		return &AnalysisValidationError{Field: "schema_version", Code: "unsupported value"}
 	}
+	v2 := result.SchemaVersion == AnalysisSchemaVersion
 	if err := validateSource(result.Source); err != nil {
 		return err
 	}
@@ -216,6 +495,34 @@ func (result EvaluationResult) Validate() error {
 		if err := validateRationale(signal.Detail, fmt.Sprintf("review_signals[%d].detail", index), true); err != nil {
 			return err
 		}
+		if len(signal.Occurrences) > maxAnalysisRecords {
+			return &AnalysisValidationError{Field: fmt.Sprintf("review_signals[%d].occurrences", index), Code: "too many records"}
+		}
+		if v2 && signal.Count != len(signal.Occurrences) {
+			return &AnalysisValidationError{Field: fmt.Sprintf("review_signals[%d].occurrences", index), Code: "count must match the occurrence list"}
+		}
+		seenOccurrences := make(map[string]struct{}, len(signal.Occurrences))
+		for occurrenceIndex, occurrence := range signal.Occurrences {
+			occurrenceField := fmt.Sprintf("review_signals[%d].occurrences[%d]", index, occurrenceIndex)
+			if err := validateEventID(occurrence.EventID, occurrenceField+".event_id"); err != nil {
+				return err
+			}
+			if _, duplicate := seenOccurrences[occurrence.EventID]; duplicate {
+				return &AnalysisValidationError{Field: occurrenceField + ".event_id", Code: "duplicate occurrence event ID"}
+			}
+			seenOccurrences[occurrence.EventID] = struct{}{}
+			if occurrence.EventKind != "" {
+				if err := validateShortString(occurrence.EventKind, occurrenceField+".event_kind", true); err != nil {
+					return err
+				}
+			}
+			if err := validateRationale(occurrence.Summary, occurrenceField+".summary", false); err != nil {
+				return err
+			}
+			if err := validateRationale(occurrence.Impact, occurrenceField+".impact", false); err != nil {
+				return err
+			}
+		}
 	}
 	if result.JudgeAlignment.Status != "" && !validAlignmentStatus(result.JudgeAlignment.Status) {
 		return &AnalysisValidationError{Field: "judge_alignment.status", Code: "unsupported value"}
@@ -230,13 +537,40 @@ func (result EvaluationResult) Validate() error {
 		return &AnalysisValidationError{Field: "evaluation_ledger.improvements", Code: "too many records"}
 	}
 	for index, improvement := range result.EvaluationLedger.Improvements {
-		if err := validateImprovementTarget(improvement.Path, fmt.Sprintf("evaluation_ledger.improvements[%d].path", index)); err != nil {
-			return err
-		}
-		for field, value := range map[string]string{"change": improvement.Change, "reason": improvement.Reason} {
-			if err := validateShortString(value, fmt.Sprintf("evaluation_ledger.improvements[%d].%s", index, field), true); err != nil {
+		field := fmt.Sprintf("evaluation_ledger.improvements[%d]", index)
+		for key, value := range map[string]string{"change": improvement.Change, "reason": improvement.Reason} {
+			if err := validateRationale(value, field+"."+key, false); err != nil {
 				return err
 			}
+		}
+		if !v2 {
+			if err := validateShortString(improvement.Path, field+".path", true); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := validateShortString(improvement.Path, field+".path", false); err != nil {
+			return err
+		}
+		if !validImprovementTarget(improvement.TargetType) {
+			return &AnalysisValidationError{Field: field + ".target_type", Code: "unsupported value"}
+		}
+		if improvement.TargetType == ImprovementAgentBehavior && strings.TrimSpace(improvement.Path) == "" {
+			// A behavior-level action can target the agent without naming a file.
+		} else if !isAgentInstructionPath(improvement.Path) {
+			return &AnalysisValidationError{Field: field + ".path", Code: "must target agent instruction markdown"}
+		}
+		if improvement.TargetType == ImprovementSkillInstructions && !strings.Contains(strings.ToLower(improvement.Path), "/skills/") {
+			return &AnalysisValidationError{Field: field + ".path", Code: "skill instruction target must be under a skills directory"}
+		}
+		if improvement.TargetType == ImprovementWorkflowInstructions && !strings.Contains(strings.ToLower(improvement.Path), "/workflows/") {
+			return &AnalysisValidationError{Field: field + ".path", Code: "workflow instruction target must be under a workflows directory"}
+		}
+		if len(improvement.EvidenceEventIDs) == 0 {
+			return &AnalysisValidationError{Field: field + ".evidence_event_ids", Code: "at least one evidence event is required"}
+		}
+		if err := validateEventIDList(improvement.EvidenceEventIDs, field+".evidence_event_ids"); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -261,6 +595,157 @@ const (
 	maxShortLength     = 1000
 )
 
+func validAnalysisSchemaVersion(value string) bool {
+	return strings.TrimSpace(value) == AnalysisSchemaVersion || strings.TrimSpace(value) == LegacyAnalysisSchemaVersion
+}
+
+func validateCoverage(result AnnotationResult) error {
+	if result.Coverage == nil {
+		return &AnalysisValidationError{Field: "coverage", Code: "schema version 2 requires counts for every evidence category"}
+	}
+	coverage := *result.Coverage
+	if coverage.UserTurns == nil || coverage.AgentTurns == nil || coverage.ToolCalls == nil || coverage.SkillInvocations == nil || coverage.FileOperations == nil {
+		return &AnalysisValidationError{Field: "coverage", Code: "schema version 2 requires counts for every evidence category"}
+	}
+	unclearUsers := 0
+	for _, record := range result.UserTurns {
+		if record.SignalType == UserSignalUnclear {
+			unclearUsers++
+		}
+	}
+	unclearTurns := 0
+	for _, record := range result.Turns {
+		if record.FollowsInstructions == AnnotationUnclear || record.Performance == PerformanceUnclear || record.ScopeAdherence == ScopeUnclear || record.Groundedness == GroundedUnclear || record.Verification == VerificationUnclear {
+			unclearTurns++
+		}
+	}
+	unclearTools := 0
+	for _, record := range result.Tools {
+		if record.Necessary == AnnotationUnclear || record.CompletionStatus == ToolUnknown {
+			unclearTools++
+		}
+	}
+	unclearSkills := 0
+	for _, record := range result.Skills {
+		if record.Necessary == AnnotationUnclear {
+			unclearSkills++
+		}
+	}
+	unclearFiles := 0
+	for _, record := range result.Files {
+		if record.Necessary == AnnotationUnclear {
+			unclearFiles++
+		}
+	}
+	categories := []struct {
+		name    string
+		value   *CoverageCategory
+		labeled int
+		unclear int
+	}{
+		{"user_turns", coverage.UserTurns, len(result.UserTurns), unclearUsers},
+		{"agent_turns", coverage.AgentTurns, len(result.Turns), unclearTurns},
+		{"tool_calls", coverage.ToolCalls, len(result.Tools), unclearTools},
+		{"skill_invocations", coverage.SkillInvocations, len(result.Skills), unclearSkills},
+		{"file_operations", coverage.FileOperations, len(result.Files), unclearFiles},
+	}
+	for _, category := range categories {
+		if err := validateCoverageCategory(*category.value, category.name, category.labeled, category.unclear); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCoverageCategory(value CoverageCategory, field string, labeled, unclear int) error {
+	if value.Captured < 0 || value.Labeled < 0 || value.Unclear < 0 {
+		return &AnalysisValidationError{Field: "coverage." + field, Code: "counts must be non-negative"}
+	}
+	if value.Captured != value.Labeled || value.Labeled != labeled || value.Unclear != unclear {
+		return &AnalysisValidationError{Field: "coverage." + field, Code: "every captured record must have one annotation, and counts must match the annotation records"}
+	}
+	return nil
+}
+
+func validateEventIDList(values []string, field string) error {
+	if len(values) > maxAnalysisRecords {
+		return &AnalysisValidationError{Field: field, Code: "too many records"}
+	}
+	for index, value := range values {
+		if err := validateEventID(value, fmt.Sprintf("%s[%d]", field, index)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateUniqueEventIDs(values []string, field string) error {
+	seen := make(map[string]struct{}, len(values))
+	for index, value := range values {
+		if _, duplicate := seen[value]; duplicate {
+			return &AnalysisValidationError{Field: fmt.Sprintf("%s[%d]", field, index), Code: "duplicate event ID"}
+		}
+		seen[value] = struct{}{}
+	}
+	return nil
+}
+
+func userTurnEventIDs(records []UserTurnAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func turnEventIDs(records []TurnAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func toolEventIDs(records []ToolAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func skillEventIDs(records []SkillAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func fileEventIDs(records []FileAnnotation) []string {
+	values := make([]string, len(records))
+	for index, record := range records {
+		values[index] = record.EventID
+	}
+	return values
+}
+
+func isAgentInstructionPath(value string) bool {
+	clean := path.Clean(strings.ReplaceAll(strings.TrimSpace(value), "\\", "/"))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") || strings.Contains(clean, ":") || !strings.EqualFold(path.Ext(clean), ".md") {
+		return false
+	}
+	if strings.EqualFold(clean, "AGENTS.md") {
+		return true
+	}
+	for _, root := range []string{".agents/", ".codex/", ".claude/", ".cursor/", ".github/", ".opencode/", ".windsurf/"} {
+		if strings.HasPrefix(strings.ToLower(clean), root) {
+			return true
+		}
+	}
+	return false
+}
+
 func validateSource(value string) error {
 	return validateShortString(value, "source", true, maxSourceLength)
 }
@@ -269,36 +754,15 @@ func validateEventID(value, field string) error {
 	return validateShortString(value, field, true, maxShortLength)
 }
 
-func validateRationale(value, field string, optional bool) error {
-	return validateShortString(value, field, !optional, maxRationaleLength)
+func validateOptionalEventID(value *string, field string) error {
+	if value == nil {
+		return nil
+	}
+	return validateEventID(*value, field)
 }
 
-func validateImprovementTarget(value, field string) error {
-	if err := validateShortString(value, field, true); err != nil {
-		return err
-	}
-
-	target := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), `\`, "/"))
-	switch target {
-	case "agent", "agent behavior", "instructions", "skill", "workflow":
-		return nil
-	}
-
-	for _, prefix := range []string{".agents/", ".codex/", ".claude/", ".cursor/"} {
-		if strings.HasPrefix(target, prefix) && strings.HasSuffix(target, ".md") {
-			return nil
-		}
-	}
-
-	base := target
-	if separator := strings.LastIndexByte(base, '/'); separator >= 0 {
-		base = base[separator+1:]
-	}
-	if base == "agents.md" || base == "claude.md" || base == "codex.md" {
-		return nil
-	}
-
-	return &AnalysisValidationError{Field: field, Code: "must target agent behavior or an agent instruction file"}
+func validateRationale(value, field string, optional bool) error {
+	return validateShortString(value, field, !optional, maxRationaleLength)
 }
 
 func validateShortString(value, field string, required bool, limits ...int) error {
@@ -330,4 +794,33 @@ func validEvaluationVerdict(value EvaluationVerdict) bool {
 
 func validAlignmentStatus(value AlignmentStatus) bool {
 	return value == AlignmentAligned || value == AlignmentNotAligned || value == AlignmentNotRecorded
+}
+
+func validUserSignalType(value UserSignalType) bool {
+	switch value {
+	case UserSignalRequest, UserSignalConstraint, UserSignalClarification, UserSignalCorrection, UserSignalApproval, UserSignalRejection, UserSignalFeedback, UserSignalOther, UserSignalUnclear:
+		return true
+	default:
+		return false
+	}
+}
+
+func validScopeAdherence(value ScopeAdherence) bool {
+	return value == ScopeWithin || value == ScopeDeviation || value == ScopeUnclear
+}
+
+func validGroundedness(value Groundedness) bool {
+	return value == GroundedSupported || value == GroundedUnsupported || value == GroundedUnclear
+}
+
+func validVerificationStatus(value VerificationStatus) bool {
+	return value == VerificationVerified || value == VerificationNotVerified || value == VerificationNotApplicable || value == VerificationUnclear
+}
+
+func validToolCompletionStatus(value ToolCompletionStatus) bool {
+	return value == ToolCompleted || value == ToolIncomplete || value == ToolFailed || value == ToolUnknown
+}
+
+func validImprovementTarget(value ImprovementTarget) bool {
+	return value == ImprovementAgentBehavior || value == ImprovementAgentInstructions || value == ImprovementSkillInstructions || value == ImprovementWorkflowInstructions
 }

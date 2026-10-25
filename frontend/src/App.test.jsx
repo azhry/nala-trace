@@ -425,6 +425,20 @@ describe('authenticated sessions flow', () => {
     expect(screen.queryByText('The evaluator recorded a review concern.')).not.toBeInTheDocument()
   })
 
+  it('shows an annotation and evaluation link beside the session title', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    getTrace.mockResolvedValueOnce(apiTracePayload)
+
+    render(<App />)
+
+    const title = await screen.findByRole('heading', { level: 1 })
+    const evaluationLink = await screen.findByRole('link', { name: 'View annotation and evaluation' })
+
+    expect(evaluationLink).toBeVisible()
+    expect(title.parentElement).toContainElement(evaluationLink)
+    expect(evaluationLink).toHaveAttribute('href', '#/sessions/authenticated-session/evaluation')
+  })
+
   it('opens the full evaluation review on its dedicated route', async () => {
     window.history.replaceState({}, '', '/#/sessions/authenticated-session/evaluation')
     getSessionAnalysis.mockResolvedValueOnce({

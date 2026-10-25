@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import InsightCards from './InsightCards'
 
 const trace = {
@@ -23,6 +24,10 @@ const evaluation = {
 }
 
 describe('InsightCards', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('renders explicit not-recorded state for null API analysis', () => {
     render(<InsightCards analysis={null} trace={trace} />)
 
@@ -63,7 +68,7 @@ describe('InsightCards', () => {
     expect(screen.getByText('“No outcome change recorded” means the evaluator did not see this turn change the result. It does not mean the response was good or bad.')).toBeInTheDocument()
     expect(screen.getAllByText('The assistant completed the requested inspection.', { exact: false }).length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('rg')).toBeInTheDocument()
-    expect(screen.getByText('tool use: tool-1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy tool use ID tool-1' })).toBeInTheDocument()
     expect(screen.getByText('rg --files', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('The recorded turn stayed within scope.')).toBeInTheDocument()
     expect(screen.getByText('Evaluation result')).toBeInTheDocument()
@@ -123,10 +128,130 @@ describe('InsightCards', () => {
     }} trace={trace} />)
 
     expect(screen.getAllByText('Unmatched tool hook pairs').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Unmatched event: ObjectID("stop-1").').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('No event locations saved')).toBeInTheDocument()
+    expect(screen.getAllByText('Unmatched event: a cited event reference.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('References cited in finding description')).toBeInTheDocument()
+    expect(screen.getByText('No explicit occurrences saved')).toBeInTheDocument()
+    expect(screen.queryByText(/ObjectID\("stop-1"\)/)).not.toBeInTheDocument()
     expect(screen.getByText('2 occurrences · Warning')).toBeInTheDocument()
     expect(screen.getByText('Review concern')).toBeInTheDocument()
+  })
+
+  it('shows a cited ObjectId as readable tool context, separately from saved occurrence counts', () => {
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: {
+        schema_version: '2',
+        source: 'session-annotator',
+        user_turns: [],
+        turns: [],
+        tools: [{ event_id: 'cited-tool-event', tool_name: 'Bash', input_summary: 'npm test', output_summary: 'All tests passed.' }],
+        skills: [],
+        files: [],
+      },
+      evaluation: {
+        ...evaluation,
+        schema_version: '2',
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 2,
+          severity: 'warning',
+          detail: 'A tool event was cited as ObjectId("cited-tool-event").',
+          occurrences: [],
+        }],
+      },
+    }} />)
+
+    expect(screen.getAllByText('A tool event was cited as a cited event reference.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('References cited in finding description')).toBeInTheDocument()
+    expect(screen.getByText('No explicit occurrences saved')).toBeInTheDocument()
+    expect(screen.getByText('2 occurrences · Warning')).toBeInTheDocument()
+    expect(screen.queryByText(/ObjectId\("cited-tool-event"\)/)).not.toBeInTheDocument()
+
+    const citationButton = screen.getByRole('button', { name: 'Copy Event ID cited in prose cited-tool-event' })
+    const citation = citationButton.closest('.analysis-event-evidence')
+    const context = citation.querySelector('.analysis-linked-event-context')
+    const id = citation.querySelector('code')
+    expect(context).toHaveTextContent('Tool call · Bash')
+    expect(context).toHaveTextContent('npm test')
+    expect(context).toHaveTextContent('All tests passed.')
+    expect(context.compareDocumentPosition(id) & 4).toBeTruthy()
+  })
+
+  it('resolves related and action evidence IDs, explains unmatched references, and supports keyboard copy', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    const clipboardNavigator = Object.create(navigator)
+    Object.defineProperty(clipboardNavigator, 'clipboard', { configurable: true, value: { writeText } })
+    vi.stubGlobal('navigator', clipboardNavigator)
+
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: {
+        schema_version: '2',
+        source: 'session-annotator',
+        user_turns: [],
+        turns: [{ event_id: 'agent-event', response_summary: 'Ran the requested check.', related_event_ids: ['tool-event', 'trace-user-event', 'trace-assistant-event', 'trace-tool-event', 'trace-skill-event', 'trace-file-event', 'missing-related-event'] }],
+        tools: [{ event_id: 'tool-event', tool_name: 'Bash', input_summary: 'npm run lint', output_summary: 'No lint findings.' }],
+        skills: [],
+        files: [],
+      },
+      evaluation: {
+        ...evaluation,
+        schema_version: '2',
+        evaluation_ledger: {
+          improvements: [{ target_type: 'agent_instructions', change: 'Keep a focused check.', reason: 'The saved check identified this need.', evidence_event_ids: ['tool-event', 'trace-tool-event', 'missing-action-event'] }],
+        },
+      },
+    }} trace={{
+      conversation: [
+        { event_id: 'trace-user-event', role: 'user', content: 'Please verify the current branch.' },
+        { event_id: 'trace-assistant-event', role: 'assistant', content: 'I checked the current branch.' },
+      ],
+      timeline: [{ id: 'trace-tool-event', hook_event_name: 'PreToolUse', tool_call_index: 0 }],
+      tool_calls: [{ tool_name: 'Bash', input: { cmd: 'npm run test' }, output: 'All 14 focused tests passed.', status: 'completed' }],
+      skill_invocations: [{ event_id: 'trace-skill-event', name: 'session-evaluator', summary: 'Evaluated the captured conversation.' }],
+      files: [{ event_id: 'trace-file-event', path: '.agents/AGENTS.md', operation: 'read', summary: 'Read project instructions.' }],
+    }} />)
+
+    const relatedButton = screen.getByRole('button', { name: 'Copy Related event ID tool-event' })
+    const relatedEvidence = relatedButton.closest('.analysis-event-evidence')
+    expect(relatedEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Tool call · Bash')
+    expect(relatedEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('npm run lint')
+    expect(relatedEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('No lint findings.')
+
+    const userMessageEvidence = screen.getByRole('button', { name: 'Copy Related event ID trace-user-event' }).closest('.analysis-event-evidence')
+    expect(userMessageEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Captured user message')
+    expect(userMessageEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Please verify the current branch.')
+
+    const assistantMessageEvidence = screen.getByRole('button', { name: 'Copy Related event ID trace-assistant-event' }).closest('.analysis-event-evidence')
+    expect(assistantMessageEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Captured assistant response')
+    expect(assistantMessageEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('I checked the current branch.')
+
+    const traceSkillEvidence = screen.getByRole('button', { name: 'Copy Related event ID trace-skill-event' }).closest('.analysis-event-evidence')
+    expect(traceSkillEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Captured skill invocation · session-evaluator')
+    expect(traceSkillEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Evaluated the captured conversation.')
+
+    const traceFileEvidence = screen.getByRole('button', { name: 'Copy Related event ID trace-file-event' }).closest('.analysis-event-evidence')
+    expect(traceFileEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Captured file operation · read')
+    expect(traceFileEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('.agents/AGENTS.md')
+    expect(traceFileEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Read project instructions.')
+
+    const traceToolEvidence = screen.getByRole('button', { name: 'Copy Related event ID trace-tool-event' }).closest('.analysis-event-evidence')
+    expect(traceToolEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Captured tool call · Bash')
+    expect(traceToolEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('PreToolUse')
+    expect(traceToolEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('npm run test')
+    expect(traceToolEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('All 14 focused tests passed.')
+    expect(traceToolEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('completed')
+
+    const missingRelatedButton = screen.getByRole('button', { name: 'Copy Related event ID missing-related-event' })
+    expect(missingRelatedButton.closest('.analysis-event-evidence')).toHaveTextContent('No matching saved event context was found for this reference.')
+    const missingActionButton = screen.getByRole('button', { name: 'Copy Action evidence ID missing-action-event' })
+    expect(missingActionButton.closest('.analysis-event-evidence')).toHaveTextContent('Context unavailable')
+
+    const actionButton = screen.getByRole('button', { name: 'Copy Action evidence ID tool-event' })
+    actionButton.focus()
+    expect(actionButton).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(writeText).toHaveBeenCalledWith('tool-event')
+    expect(screen.getAllByRole('status').some((status) => status.textContent === 'Copied')).toBe(true)
   })
 
   it('shows only explicit signal occurrences and filters annotation evidence by decision', () => {
@@ -167,9 +292,10 @@ describe('InsightCards', () => {
     }} />)
 
     expect(screen.getByText('2 located of 2 recorded')).toBeInTheDocument()
-    expect(screen.getByText('event id: signal-event-1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy Occurrence event ID signal-event-1' })).toBeInTheDocument()
     expect(screen.getAllByText('PreToolUse').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Tool started without a completion.')).toBeInTheDocument()
+    const occurrenceEvidence = screen.getByRole('button', { name: 'Copy Occurrence event ID signal-event-1' }).closest('.analysis-event-evidence')
+    expect(occurrenceEvidence).toHaveTextContent('Tool started without a completion.')
     expect(screen.queryByText('mcp__codex_apps__linear__list_comments')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Evidence type')).toBeInTheDocument()
     expect(screen.getByLabelText('Decision or label')).toBeInTheDocument()
@@ -242,18 +368,21 @@ describe('InsightCards', () => {
     expect(screen.queryByRole('option', { name: 'Verification: Partial' })).not.toBeInTheDocument()
     expect(screen.getAllByText(/1 record has one or more unclear decisions/)).toHaveLength(1)
     expect(screen.getAllByText('No records have an unclear decision.')).toHaveLength(4)
-    expect(screen.getByText('npm run build')).toBeInTheDocument()
-    expect(screen.getByText('Vite built the frontend.')).toBeInTheDocument()
-    expect(screen.getByText('The tool call was recorded, but its completion evidence is incomplete.')).toBeInTheDocument()
+    const buildEvidence = screen.getByRole('button', { name: 'Copy event ID tool-event-1' }).closest('.analysis-event-evidence')
+    expect(buildEvidence).toHaveTextContent('npm run build')
+    expect(buildEvidence).toHaveTextContent('Vite built the frontend.')
+    expect(buildEvidence).toHaveTextContent('The tool call was recorded, but its completion evidence is incomplete.')
     expect(screen.getByText('Improved the forensic evidence layout.')).toBeInTheDocument()
     expect(screen.getByText('.agents/AGENTS.md')).toBeInTheDocument()
-    expect(screen.getByText('A tool completion was not captured.')).toBeInTheDocument()
-    expect(screen.getByText('The tool result cannot be confirmed.')).toBeInTheDocument()
-    expect(screen.getByText('event id: gap-event-1')).toBeInTheDocument()
-    expect(screen.getByText('PreToolUse')).toBeInTheDocument()
-    expect(screen.getByText('2026-10-24T10:00:00Z')).toBeInTheDocument()
-    expect(screen.getByText('The tool invocation has no completion event.')).toBeInTheDocument()
-    expect(screen.getByText('Its outcome cannot be verified.')).toBeInTheDocument()
+    const captureGapEvidence = document.querySelector('.analysis-capture-gap')
+    expect(captureGapEvidence).toHaveTextContent('A tool completion was not captured.')
+    expect(captureGapEvidence).toHaveTextContent('The tool result cannot be confirmed.')
+    expect(screen.getAllByRole('button', { name: 'Copy Action evidence ID gap-event-1' })).toHaveLength(2)
+    const gapOccurrenceEvidence = screen.getByRole('button', { name: 'Copy Occurrence event ID gap-event-1' }).closest('.analysis-event-evidence')
+    expect(gapOccurrenceEvidence).toHaveTextContent('PreToolUse')
+    expect(gapOccurrenceEvidence).toHaveTextContent('2026-10-24T10:00:00Z')
+    expect(gapOccurrenceEvidence).toHaveTextContent('The tool invocation has no completion event.')
+    expect(gapOccurrenceEvidence).toHaveTextContent('Its outcome cannot be verified.')
     expect(screen.getByText('Require a completion-event check.')).toBeInTheDocument()
     expect(screen.getByText('Agent instructions')).toBeInTheDocument()
     expect(screen.getAllByText('gap-event-1').length).toBeGreaterThanOrEqual(2)
@@ -267,7 +396,7 @@ describe('InsightCards', () => {
     fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'capture_gaps' } })
     expect(screen.getByLabelText('Decision or label')).toBeDisabled()
     expect(screen.getByText('Showing 1 of 1 saved records')).toBeInTheDocument()
-    expect(screen.getByText('A tool completion was not captured.')).toBeInTheDocument()
+    expect(document.querySelector('.analysis-capture-gap')).toHaveTextContent('A tool completion was not captured.')
     expect(screen.queryByText('Updated the evaluation interface.')).not.toBeInTheDocument()
   })
 
@@ -312,7 +441,7 @@ describe('InsightCards', () => {
     expect(screen.getByText('apply_patch')).toBeInTheDocument()
     expect(screen.getByText('Completion evidence')).toBeInTheDocument()
     expect(screen.getByText('No matching completion hook was captured; the invocation is present but its completion evidence is incomplete.')).toBeInTheDocument()
-    expect(screen.getByText('Summary not included in this analysis version.')).toBeInTheDocument()
+    expect(screen.getAllByText('Summary not included in this analysis version.').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Why this label was applied')).toHaveLength(2)
   })
 

@@ -656,8 +656,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .analysis-signal-occurrence-input > span { color: var(--muted); font-size: 13px; font-weight: 650; }
 .analysis-signal-occurrence-input > p { margin: 0; color: var(--text); font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
 .analysis-related-events { display: grid; gap: 5px; margin: 6px 0 0; padding-left: 20px; }
-.analysis-related-events li { color: var(--muted); }
+.analysis-related-events li { min-width: 0; color: var(--muted); }
 .analysis-related-events code { color: var(--text); font-size: 13px; overflow-wrap: anywhere; word-break: break-word; }
+.analysis-event-evidence { display: grid; gap: 7px; min-width: 0; margin-top: 7px; }
+.analysis-linked-event-context { min-width: 0; margin: 0; }
+.analysis-linked-event-context time { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.analysis-linked-event-detail { display: grid; gap: 3px; min-width: 0; }
+.analysis-linked-event-detail > span { color: var(--muted); font-size: 12px; font-weight: 650; }
+.analysis-linked-event-detail > p { margin: 0; color: var(--text); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.analysis-event-reference { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-width: 0; color: var(--muted); font-size: 12px; }
+.analysis-event-reference-label, .analysis-copy-event-status, .analysis-event-id-missing { color: var(--muted); font-size: 12px; }
+.analysis-event-reference code { max-width: 100%; color: var(--muted); font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }
+.analysis-copy-event-id { min-width: 44px; min-height: 44px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; font: inherit; }
+.analysis-copy-event-id:hover { border-color: var(--purple); }
+.analysis-copy-event-id:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+.analysis-signal-description-references { margin: 10px 0; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); }
+.analysis-signal-description-references > span { display: block; color: var(--muted); font-size: 12px; font-weight: 650; }
+.analysis-signal-description-references > p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .analysis-evidence-record { gap: 12px; padding: 18px; }
 .analysis-evidence-record-heading { align-items: start; gap: 8px 16px; }
 .analysis-evidence-record-heading strong { font-size: 16px; }
@@ -791,6 +806,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .evaluation-page .analysis-evidence-record-heading strong { font-size: 14px; }
 .evaluation-page .analysis-evidence-record-heading code, .evaluation-page .analysis-evidence-input code, .evaluation-page .analysis-evidence-context code { font-size: 12px; }
 .evaluation-page .analysis-evidence-input > span, .evaluation-page .analysis-evidence-context > span, .evaluation-page .analysis-evidence-turn > span { font-size: 11px; }
+.evaluation-page .analysis-linked-event-detail > span, .evaluation-page .analysis-event-reference, .evaluation-page .analysis-event-reference-label, .evaluation-page .analysis-event-reference code, .evaluation-page .analysis-copy-event-status, .evaluation-page .analysis-event-id-missing, .evaluation-page .analysis-signal-description-references > span, .evaluation-page .analysis-signal-description-references > p { font-size: 11px; }
+.evaluation-page .analysis-linked-event-detail > p { font-size: 13px; }
+.evaluation-page .analysis-copy-event-id { min-height: 44px; font-size: 12px; }
 .evaluation-page .analysis-evidence-turn p, .evaluation-page .analysis-evidence-record p, .evaluation-page .analysis-empty-copy { font-size: 14px; line-height: 1.55; }
 .evaluation-page .analysis-inline-empty strong { font-size: 15px; }
 .evaluation-page .analysis-inline-empty span { font-size: 13px; }

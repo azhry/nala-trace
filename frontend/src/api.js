@@ -121,8 +121,11 @@ export function getSessions() {
   return fetchJSON('/sessions?limit=100')
 }
 
-export function getTrace(sessionId) {
-  return fetchJSON(`/sessions/${encodeURIComponent(sessionId)}`)
+export const SESSION_TRACE_PAGE_SIZE = 100
+
+export function getTrace(sessionId, { offset = 0, limit = SESSION_TRACE_PAGE_SIZE } = {}) {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+  return fetchJSON(`/sessions/${encodeURIComponent(sessionId)}?${params.toString()}`)
 }
 
 export function getSessionAnalysis(sessionId) {

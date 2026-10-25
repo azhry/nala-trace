@@ -11,8 +11,6 @@ const filters = [
   ['context', 'Prompts & context'],
 ]
 const EMPTY_EVENTS = []
-const INITIAL_RENDER_COUNT = 60
-const RENDER_BATCH_SIZE = 60
 
 function evidencePath(file) {
   return normalizePath(file ?? '').toLowerCase()
@@ -138,7 +136,7 @@ function ContextRow({ event, inline = false, selected = false, active = false, o
   </article>
 }
 
-function SkillInventory({ events, fileRecords = EMPTY_EVENTS, capturedSkillEvidenceCount = 0, onEvidenceSelect, selectedEvidenceKey = '' }) {
+function SkillInventory({ events, fileRecords = EMPTY_EVENTS, capturedSkillEvidenceCount, onEvidenceSelect, selectedEvidenceKey = '' }) {
   const skillCounts = useMemo(() => {
     const counts = new Map()
     const addSkill = (skill) => {
@@ -175,7 +173,9 @@ function SkillInventory({ events, fileRecords = EMPTY_EVENTS, capturedSkillEvide
   const inferredTagCount = skillCounts.reduce((total, [, value]) => total + value.count, 0)
   const skillReadCount = skillReadCounts.reduce((total, [, count]) => total + count, 0)
   const formatCount = (count, singular, plural = `${singular}s`) => `${count.toLocaleString()} ${count === 1 ? singular : plural}`
-  const recordedSkillEvidenceCount = capturedSkillEvidenceCount || events.reduce((total, event) => total + (event.skillRecords?.length || 0), 0)
+  const recordedSkillEvidenceCount = capturedSkillEvidenceCount == null
+    ? events.reduce((total, event) => total + (event.skillRecords?.length || 0), 0)
+    : Number(capturedSkillEvidenceCount)
   const skillInventoryNote = recordedSkillEvidenceCount
     ? `${formatCount(recordedSkillEvidenceCount, 'captured skill evidence record')} ${recordedSkillEvidenceCount === 1 ? 'was' : 'were'} recorded as ${recordedSkillEvidenceCount === 1 ? 'a skill invocation' : 'skill invocations'}; inferred tags are shown separately from document reads.`
     : 'No captured skill evidence or skill invocation was recorded in the source audit; inferred tags are shown separately from document reads.'
@@ -285,10 +285,9 @@ function PartialNotice({ message }) {
   return <div className="trace-partial-notice" role="status"><strong>Partial conversation data</strong><span>{message}</span></div>
 }
 
-export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {} }) {
+export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {}, onLoadMore = () => {}, isLoadingMore = false, loadMoreError = false }) {
   const [filter, setFilter] = useState('all')
   const [selection, setSelection] = useState(null)
-  const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_COUNT)
   const viewModel = useMemo(() => normalizeTraceViewModel(session), [session])
   const events = viewModel.events || EMPTY_EVENTS
   const sessionKey = session.id || session.session_id || viewModel.sessionId || 'selected-session'
@@ -313,6 +312,13 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
     })
     return rows
   }, [events])
+  const pagination = session.pagination
+  const hasServerPagination = Boolean(pagination && pagination.total != null && Number.isFinite(Number(pagination.total)))
+  const loadedEventCount = Array.isArray(session.timeline)
+    ? new Set(session.timeline.map((event, index) => event.id == null ? `row:${index}` : `id:${event.id}`)).size
+    : events.length
+  const totalEventCount = hasServerPagination ? Number(pagination.total) : loadedEventCount
+  const hasMoreServerPages = pagination?.has_more === true
   const visibleEvents = useMemo(() => {
     if (filter === 'context') return contextRows
     return events.filter((event) => {
@@ -322,17 +328,21 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       return event.type === 'system'
     })
   }, [contextRows, events, filter])
-  const renderedEvents = useMemo(() => visibleEvents.slice(0, renderLimit), [visibleEvents, renderLimit])
-  const hasMoreEvents = renderedEvents.length < visibleEvents.length
+  const renderedEvents = visibleEvents
+  const hasMoreEvents = hasMoreServerPages
   const semanticRecords = String(viewModel.semanticRecords ?? 0)
   const isApiTrace = viewModel.source === 'api'
   const emptyConversation = isApiTrace && viewModel.conversation.length === 0
   const contextCounts = contextRows.reduce((counts, event) => ({ ...counts, [event.contextType]: (counts[event.contextType] || 0) + 1 }), {})
   const inventoryFiles = viewModel.source === 'api' ? viewModel.files : events.flatMap(getFileOperations)
-  const changeFilter = (nextFilter) => {
-    setFilter(nextFilter)
-    setRenderLimit(INITIAL_RENDER_COUNT)
-  }
+  const summarySkillCount = hasServerPagination
+    ? session.summary?.skill_invocation_count ?? session.summary?.skillInvocationCount
+    : null
+  const parsedSummarySkillCount = Number(summarySkillCount)
+  const totalSkillInvocationCount = summarySkillCount == null || !Number.isFinite(parsedSummarySkillCount)
+    ? Number(viewModel.skillInvocationCount ?? 0)
+    : parsedSummarySkillCount
+  const changeFilter = (nextFilter) => setFilter(nextFilter)
   const selectEvidence = ({ key, label, records = EMPTY_EVENTS }) => {
     const matchingEvents = events.filter((event) => records.some((record) => eventMatchesEvidence(event, record)))
     const eventIds = [...new Set(matchingEvents.map((event) => event.id).filter(Boolean))]
@@ -357,25 +367,18 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
 
   useEffect(() => {
     setSelection(null)
-    setRenderLimit(INITIAL_RENDER_COUNT)
   }, [sessionKey])
 
   useEffect(() => {
     if (!selection?.eventIds.length) return
     const activeMatchIndex = Math.min(selection.activeMatchIndex ?? 0, selection.eventIds.length - 1)
-    const activeEventId = selection.eventIds[activeMatchIndex]
-    const activeEventIndex = visibleEvents.findIndex((event) => event.id === activeEventId)
-    if (activeEventIndex >= renderLimit) {
-      setRenderLimit(Math.min(visibleEvents.length, activeEventIndex + 1))
-      return
-    }
     const target = document.getElementById(eventAnchorId(selection.eventIds[activeMatchIndex]))
     if (target?.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     target?.focus?.({ preventScroll: true })
-  }, [selection, visibleEvents, renderLimit])
+  }, [selection, visibleEvents])
 
   const loadMoreEvents = () => {
-    setRenderLimit((current) => Math.min(current + RENDER_BATCH_SIZE, visibleEvents.length))
+    if (hasMoreServerPages && !isLoadingMore) onLoadMore()
   }
 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
@@ -383,18 +386,19 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div>
         <p className="section-label">Conversation and trace</p>
         <h2 id="trace-view-title">Session detail</h2>
-        <p className="panel-description">The captured event stream: User and Codex turns, recorded tool calls with paired output, lifecycle/context markers, file and instruction references, and skill tags. Private model reasoning is not part of the hook data.</p>
+        <p className="panel-description">Rows below include only pages loaded so far; request another page to continue. Session summary counts cover the whole capture. Private model reasoning is not part of the hook data.</p>
       </div>
       <span className="record-count">{semanticRecords} records</span>
     </div>
     <div className="trace-summary">
-      <div><span>Skill invocations</span><strong>{Number(viewModel.skillInvocationCount ?? 0).toLocaleString()}</strong><small>captured invocation records</small></div>
+      <div><span>Skill invocations</span><strong>{totalSkillInvocationCount.toLocaleString()}</strong><small>captured invocation records</small></div>
       <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
       <div><span>MCP</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()} calls</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
       <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
     </div>
+    {hasServerPagination && <p className="trace-page-note">Summary counts cover the full session. Event details below include only loaded pages.</p>}
     <TokenUsageSummary usage={viewModel.tokenUsage} />
-    <SkillInventory events={events} fileRecords={inventoryFiles} capturedSkillEvidenceCount={viewModel.skillInvocations?.length || 0} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
+    <SkillInventory events={events} fileRecords={inventoryFiles} capturedSkillEvidenceCount={totalSkillInvocationCount} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <McpInventory callCount={viewModel.mcpCallCount} servers={viewModel.mcpServers} />
     <InstructionInventory fileRecords={inventoryFiles} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <div className="context-inventory" aria-label="Prompt and context summary">
@@ -407,7 +411,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       {filters.map(([id, label]) => <button key={id} type="button" className={filter === id ? 'is-active' : ''} aria-pressed={filter === id} onClick={() => changeFilter(id)}>{label}</button>)}
       <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} rows · {semanticRecords} semantic records</span>
     </div>
-    <div className="trace-stream">
+    <div className="trace-stream" aria-busy={isLoadingMore}>
       {traceState !== 'ready' ? <TraceStatePanel state={traceState} onRetry={onRetry} /> : <>
         {viewModel.partial && <PartialNotice message={viewModel.partialMessage} />}
         {emptyConversation && <TraceStatePanel state="empty" />}
@@ -421,10 +425,13 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
           return <ConversationMessage key={event.id} event={event} selected={selected} active={active} />
         })}
         <div className="trace-stream-pagination">
-          <span role="status" aria-live="polite">Showing {renderedEvents.length.toLocaleString()} of {visibleEvents.length.toLocaleString()} rows</span>
-          {hasMoreEvents && <button type="button" className="load-more-events" onClick={loadMoreEvents}>Load more rows</button>}
+          <span role="status" aria-live="polite">{hasServerPagination
+            ? `Loaded ${loadedEventCount.toLocaleString()} of ${totalEventCount.toLocaleString()} captured events · ${visibleEvents.length.toLocaleString()} rows shown.`
+            : `Showing ${renderedEvents.length.toLocaleString()} of ${visibleEvents.length.toLocaleString()} rows`}</span>
+          {loadMoreError && <p className="trace-page-error" role="alert">The next page could not be loaded. Loaded events are still available. Retry to continue.</p>}
+          {isLoadingMore && <span className="trace-page-loading" role="status" aria-live="polite">Loading the next page of events. Loaded rows remain on screen.</span>}
+          {hasMoreEvents && <button type="button" className="load-more-events" disabled={isLoadingMore} onClick={loadMoreEvents}>{isLoadingMore ? 'Loading next page…' : loadMoreError && hasMoreServerPages ? 'Retry loading more rows' : hasMoreServerPages ? 'Load more rows' : 'Show more loaded rows'}</button>}
         </div>
-        {!hasMoreEvents && visibleEvents.length > 0 && <div className="stream-end"><span>End of captured session · {viewModel.capturedAt}</span><span className="stream-line" /></div>}
       </>}
     </div>
   </section>

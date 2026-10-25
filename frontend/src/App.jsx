@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, getSessionAnalysis, getSessions, getTrace, resolveSession } from './api'
+import { ApiError, getSessionAnalysis, getSessions, getTrace, resolveSession, SESSION_TRACE_PAGE_SIZE } from './api'
 import { AuthHandoffError, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import InsightCards from './components/InsightCards'
 import EvaluationPage from './components/EvaluationPage'
@@ -22,6 +22,102 @@ function navigateTo(path) {
 }
 
 export const TRACE_LOADING_MIN_DURATION_MS = 180
+
+function tracePageRecordKey(collection, record = {}) {
+  const eventId = record.event_id ?? record.eventId
+  if (collection === 'timeline') return record.id == null ? null : `timeline:${record.id}`
+  if (collection === 'conversation') return eventId == null ? null : `conversation:${eventId}`
+  if (collection === 'tool_calls') {
+    const id = record.__traceToolCallIndex ?? record.tool_use_id ?? record.toolUseId ?? record.tool_call_index ?? record.toolCallIndex ?? eventId
+    return id == null ? null : `tool:${id}`
+  }
+  if (collection === 'skill_invocations') {
+    return eventId == null ? null : `skill:${eventId}:${record.name ?? record.skill_name ?? record.skill ?? ''}`
+  }
+  if (collection === 'files') {
+    return eventId == null ? null : `file:${eventId}:${record.path ?? ''}:${record.operation ?? record.action ?? ''}`
+  }
+  return null
+}
+
+function appendTracePageRecords(collection, current = [], next = []) {
+  const records = Array.isArray(current) ? [...current] : []
+  const seen = new Set(records.map((record) => tracePageRecordKey(collection, record)).filter((key) => key !== null))
+
+  for (const record of Array.isArray(next) ? next : []) {
+    const key = tracePageRecordKey(collection, record)
+    if (key !== null && seen.has(key)) continue
+    records.push(record)
+    if (key !== null) seen.add(key)
+  }
+
+  return records
+}
+
+function prepareTracePage(page = {}) {
+  const timeline = Array.isArray(page.timeline) ? page.timeline.map((event) => {
+    const toolCallIndex = event.__traceToolCallIndex ?? event.tool_call_index ?? event.toolCallIndex
+    return Number.isInteger(toolCallIndex) ? { ...event, __traceToolCallIndex: toolCallIndex } : event
+  }) : []
+  const pageToolIndexes = [...new Set(timeline
+    .filter((event) => event.hook_event_name === 'PreToolUse' || event.hookEventName === 'PreToolUse')
+    .map((event) => event.__traceToolCallIndex)
+    .filter(Number.isInteger))].sort((left, right) => left - right)
+  const tool_calls = Array.isArray(page.tool_calls) ? page.tool_calls.map((call, index) => {
+    const toolCallIndex = call.__traceToolCallIndex ?? call.tool_call_index ?? call.toolCallIndex ?? pageToolIndexes[index]
+    return Number.isInteger(toolCallIndex) ? { ...call, __traceToolCallIndex: toolCallIndex } : call
+  }) : []
+  return { ...page, timeline, tool_calls }
+}
+
+function alignTraceToolCallIndexes(trace) {
+  const compactIndexes = new Map()
+  trace.tool_calls.forEach((call, index) => {
+    if (Number.isInteger(call.__traceToolCallIndex)) compactIndexes.set(call.__traceToolCallIndex, index)
+  })
+  return {
+    ...trace,
+    timeline: trace.timeline.map((event) => {
+      const toolCallIndex = event.__traceToolCallIndex ?? event.tool_call_index ?? event.toolCallIndex
+      if (!Number.isInteger(toolCallIndex)) return event
+      return { ...event, __traceToolCallIndex: toolCallIndex, tool_call_index: compactIndexes.get(toolCallIndex) ?? null }
+    }),
+  }
+}
+
+function mergeTracePage(current, next) {
+  const previous = current ? prepareTracePage(current) : {}
+  const upcoming = prepareTracePage(next)
+  const merged = { ...previous, ...upcoming }
+  for (const collection of ['timeline', 'conversation', 'tool_calls', 'skill_invocations', 'files']) {
+    merged[collection] = appendTracePageRecords(collection, previous[collection], upcoming[collection])
+  }
+  for (const field of ['summary', 'analysis', 'runtime_metadata']) {
+    if (previous[field] != null) merged[field] = previous[field]
+  }
+  return alignTraceToolCallIndexes(merged)
+}
+
+function hasContiguousNextTracePage(current, next, nextOffset, limit) {
+  const currentTimeline = Array.isArray(current?.timeline) ? current.timeline : []
+  const nextTimeline = Array.isArray(next?.timeline) ? next.timeline : []
+  const pagination = next?.pagination
+  const total = Number(pagination?.total)
+
+  if (currentTimeline.length !== nextOffset || !Number.isInteger(total) || total <= nextOffset) return false
+  if (currentTimeline.some((event) => typeof event?.id !== 'string' || !event.id)) return false
+  if (Number(pagination?.offset) !== nextOffset || Number(pagination?.limit) !== limit) return false
+  const expectedNewRows = Math.min(limit, total - nextOffset)
+  if (pagination.has_more !== (nextOffset + expectedNewRows < total)) return false
+
+  const seenIds = new Set(currentTimeline.map((event) => event.id))
+  const newIds = new Set()
+  for (const event of nextTimeline) {
+    if (typeof event?.id !== 'string' || !event.id) return false
+    if (!seenIds.has(event.id)) newIds.add(event.id)
+  }
+  return newIds.size === expectedNewRows
+}
 
 function dataSourceCopy(apiState) {
   if (apiState === 'connected') return { label: 'Go API data', status: 'Go API connected', detail: 'Using live session records from the protected Go API' }
@@ -99,11 +195,11 @@ function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, fi
   return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} />{apiState === 'loading' ? <TraceLoadingPanel title="Loading sessions…" detail="Resolving your application session before reading Trace records." /> : apiState === 'connected' ? <><SessionStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} sortBy={sortBy} onSortChange={onSortChange} /></> : <SessionStatePanel state={apiState} onRetry={onRetry} />}</section>
 }
 
-function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry }) {
+function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry, onLoadMore, isLoadingMore, loadMoreError }) {
   const source = dataSourceCopy(apiState)
   const isLoading = traceState === 'loading'
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span></div></div><DataSourceNotice apiState={apiState} />{isLoading ? <TraceLoadingPanel /> : <><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} /><InsightCards analysis={session.analysis ?? null} trace={session} insights={session.insights} compact sessionId={session.id} /></div></>}</section>
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span></div></div><DataSourceNotice apiState={apiState} />{isLoading ? <TraceLoadingPanel /> : <><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} onLoadMore={onLoadMore} isLoadingMore={isLoadingMore} loadMoreError={loadMoreError} /><InsightCards analysis={session.analysis ?? null} trace={session} insights={session.insights} compact sessionId={session.id} /></div></>}</section>
 }
 
 export default function App() {
@@ -119,6 +215,10 @@ export default function App() {
   const [traceRequestSessionId, setTraceRequestSessionId] = useState(null)
   const [traceState, setTraceState] = useState('idle')
   const [traceError, setTraceError] = useState(null)
+  const [tracePageState, setTracePageState] = useState('idle')
+  const [tracePageError, setTracePageError] = useState(null)
+  const traceRequestVersionRef = useRef(0)
+  const activeTracePageRequestRef = useRef(null)
   const [analysisPayload, setAnalysisPayload] = useState(null)
   const [analysisSessionId, setAnalysisSessionId] = useState(null)
   const [analysisState, setAnalysisState] = useState('idle')
@@ -161,6 +261,9 @@ export default function App() {
 
   const loadTrace = useCallback((sessionId, isActive = () => true) => {
     if (!sessionId) return Promise.resolve(null)
+    const requestVersion = traceRequestVersionRef.current + 1
+    traceRequestVersionRef.current = requestVersion
+    activeTracePageRequestRef.current = null
     const loadingStartedAt = Date.now()
     const settleAfterVisibleLoading = (settle) => {
       const remaining = Math.max(0, TRACE_LOADING_MIN_DURATION_MS - (Date.now() - loadingStartedAt))
@@ -171,14 +274,16 @@ export default function App() {
     setTraceSessionId(null)
     setTraceError(null)
     setTraceState('loading')
-    return getTrace(sessionId).then((payload) => settleAfterVisibleLoading(() => {
-      if (!isActive()) return payload
-      setRemoteTrace(payload || {})
+    setTracePageState('idle')
+    setTracePageError(null)
+    return getTrace(sessionId, { offset: 0, limit: SESSION_TRACE_PAGE_SIZE }).then((payload) => settleAfterVisibleLoading(() => {
+      if (!isActive() || requestVersion !== traceRequestVersionRef.current) return payload
+      setRemoteTrace(mergeTracePage(null, payload || {}))
       setTraceSessionId(sessionId)
       setTraceState('ready')
       return payload
     })).catch((error) => settleAfterVisibleLoading(() => {
-      if (!isActive()) return null
+      if (!isActive() || requestVersion !== traceRequestVersionRef.current) return null
       setTraceError(error)
       setTraceState(error instanceof ApiError && error.status === 404
         ? 'missing'
@@ -188,6 +293,50 @@ export default function App() {
       return null
     }))
   }, [])
+
+  const loadMoreTrace = useCallback((sessionId) => {
+    const pagination = remoteTrace?.pagination
+    if (!sessionId || traceSessionId !== sessionId || !pagination?.has_more || activeTracePageRequestRef.current) return Promise.resolve(null)
+    const offset = Number(pagination.offset)
+    const limit = Number(pagination.limit)
+    if (!Number.isInteger(offset) || !Number.isInteger(limit) || limit < 1) return Promise.resolve(null)
+
+    const nextOffset = offset + limit
+    const loadedTimelineCount = Array.isArray(remoteTrace.timeline) ? remoteTrace.timeline.length : 0
+    const requestVersion = traceRequestVersionRef.current
+    const requestToken = Symbol('trace-page-request')
+    activeTracePageRequestRef.current = requestToken
+    setTracePageState('loading')
+    setTracePageError(null)
+
+    if (loadedTimelineCount !== nextOffset) {
+      setTracePageError(new Error('The session trace pages are not contiguous.'))
+      setTracePageState('error')
+      activeTracePageRequestRef.current = null
+      return Promise.resolve(null)
+    }
+
+    return getTrace(sessionId, { offset: nextOffset, limit }).then((payload) => {
+      if (requestVersion !== traceRequestVersionRef.current) return null
+      if (!hasContiguousNextTracePage(remoteTrace, payload, nextOffset, limit)) {
+        throw new Error('The session trace returned an invalid page.')
+      }
+      setRemoteTrace((current) => {
+        if (!current || current.session_id !== sessionId || requestVersion !== traceRequestVersionRef.current) return current
+        return mergeTracePage(current, payload)
+      })
+      setTracePageState('idle')
+      return payload
+    }).catch((error) => {
+      if (requestVersion === traceRequestVersionRef.current) {
+        setTracePageError(error)
+        setTracePageState('error')
+      }
+      return null
+    }).finally(() => {
+      if (activeTracePageRequestRef.current === requestToken) activeTracePageRequestRef.current = null
+    })
+  }, [remoteTrace, traceSessionId])
 
   const loadAnalysis = useCallback((sessionId, isActive = () => true) => {
     if (!sessionId) return Promise.resolve(null)
@@ -213,11 +362,15 @@ export default function App() {
   useEffect(() => {
     let mounted = true
     if (apiState !== 'connected' || route.view !== 'detail' || !route.sessionId) {
+      traceRequestVersionRef.current += 1
+      activeTracePageRequestRef.current = null
       setRemoteTrace(null)
       setTraceSessionId(null)
       setTraceRequestSessionId(null)
       setTraceError(null)
       setTraceState('idle')
+      setTracePageState('idle')
+      setTracePageError(null)
       return () => { mounted = false }
     }
     loadTrace(route.sessionId, () => mounted)
@@ -252,5 +405,5 @@ export default function App() {
 
   const showDetail = route.view === 'detail' && detailSession
   const showEvaluation = route.view === 'evaluation' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={detailSession || selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} analysis={analysisSessionId === route.sessionId ? analysisPayload : null} analysisState={analysisSessionId === route.sessionId ? analysisState : 'loading'} analysisError={analysisError} onAnalysisRetry={() => loadAnalysis(route.sessionId)} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={apiState === 'loading' ? 'loading' : detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={detailSession || selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} analysis={analysisSessionId === route.sessionId ? analysisPayload : null} analysisState={analysisSessionId === route.sessionId ? analysisState : 'loading'} analysisError={analysisError} onAnalysisRetry={() => loadAnalysis(route.sessionId)} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={apiState === 'loading' ? 'loading' : detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onLoadMore={() => loadMoreTrace(route.sessionId)} isLoadingMore={tracePageState === 'loading'} loadMoreError={Boolean(tracePageError)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

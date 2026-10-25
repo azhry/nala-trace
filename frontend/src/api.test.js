@@ -54,13 +54,29 @@ describe('API auth configuration', () => {
         Authorization: 'Bearer jwt-token',
       },
     })
-    expect(fetch).toHaveBeenNthCalledWith(2, '/sessions/session-2', {
+    expect(fetch).toHaveBeenNthCalledWith(2, '/sessions/session-2?offset=0&limit=100', {
       headers: {
         Accept: 'application/json',
         Authorization: 'Bearer jwt-token',
       },
     })
     expect(fetch).not.toHaveBeenCalledWith('/api/auth/session', expect.anything())
+  })
+
+  it('requests trace pages with explicit offsets and limits', async () => {
+    configureAuth({ jwt: 'jwt-token' })
+    fetch.mockResolvedValueOnce(jsonResponse({ pagination: { offset: 0, limit: 100 } }))
+    fetch.mockResolvedValueOnce(jsonResponse({ pagination: { offset: 100, limit: 100 } }))
+
+    await getTrace('session-2', { offset: 0, limit: 100 })
+    await getTrace('session-2', { offset: 100, limit: 100 })
+
+    expect(fetch).toHaveBeenNthCalledWith(1, '/sessions/session-2?offset=0&limit=100', {
+      headers: { Accept: 'application/json', Authorization: 'Bearer jwt-token' },
+    })
+    expect(fetch).toHaveBeenNthCalledWith(2, '/sessions/session-2?offset=100&limit=100', {
+      headers: { Accept: 'application/json', Authorization: 'Bearer jwt-token' },
+    })
   })
 
   it('returns the persisted analysis sections from the session-detail response', async () => {
@@ -83,7 +99,7 @@ describe('API auth configuration', () => {
       session_id: 'session-analysis',
       analysis,
     })
-    expect(fetch).toHaveBeenCalledExactlyOnceWith('/sessions/session-analysis', {
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('/sessions/session-analysis?offset=0&limit=100', {
       headers: {
         Accept: 'application/json',
         Authorization: 'Bearer jwt-token',
@@ -175,7 +191,7 @@ describe('API auth configuration', () => {
         'X-Nala-Labs-API-Key': 'api-token',
       },
     })
-    expect(fetch).toHaveBeenNthCalledWith(2, '/sessions/session-3', {
+    expect(fetch).toHaveBeenNthCalledWith(2, '/sessions/session-3?offset=0&limit=100', {
       headers: {
         Accept: 'application/json',
         'X-Nala-Labs-API-Key': 'api-token',

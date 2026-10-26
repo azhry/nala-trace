@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	authsdk "github.com/azhry/nala-auth-go"
 	"github.com/azhry/nala-trace/backend/internal/config"
 )
 
@@ -22,9 +23,9 @@ var (
 )
 
 type IAMClient struct {
-	baseURL string
-	client  *http.Client
-	timeout time.Duration
+	baseURL       string
+	client        *http.Client
+	sessionClient *authsdk.SessionClient
 }
 
 func NormalizeTraceOrigin(value string) string {
@@ -43,16 +44,48 @@ func NewIAMClient(cfg config.AuthConfig) *IAMClient {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &IAMClient{baseURL: strings.TrimRight(cfg.NalaLabsAuthURL, "/"), client: &http.Client{Timeout: timeout}, timeout: timeout}
+	baseURL := strings.TrimRight(strings.TrimSpace(cfg.NalaLabsAuthURL), "/")
+	client := &http.Client{Timeout: timeout}
+	return &IAMClient{
+		baseURL:       baseURL,
+		client:        client,
+		sessionClient: authsdk.NewSessionClient(baseURL, client),
+	}
 }
 
 func (c *IAMClient) ValidateBearer(ctx context.Context, token string) (User, error) {
 	if strings.TrimSpace(token) == "" {
 		return User{}, ErrUnauthenticated
 	}
-	return c.requestSession(ctx, func(request *http.Request) {
-		request.Header.Set("Authorization", "Bearer "+token)
-	})
+	if c == nil || c.sessionClient == nil {
+		return User{}, ErrProviderUnavailable
+	}
+	principal, err := c.sessionClient.ValidateBearer(ctx, token)
+	if err != nil {
+		switch {
+		case errors.Is(err, authsdk.ErrUnauthenticated):
+			return User{}, ErrUnauthenticated
+		case errors.Is(err, authsdk.ErrMalformedResponse):
+			return User{}, ErrMalformedProviderData
+		default:
+			return User{}, ErrProviderUnavailable
+		}
+	}
+
+	var entitlements []string
+	rawEntitlements := bytes.TrimSpace(principal.Entitlements)
+	if len(rawEntitlements) > 0 && rawEntitlements[0] == '[' {
+		if err := json.Unmarshal(rawEntitlements, &entitlements); err != nil {
+			return User{}, ErrMalformedProviderData
+		}
+	}
+	return User{
+		ID:           principal.ID,
+		Name:         principal.Name,
+		Email:        principal.Email,
+		Tier:         traceTier(principal.Tier),
+		Entitlements: entitlements,
+	}, nil
 }
 
 func (c *IAMClient) RedeemTraceHandoff(ctx context.Context, code, traceOrigin string) (string, error) {
@@ -108,128 +141,15 @@ func (c *IAMClient) RedeemTraceHandoff(ctx context.Context, code, traceOrigin st
 	return strings.TrimSpace(token), nil
 }
 
-func (c *IAMClient) requestSession(ctx context.Context, authorize func(*http.Request)) (User, error) {
-	if c == nil || c.client == nil || c.baseURL == "" {
-		return User{}, ErrProviderUnavailable
+func traceTier(tier authsdk.Tier) Tier {
+	switch tier {
+	case authsdk.TierAdmin:
+		return TierAdmin
+	case authsdk.TierDeveloper:
+		return TierDeveloper
+	default:
+		return TierFree
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/auth/session", nil)
-	if err != nil {
-		return User{}, ErrProviderUnavailable
-	}
-	request.Header.Set("Accept", "application/json")
-	if authorize != nil {
-		authorize(request)
-	}
-	response, err := c.client.Do(request)
-	if err != nil {
-		return User{}, ErrProviderUnavailable
-	}
-	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	if err != nil {
-		return User{}, ErrProviderUnavailable
-	}
-	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
-		return User{}, ErrUnauthenticated
-	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return User{}, ErrProviderUnavailable
-	}
-	user, err := decodeUser(responseBody, true)
-	if err != nil {
-		return User{}, err
-	}
-	return user, nil
-}
-
-type upstreamUser struct {
-	ID           string            `json:"id"`
-	UserID       string            `json:"user_id"`
-	Subject      string            `json:"sub"`
-	Name         string            `json:"name"`
-	DisplayName  string            `json:"display_name"`
-	Email        string            `json:"email"`
-	Roles        []string          `json:"roles"`
-	Groups       []string          `json:"groups"`
-	Tags         []string          `json:"tags"`
-	Admin        bool              `json:"admin"`
-	Tier         string            `json:"tier"`
-	Entitlements entitlementValues `json:"entitlements"`
-}
-
-type upstreamResponse struct {
-	Authenticated *bool             `json:"authenticated"`
-	ID            string            `json:"id"`
-	UserID        string            `json:"user_id"`
-	Subject       string            `json:"sub"`
-	Name          string            `json:"name"`
-	DisplayName   string            `json:"display_name"`
-	Email         string            `json:"email"`
-	Roles         []string          `json:"roles"`
-	Groups        []string          `json:"groups"`
-	Tags          []string          `json:"tags"`
-	Admin         bool              `json:"admin"`
-	Tier          string            `json:"tier"`
-	Entitlements  entitlementValues `json:"entitlements"`
-	User          upstreamUser      `json:"user"`
-}
-
-// entitlementValues accepts both the legacy list form and the current Nala
-// Labs entitlement object. The object contains policy metadata rather than a
-// stable list of names, so it is intentionally accepted without inventing
-// list values for the internal user contract.
-type entitlementValues []string
-
-func (values *entitlementValues) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
-		*values = nil
-		return nil
-	}
-
-	var list []string
-	if err := json.Unmarshal(data, &list); err == nil {
-		*values = entitlementValues(list)
-		return nil
-	}
-
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(data, &object); err != nil {
-		return err
-	}
-	*values = nil
-	return nil
-}
-
-func decodeUser(data []byte, requireAuthenticated bool) (User, error) {
-	var response upstreamResponse
-	if err := json.Unmarshal(data, &response); err != nil {
-		return User{}, ErrMalformedProviderData
-	}
-	if requireAuthenticated && (response.Authenticated == nil || !*response.Authenticated) {
-		return User{}, ErrUnauthenticated
-	}
-	identity := response.User
-	if identity.ID == "" && identity.UserID == "" && identity.Subject == "" {
-		identity = upstreamUser{
-			ID: response.ID, UserID: response.UserID, Subject: response.Subject,
-			Name: response.Name, DisplayName: response.DisplayName, Email: response.Email,
-			Roles: response.Roles, Groups: response.Groups, Tags: response.Tags,
-			Admin: response.Admin, Tier: response.Tier, Entitlements: response.Entitlements,
-		}
-	}
-	id := firstNonEmpty(identity.ID, identity.UserID, identity.Subject)
-	if id == "" {
-		return User{}, ErrMalformedProviderData
-	}
-	claims := Claims{Roles: identity.Roles, Groups: identity.Groups, Tags: identity.Tags, Admin: identity.Admin}
-	tier := NormalizeTier(claims)
-	if strings.EqualFold(strings.TrimSpace(identity.Tier), string(TierAdmin)) {
-		tier = TierAdmin
-	} else if strings.EqualFold(strings.TrimSpace(identity.Tier), string(TierDeveloper)) {
-		tier = TierDeveloper
-	}
-	name := firstNonEmpty(identity.Name, identity.DisplayName)
-	return User{ID: id, Name: name, Email: identity.Email, Tier: tier, Entitlements: append([]string(nil), identity.Entitlements...)}, nil
 }
 
 func firstNonEmpty(values ...string) string {

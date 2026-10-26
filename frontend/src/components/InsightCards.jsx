@@ -648,15 +648,15 @@ function EvaluationOverview({ analysis }) {
 }
 
 function TurnImpactHighlights({ annotation }) {
-  const improved = annotation.performanceSummary.find((item) => item.value === 'improved')
-  const worsened = annotation.performanceSummary.find((item) => item.value === 'worsened')
-  const turns = [improved, worsened].flatMap((item) => (item?.turns || []).map((turn) => ({ ...turn, effect: item.value })))
+  const neutral = annotation.performanceSummary.find((item) => item.value === 'neutral')
+  const turns = annotation.performanceSummary.flatMap((item) => (item.turns || []).map((turn) => ({ ...turn, effect: item.value })))
 
   return <section className="analysis-highlight-block" aria-labelledby="analysis-turn-impact-title">
     <div className="analysis-highlight-heading"><h3 id="analysis-turn-impact-title">Turn impact</h3><span>{annotation.performanceLabeledCount.toLocaleString()} labeled</span></div>
     {annotation.performanceLabeledCount ? <>
-      <div className="analysis-highlight-counts"><span><strong>{(improved?.count || 0).toLocaleString()}</strong> improved</span><span><strong>{(worsened?.count || 0).toLocaleString()}</strong> worsened</span></div>
-      {turns.length > 0 && <BoundedList items={turns} itemLabel="turn impact records" ordered className="analysis-turn-impact-list" resetKey="turn-impact" renderItem={(turn, index) => <li className="analysis-turn-impact-item" key={turn.id || index}><StatusPill tone={turn.effect === 'worsened' ? 'critical' : 'positive'}>{turn.effect === 'worsened' ? 'Worsened' : 'Improved'}</StatusPill><span>{turn.preview || 'Response summary not included in this analysis version.'}</span></li>} />}
+      <div className="analysis-highlight-counts">{annotation.performanceSummary.map((item) => <span key={item.value}><strong>{item.count.toLocaleString()}</strong> {evidenceValue(item.value)}</span>)}</div>
+      {neutral?.count > 0 && <p>“No outcome change recorded” means the evaluator saw no change to the result; it does not mean the turn was good or bad.</p>}
+      {turns.length > 0 && <BoundedList items={turns} itemLabel="turn impact records" ordered className="analysis-turn-impact-list" resetKey="turn-impact" renderItem={(turn, index) => <li className="analysis-turn-impact-item" key={turn.id || index}><StatusPill tone={turn.effect === 'worsened' ? 'critical' : turn.effect === 'improved' ? 'positive' : 'unknown'}>{turn.effect === 'neutral' ? 'Neutral' : turn.effect === 'unclear' ? 'Unclear' : turn.effect === 'worsened' ? 'Worsened' : 'Improved'}</StatusPill><span>{turn.preview || 'Response summary not included in this analysis version.'}</span></li>} />}
     </> : <p>No turn effect labels were recorded. The result impact is unknown.</p>}
   </section>
 }

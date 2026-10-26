@@ -58,6 +58,7 @@ describe('EvaluationPage', () => {
     expect(screen.getByRole('heading', { name: 'Review at a glance' })).toBeInTheDocument()
     expect(screen.getByText('The evaluator recorded a complete review.')).toBeInTheDocument()
     expect(screen.getByText('What to improve')).toBeInTheDocument()
+    expect(screen.getByText('“No outcome change recorded” means the evaluator saw no change to the result; it does not mean the turn was good or bad.')).toBeInTheDocument()
 
     const evidenceDetails = screen.getByText('Evidence details').closest('details')
     expect(evidenceDetails).not.toHaveAttribute('open')

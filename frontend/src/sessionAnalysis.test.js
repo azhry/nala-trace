@@ -134,13 +134,13 @@ describe('session analysis view model', () => {
     })
     expect(model.annotation.categories).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'user_turns', recorded: false, coverageValue: 'Not included' }),
-      expect.objectContaining({ key: 'turns', coverageValue: '1 labeled / 1 captured', coverageDetail: '100% of captured records labeled' }),
-      expect.objectContaining({ key: 'tools', coverageValue: '1 labeled / 2 captured', coverageDetail: '50% of captured records labeled' }),
-      expect.objectContaining({ key: 'skills', coverageValue: '1 labeled / 1 captured', coverageDetail: '100% of captured records labeled' }),
+      expect.objectContaining({ key: 'turns', recordCount: 1, labeledCount: null, coverageValue: '1 captured agent turn', coverageSource: 'Current trace conversation' }),
+      expect.objectContaining({ key: 'tools', recordCount: 1, labeledCount: null, coverageValue: '2 captured tool calls', coverageSource: 'Current trace records' }),
+      expect.objectContaining({ key: 'skills', recordCount: 1, labeledCount: null, coverageValue: '1 captured skill invocation', coverageSource: 'Current trace records' }),
       expect.objectContaining({ key: 'files', recorded: false, coverageValue: 'Not included' }),
     ]))
     expect(model.annotation.performanceSummary).toEqual([
-      { value: 'improved', count: 1, turnIds: ['turn-1'], turns: [{ id: 'turn-1', role: 'assistant', preview: 'The assistant completed the requested inspection.' }] },
+      { value: 'improved', count: 1, turnIds: ['turn-1'], turns: [{ id: 'turn-1', role: 'assistant', preview: 'The assistant completed the requested inspection.', rationale: 'The recorded response followed the requested workflow.' }] },
       { value: 'neutral', count: 0, turnIds: [], turns: [] },
       { value: 'worsened', count: 0, turnIds: [], turns: [] },
       { value: 'unclear', count: 0, turnIds: [], turns: [] },
@@ -177,6 +177,33 @@ describe('session analysis view model', () => {
       targetValid: true,
     })
     expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([])
+  })
+
+  it('keeps v2 saved record rows separate when stored coverage totals are missing', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '2',
+        source: 'session-annotator',
+        turns: [{ event_id: 'turn-event-1', performance: 'neutral' }],
+        skills: [{ event_id: 'skill-event-1', skill_name: 'frontend-design' }],
+      },
+      evaluation: null,
+    })
+    const turns = model.annotation.categories.find((category) => category.key === 'turns')
+    const skills = model.annotation.categories.find((category) => category.key === 'skills')
+
+    expect(turns).toMatchObject({
+      recordCount: 1,
+      labeledCount: null,
+      capturedCount: null,
+      coverageValue: 'Coverage unavailable',
+      coverageSource: 'Captured total missing from saved schema v2 coverage',
+    })
+    expect(skills).toMatchObject({ recordCount: 1, capturedCount: null, coverageValue: 'Coverage unavailable' })
+    expect(model.annotation.performanceSummary.find((item) => item.value === 'neutral').turns[0]).toMatchObject({
+      id: 'turn-event-1',
+      rationale: null,
+    })
   })
 
   it('keeps agent behavior and instruction Markdown targets in the actionable ledger', () => {
@@ -266,8 +293,26 @@ describe('session analysis view model', () => {
     const model = normalizeSessionAnalysis({ annotation: { schema_version: '1', source: 'session-annotator', turns: [], tools: [], skills: [] }, evaluation: null }, trace)
 
     expect(model.recorded).toBe(true)
-    expect(model.annotation.categories.every((category) => category.annotatedCount === 0)).toBe(true)
+    expect(model.annotation.categories.every((category) => category.recordCount === 0)).toBe(true)
     expect(model.evaluation.recorded).toBe(false)
+  })
+
+  it('keeps judge alignment not recorded until both labels are saved', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: null,
+      evaluation: {
+        schema_version: '1',
+        judge_alignment: { status: 'aligned', human_label: 'pass', agreement: true },
+      },
+    })
+
+    expect(model.evaluation.judgeAlignment).toMatchObject({
+      status: 'not_recorded',
+      label: 'Not recorded',
+      humanLabel: 'pass',
+      evaluatorLabel: null,
+      agreement: null,
+    })
   })
 
   it('does not infer v1 signal occurrences from prose or trace evidence', () => {
@@ -397,13 +442,13 @@ describe('session analysis view model', () => {
     const category = (key) => model.annotation.categories.find((item) => item.key === key)
 
     expect(model.annotation.schemaVersion).toBe('2')
-    expect(category('user_turns')).toMatchObject({ coverageValue: '1 labeled / 1 captured', unclearCount: 0 })
+    expect(category('user_turns')).toMatchObject({ coverageValue: '1 labeled / 1 captured user turn', coverageSource: 'Saved schema v2 coverage', unclearCount: 0 })
     expect(category('user_turns').records[0]).toMatchObject({
       eventId: 'user-event-1',
       summary: 'Please only change the evaluation page.',
       rationale: 'The user clarified the implementation boundary.',
     })
-    expect(category('turns')).toMatchObject({ coverageValue: '3 labeled / 3 captured', unclearCount: 1 })
+    expect(category('turns')).toMatchObject({ coverageValue: '3 labeled / 3 captured agent turns', coverageSource: 'Saved schema v2 coverage', unclearCount: 1 })
     expect(category('turns').records[0]).toMatchObject({
       responseSummary: 'Updated the evaluation view and checked its narrow layout.',
       scopeAdherence: 'deviation',
@@ -412,7 +457,7 @@ describe('session analysis view model', () => {
       relatedEventIds: ['tool-event-1'],
     })
     expect(category('turns').records.map((record) => record.verification)).toEqual(['not_verified', 'not_applicable', 'unclear'])
-    expect(category('tools')).toMatchObject({ coverageValue: '4 labeled / 4 captured', unclearCount: 1 })
+    expect(category('tools')).toMatchObject({ coverageValue: '4 labeled / 4 captured tool calls', coverageSource: 'Saved schema v2 coverage', unclearCount: 1 })
     expect(category('tools').records[0]).toMatchObject({
       toolName: 'Bash',
       inputPreview: 'npm run build',

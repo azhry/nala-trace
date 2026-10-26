@@ -74,7 +74,7 @@ function BoundedList({ items, itemLabel, resetKey = '', ordered = false, classNa
 }
 
 function annotationStatus(category) {
-  return category.recorded && category.annotatedCount ? 'positive' : 'unknown'
+  return category.recorded && category.recordCount ? 'positive' : 'unknown'
 }
 
 function evidenceValue(value) {
@@ -114,7 +114,12 @@ function EvidenceRecord({ category, record, eventContextLookup }) {
   }
 
   if (category.key === 'turns') {
-    return <li className="analysis-evidence-record"><div className="analysis-evidence-record-heading"><strong>{turnRoleLabel(record.turnRole)}</strong></div><EventEvidence eventId={record.eventId} eventContextLookup={eventContextLookup} contextFallback={context} />{record.turnId && <CopyableReference value={record.turnId} label="Turn ID" referenceType="turn ID" />}<div className="analysis-evidence-tags"><StatusPill tone={record.followsInstructions === 'no' ? 'critical' : record.followsInstructions === 'yes' ? 'positive' : 'unknown'}>Instruction adherence: {decisionLabel('followsInstructions', record.followsInstructions)}</StatusPill>{record.scopeAdherence && <StatusPill tone={record.scopeAdherence === 'deviation' ? 'critical' : record.scopeAdherence === 'within_scope' ? 'positive' : 'unknown'}>Scope: {humanLabel(record.scopeAdherence)}</StatusPill>}{record.groundedness && <StatusPill tone={record.groundedness === 'unsupported' ? 'critical' : record.groundedness === 'supported' ? 'positive' : 'unknown'}>Claims: {humanLabel(record.groundedness)}</StatusPill>}{record.verification && <StatusPill tone={record.verification === 'not_verified' ? 'warning' : record.verification === 'verified' ? 'positive' : 'unknown'}>Verification: {humanLabel(record.verification)}</StatusPill>}{record.performance && <StatusPill tone={record.performance === 'worsened' ? 'critical' : record.performance === 'improved' ? 'positive' : 'unknown'}>Effect on result: {decisionLabel('performance', record.performance)}</StatusPill>}</div>{record.rationale && <div className="analysis-evidence-context"><span>Why this label was applied</span><p>{record.rationale}</p></div>}{record.relatedEventIds.length > 0 && <RelatedEvents eventIds={record.relatedEventIds} eventContextLookup={eventContextLookup} />}</li>
+    const rationaleLabel = record.rationale ? 'Why this label was applied' : 'Rationale status'
+    const rationale = record.rationale || (record.performance === 'neutral'
+      ? 'Unclear — no evidence-based rationale was saved for this neutral label.'
+      : 'Rationale not recorded for this saved label.')
+
+    return <li className="analysis-evidence-record"><div className="analysis-evidence-record-heading"><strong>{turnRoleLabel(record.turnRole)}</strong></div><EventEvidence eventId={record.eventId} eventContextLookup={eventContextLookup} contextFallback={context} />{record.turnId && <CopyableReference value={record.turnId} label="Turn ID" referenceType="turn ID" />}<div className="analysis-evidence-tags"><StatusPill tone={record.followsInstructions === 'no' ? 'critical' : record.followsInstructions === 'yes' ? 'positive' : 'unknown'}>Instruction adherence: {decisionLabel('followsInstructions', record.followsInstructions)}</StatusPill>{record.scopeAdherence && <StatusPill tone={record.scopeAdherence === 'deviation' ? 'critical' : record.scopeAdherence === 'within_scope' ? 'positive' : 'unknown'}>Scope: {humanLabel(record.scopeAdherence)}</StatusPill>}{record.groundedness && <StatusPill tone={record.groundedness === 'unsupported' ? 'critical' : record.groundedness === 'supported' ? 'positive' : 'unknown'}>Claims: {humanLabel(record.groundedness)}</StatusPill>}{record.verification && <StatusPill tone={record.verification === 'not_verified' ? 'warning' : record.verification === 'verified' ? 'positive' : 'unknown'}>Verification: {humanLabel(record.verification)}</StatusPill>}{record.performance && <StatusPill tone={record.performance === 'worsened' ? 'critical' : record.performance === 'improved' ? 'positive' : 'unknown'}>Effect on result: {decisionLabel('performance', record.performance)}</StatusPill>}</div><div className="analysis-evidence-context"><span>{rationaleLabel}</span><p>{rationale}</p></div>{record.relatedEventIds.length > 0 && <RelatedEvents eventIds={record.relatedEventIds} eventContextLookup={eventContextLookup} />}</li>
   }
 
   if (category.key === 'files') {
@@ -372,19 +377,21 @@ function Breakdown({ breakdowns }) {
 }
 
 function AnnotationCategory({ category, visibleRecords, visibleBreakdowns, filtersActive, eventContextLookup, filterKey }) {
-  const unlabeledCount = category.capturedCount == null ? null : Math.max(category.capturedCount - category.annotatedCount, 0)
-  const coverageDetail = category.capturedCount == null
+  const unlabeledCount = category.capturedCount == null || category.labeledCount == null ? null : Math.max(category.capturedCount - category.labeledCount, 0)
+  const coverageDetail = unlabeledCount === null
     ? category.coverageDetail
     : `${category.coverageDetail}${unlabeledCount ? ` · ${unlabeledCount.toLocaleString()} not labeled` : ''}`
-  const stateLabel = !category.recorded ? 'Not included in this analysis' : category.annotatedCount ? 'Evidence recorded' : 'No labels recorded'
+  const stateLabel = !category.recorded ? 'Not included in this analysis' : category.recordCount ? 'Evidence recorded' : 'No records saved'
 
   return <details className="analysis-category-card">
     <summary className="analysis-category-summary">
       <div className="analysis-category-header">
         <div>
           <span className="analysis-card-kicker">{category.label}</span>
-          <strong>{category.coverageValue}</strong>
-          <small>{category.recorded ? coverageDetail : category.unavailableDetail || coverageDetail}</small>
+          <strong>{category.recordCount.toLocaleString()} saved {category.recordCount === 1 ? 'record' : 'records'}</strong>
+          <small>Coverage: {category.recorded ? category.coverageValue : category.unavailableDetail || category.coverageValue}</small>
+          {category.recorded && <small>{coverageDetail}</small>}
+          {category.recorded && <small className="analysis-coverage-source">Coverage source: {category.coverageSource}</small>}
           {category.recorded && <small className="analysis-category-unclear">{category.unclearCount ? `${category.unclearCount.toLocaleString()} ${category.unclearCount === 1 ? 'record has' : 'records have'} one or more unclear decisions.` : 'No records have an unclear decision.'}</small>}
         </div>
         <div className="analysis-category-summary-side">
@@ -397,7 +404,7 @@ function AnnotationCategory({ category, visibleRecords, visibleBreakdowns, filte
       {category.recorded && <Breakdown breakdowns={visibleBreakdowns} />}
       {category.recorded && <div className="analysis-evidence-heading">
         <span>Saved evidence in this category</span>
-        <strong>{filtersActive ? `${visibleRecords.length.toLocaleString()} matching / ${category.annotatedCount.toLocaleString()} labeled records` : `${category.annotatedCount.toLocaleString()} labeled records`}</strong>
+        <strong>{filtersActive ? `${visibleRecords.length.toLocaleString()} matching / ${category.recordCount.toLocaleString()} saved records` : `${category.recordCount.toLocaleString()} saved records`}</strong>
       </div>}
       {visibleRecords.length
         ? <BoundedList items={visibleRecords} itemLabel="evidence records" resetKey={filterKey} className="analysis-evidence-list" renderItem={(record, index) => <EvidenceRecord category={category} record={record} eventContextLookup={eventContextLookup} key={record.eventId + '-' + index} />} />
@@ -407,7 +414,7 @@ function AnnotationCategory({ category, visibleRecords, visibleBreakdowns, filte
 }
 
 function PerformanceSummary({ annotation }) {
-  return <div className="analysis-performance-summary"><div className="analysis-subsection-heading"><span>Effect on the result</span><strong>{annotation.performanceLabeledCount ? `${annotation.performanceLabeledCount} agent turns labeled` : 'Not recorded'}</strong></div><p className="analysis-performance-copy">“No outcome change recorded” means the evaluator did not see this turn change the result. It does not mean the response was good or bad.</p>{annotation.performanceLabeledCount ? <div className="analysis-performance-values">{annotation.performanceSummary.map((item) => <div className={`analysis-performance-value ${item.value}`} key={item.value}><div><strong>{evidenceValue(item.value)}</strong><span>{item.count} {item.count === 1 ? 'agent turn' : 'agent turns'}</span></div>{item.count ? <BoundedList items={item.turns} itemLabel={evidenceValue(item.value).toLowerCase() + ' agent turns'} resetKey={'performance-' + item.value} className="analysis-performance-turns" renderItem={(turn, index) => <li className="analysis-performance-turn" key={turn.id + '-' + index} title={turn.id}><strong>{turnRoleLabel(turn.role)}</strong><span>{turn.preview || 'Response summary not included in this analysis version.'}</span></li>} /> : <em>No turns have this label</em>}</div>)}</div> : <p className="analysis-empty-copy">This analysis did not store a turn-effect label.</p>}</div>
+  return <div className="analysis-performance-summary"><div className="analysis-subsection-heading"><span>Effect on the result</span><strong>{annotation.performanceLabeledCount ? `${annotation.performanceLabeledCount} agent turns labeled` : 'Not recorded'}</strong></div><p className="analysis-performance-copy">“No outcome change recorded” means the evaluator did not see this turn change the result. It does not mean the response was good or bad.</p>{annotation.performanceLabeledCount ? <div className="analysis-performance-values">{annotation.performanceSummary.map((item) => <div className={`analysis-performance-value ${item.value}`} key={item.value}><div><strong>{evidenceValue(item.value)}</strong><span>{item.count} {item.count === 1 ? 'agent turn' : 'agent turns'}</span></div>{item.count ? <BoundedList items={item.turns} itemLabel={evidenceValue(item.value).toLowerCase() + ' agent turns'} resetKey={'performance-' + item.value} className="analysis-performance-turns" renderItem={(turn, index) => <li className="analysis-performance-turn" key={turn.id + '-' + index} title={turn.id}><strong>{turnRoleLabel(turn.role)}</strong><span>{turn.preview || 'Response summary not included in this analysis version.'}</span><p>{turn.rationale || 'Rationale unclear — no explanation was saved with this label.'}</p></li>} /> : <em>No turns have this label</em>}</div>)}</div> : <p className="analysis-empty-copy">This analysis did not store a turn-effect label.</p>}</div>
 }
 
 function categorySupportsDecision(category, decisionFilter) {
@@ -481,7 +488,7 @@ function AnnotationPanel({ annotation, eventContextLookup }) {
     .filter((category) => categorySupportsDecision(category, decisionFilter))
     .map((category) => filteredCategory(category, evidenceType, decisionFilter))
   const showCaptureGaps = decisionFilter === ALL_FILTER && (evidenceType === ALL_FILTER || evidenceType === 'capture_gaps')
-  const eligibleCount = filteredCategories.reduce((total, item) => total + item.category.annotatedCount, 0)
+  const eligibleCount = filteredCategories.reduce((total, item) => total + item.category.recordCount, 0)
     + (showCaptureGaps && annotation.captureGapsRecorded ? annotation.captureGaps.length : 0)
   const visibleCount = filteredCategories.reduce((total, item) => total + item.visibleRecords.length, 0)
     + (showCaptureGaps ? annotation.captureGaps.length : 0)
@@ -490,7 +497,7 @@ function AnnotationPanel({ annotation, eventContextLookup }) {
 
   return <section className="analysis-block annotation-block" aria-labelledby="annotation-title">
     <div className="analysis-block-heading">
-      <div><span className="section-label">Annotation</span><h3 id="annotation-title">Reviewed evidence</h3><p>Counts describe saved labels. V2 records include every captured item per category. Unclear counts are records with at least one unclear decision.</p></div>
+      <div><span className="section-label">Annotation</span><h3 id="annotation-title">Reviewed evidence</h3><p>Saved record counts are separate from capture coverage. Schema v2 uses saved coverage; legacy totals use saved counts or the current trace when available. Missing totals stay unavailable. Skill document reads and inferred tags are separate trace evidence.</p></div>
       <StatusPill tone="positive">Saved</StatusPill>
     </div>
     <AnnotationFilters evidenceType={evidenceType} decisionFilter={decisionFilter}
@@ -507,13 +514,19 @@ function AnnotationPanel({ annotation, eventContextLookup }) {
 }
 
 function SignalOccurrence({ occurrence, index, signalName, eventContextLookup }) {
+  const unavailableFields = [
+    ['eventKind', 'lifecycle event'],
+    ['occurredAt', 'occurrence time'],
+    ['summary', 'event summary'],
+    ['impact', 'impact'],
+  ].filter(([key]) => !occurrence[key]).map(([, label]) => label)
   const context = {
     label: signalName || 'Review signal occurrence',
     occurredAt: occurrence.occurredAt,
     details: [savedDetail('Lifecycle event', occurrence.eventKind), savedDetail('What happened', occurrence.summary), savedDetail('Why it matters', occurrence.impact)].filter(Boolean),
   }
 
-  return <li className="analysis-signal-occurrence"><span className="analysis-signal-occurrence-index">{index + 1}</span><EventEvidence eventId={occurrence.eventId} eventContextLookup={eventContextLookup} contextFallback={context} referenceLabel="Occurrence event ID" referenceType="Occurrence event ID" /></li>
+  return <li className="analysis-signal-occurrence"><span className="analysis-signal-occurrence-index">{index + 1}</span><div className="analysis-signal-occurrence-content"><EventEvidence eventId={occurrence.eventId} eventContextLookup={eventContextLookup} contextFallback={context} referenceLabel="Occurrence event ID" referenceType="Occurrence event ID" />{unavailableFields.length > 0 && <p className="analysis-signal-occurrence-unavailable">Not recorded in this saved occurrence: {unavailableFields.join(', ')}.</p>}</div></li>
 }
 
 function signalDescriptionReferences(description) {
@@ -565,18 +578,21 @@ function SignalCard({ signal, index, eventContextLookup, filterKey }) {
 
 function ReviewSignals({ signals, eventContextLookup }) {
   const [severityFilter, setSeverityFilter] = useState(ALL_FILTER)
+  const [categoryFilter, setCategoryFilter] = useState(ALL_FILTER)
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLowerCase()
+  const categoryOptions = Array.from(new Map(signals.map((signal) => [signal.signalKey || signal.name, signal.name])).entries())
   const filteredSignals = signals.filter((signal) => {
     if (severityFilter !== ALL_FILTER && signal.severity !== severityFilter) return false
+    if (categoryFilter !== ALL_FILTER && (signal.signalKey || signal.name) !== categoryFilter) return false
     if (!normalizedQuery) return true
     return [signal.name, signal.detail, ...signal.occurrences.flatMap((occurrence) => [occurrence.eventId, occurrence.eventKind, occurrence.summary, occurrence.impact])]
       .filter(Boolean)
       .some((value) => value.toLowerCase().includes(normalizedQuery))
   })
-  const filtersActive = severityFilter !== ALL_FILTER || Boolean(normalizedQuery)
-  const filterKey = severityFilter + ':' + normalizedQuery
-  const clearFilters = () => { setSeverityFilter(ALL_FILTER); setQuery('') }
+  const filtersActive = severityFilter !== ALL_FILTER || categoryFilter !== ALL_FILTER || Boolean(normalizedQuery)
+  const filterKey = severityFilter + ':' + categoryFilter + ':' + normalizedQuery
+  const clearFilters = () => { setSeverityFilter(ALL_FILTER); setCategoryFilter(ALL_FILTER); setQuery('') }
 
   return <div id="analysis-detailed-signals" className="analysis-subsection">
     <div className="analysis-subsection-heading"><span>Review signals</span><strong>{signals.length ? signals.length.toLocaleString() + ' recorded findings' : 'Not recorded'}</strong></div>
@@ -584,6 +600,7 @@ function ReviewSignals({ signals, eventContextLookup }) {
       <p className="analysis-signal-legend">Warning and critical labels need review. Info labels provide context. Each listed occurrence is an explicit saved event, not an example parsed from the description.</p>
       <div className="analysis-signal-filters">
         <label>Severity<select aria-label="Signal severity" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}><option value={ALL_FILTER}>All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option><option value="unknown">Unknown</option></select></label>
+        <label>Signal category<select aria-label="Signal category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value={ALL_FILTER}>All categories</option>{categoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>Find a signal or event<input aria-label="Find a signal or event" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, event ID, or evidence text" /></label>
         {filtersActive && <button type="button" className="analysis-filter-clear" onClick={clearFilters}>Clear filters</button>}
       </div>
@@ -605,8 +622,10 @@ function reviewConcernSignals(signals = []) {
 
 function evidenceCoverage(category) {
   if (!category) return { value: 'Not recorded', detail: 'agent turns labeled' }
-  if (category.capturedCount == null) return { value: `${category.annotatedCount.toLocaleString()} labeled`, detail: 'agent turns · total unavailable' }
-  return { value: `${category.annotatedCount.toLocaleString()} / ${category.capturedCount.toLocaleString()}`, detail: 'agent turns labeled' }
+  return {
+    value: `${category.recordCount.toLocaleString()} ${category.recordCount === 1 ? 'saved record' : 'saved records'}`,
+    detail: `Coverage: ${category.coverageValue} · ${category.coverageSource}`,
+  }
 }
 
 function overviewReadout(verdict) {
@@ -628,7 +647,7 @@ function AnalysisRecordMetadata({ analysis }) {
     { label: 'Evaluation', schemaVersion: analysis.evaluation.schemaVersion, source: analysis.evaluation.source, recorded: analysis.evaluation.recorded },
   ]
 
-  return <section className="analysis-record-metadata" aria-label="Saved analysis record"><div className="analysis-record-metadata-heading"><strong>Current saved record</strong><span>Stored analysis details</span></div><div className="analysis-record-metadata-grid">{entries.map((entry) => <div key={entry.label}><span>{entry.label}</span><strong>{entry.recorded ? `Schema v${entry.schemaVersion || 'unknown'}` : 'Not recorded'}</strong><small>{entry.recorded ? `Source: ${entry.source || 'Not recorded'}` : 'No saved record'}</small></div>)}<div><span>Last updated</span><strong><time dateTime={analysis.updatedAt || undefined}>{formattedSavedTime(analysis.updatedAt)}</time></strong><small>The current record; revision history is not stored.</small></div></div></section>
+  return <section className="analysis-record-metadata" aria-label="Saved analysis record"><div className="analysis-record-metadata-heading"><strong>Current saved record</strong><span>Stored analysis details</span></div><p className="analysis-record-metadata-note">Annotation and evaluation have separate sources and schema versions with one shared update time. This response contains only the current pair; revision history is not stored, so earlier observations cannot be assigned to saved older versions here.</p><div className="analysis-record-metadata-grid">{entries.map((entry) => <div key={entry.label}><span>{entry.label}</span><strong>{entry.recorded ? `Schema v${entry.schemaVersion || 'unknown'}` : 'Not recorded'}</strong><small>{entry.recorded ? `Source: ${entry.source || 'Not recorded'}` : 'No saved record'}</small></div>)}<div><span>Last updated</span><strong><time dateTime={analysis.updatedAt || undefined}>{formattedSavedTime(analysis.updatedAt)}</time></strong><small>Shared update time for this current pair.</small></div></div></section>
 }
 
 function EvaluationOverview({ analysis }) {
@@ -656,7 +675,7 @@ function TurnImpactHighlights({ annotation }) {
     {annotation.performanceLabeledCount ? <>
       <div className="analysis-highlight-counts">{annotation.performanceSummary.map((item) => <span key={item.value}><strong>{item.count.toLocaleString()}</strong> {evidenceValue(item.value)}</span>)}</div>
       {neutral?.count > 0 && <p>“No outcome change recorded” means the evaluator saw no change to the result; it does not mean the turn was good or bad.</p>}
-      {turns.length > 0 && <BoundedList items={turns} itemLabel="turn impact records" ordered className="analysis-turn-impact-list" resetKey="turn-impact" renderItem={(turn, index) => <li className="analysis-turn-impact-item" key={turn.id || index}><StatusPill tone={turn.effect === 'worsened' ? 'critical' : turn.effect === 'improved' ? 'positive' : 'unknown'}>{turn.effect === 'neutral' ? 'Neutral' : turn.effect === 'unclear' ? 'Unclear' : turn.effect === 'worsened' ? 'Worsened' : 'Improved'}</StatusPill><span>{turn.preview || 'Response summary not included in this analysis version.'}</span></li>} />}
+      {turns.length > 0 && <BoundedList items={turns} itemLabel="turn impact records" ordered className="analysis-turn-impact-list" resetKey="turn-impact" renderItem={(turn, index) => <li className="analysis-turn-impact-item" key={turn.id || index}><StatusPill tone={turn.effect === 'worsened' ? 'critical' : turn.effect === 'improved' ? 'positive' : 'unknown'}>{turn.effect === 'neutral' ? 'Neutral' : turn.effect === 'unclear' ? 'Unclear' : turn.effect === 'worsened' ? 'Worsened' : 'Improved'}</StatusPill><span>{turn.preview || 'Response summary not included in this analysis version.'}</span><p>{turn.rationale || 'Rationale unclear — no explanation was saved with this label.'}</p></li>} />}
     </> : <p>No turn effect labels were recorded. The result impact is unknown.</p>}
   </section>
 }
@@ -697,7 +716,7 @@ function EvaluationHighlights({ annotation, evaluation }) {
 }
 function EvidenceDisclosure({ annotation, evaluation, eventContextLookup }) {
   const categories = annotation.categories
-  const categoryCount = categories.filter((category) => category.annotatedCount > 0).length
+  const categoryCount = categories.filter((category) => category.recordCount > 0).length
   const concernCount = reviewConcernSignals(evaluation.reviewSignals).length
   const evidenceSummary = [
     `${categoryCount} ${categoryCount === 1 ? 'category' : 'categories'} reviewed`,

@@ -39,6 +39,20 @@ describe('InsightCards', () => {
     expect(screen.queryByText('Pass')).not.toBeInTheDocument()
   })
 
+  it('leaves legacy coverage unavailable when the compact analysis response has no trace', () => {
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: {
+        schema_version: '1',
+        source: 'session-annotator',
+        turns: [{ event_id: 'legacy-agent-1', performance: 'improved', rationale: 'The requested result was completed.' }],
+      },
+      evaluation,
+    }} />)
+
+    expect(screen.getAllByText('1 saved record').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('Coverage: Coverage unavailable · Unavailable in this response')).toBeInTheDocument()
+  })
+
   it('keeps the detail summary compact and links to the dedicated evaluation page', () => {
     render(<InsightCards analysis={{ annotation: null, evaluation }} trace={trace} compact sessionId="session-1" />)
 
@@ -62,7 +76,9 @@ describe('InsightCards', () => {
       updated_at: '2026-08-19T08:10:00Z',
     }} trace={trace} />)
 
-    expect(screen.getAllByText('1 labeled / 1 captured')).toHaveLength(2)
+    expect(screen.getByText('Coverage: 1 captured agent turn')).toBeInTheDocument()
+    expect(screen.getByText('Coverage: 1 captured tool call')).toBeInTheDocument()
+    expect(screen.getByText('Coverage source: Current trace conversation')).toBeInTheDocument()
     expect(screen.getByText('Effect on the result')).toBeInTheDocument()
     expect(screen.getAllByText('No outcome change recorded').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('“No outcome change recorded” means the evaluator did not see this turn change the result. It does not mean the response was good or bad.')).toBeInTheDocument()
@@ -70,11 +86,11 @@ describe('InsightCards', () => {
     expect(screen.getByText('rg')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy tool use ID tool-1' })).toBeInTheDocument()
     expect(screen.getByText('rg --files', { exact: false })).toBeInTheDocument()
-    expect(screen.getByText('The recorded turn stayed within scope.')).toBeInTheDocument()
+    expect(screen.getAllByText('The recorded turn stayed within scope.').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Evaluation result')).toBeInTheDocument()
     expect(screen.getAllByText('Pass')).toHaveLength(2)
     expect(screen.getByText('The recorded workflow is complete.')).toBeInTheDocument()
-    expect(screen.getByText('files read before write')).toBeInTheDocument()
+    expect(screen.getAllByText('files read before write').some((element) => element.tagName === 'STRONG')).toBe(true)
     expect(screen.getByText('Warning and critical labels need review. Info labels provide context. Each listed occurrence is an explicit saved event, not an example parsed from the description.')).toBeInTheDocument()
     expect(screen.getByText('1 occurrence · Info')).toBeInTheDocument()
     expect(screen.getAllByText('Instruction adherence: Followed').some((element) => element.tagName === 'SPAN')).toBe(true)
@@ -303,8 +319,9 @@ describe('InsightCards', () => {
     fireEvent.change(screen.getByLabelText('Decision or label'), { target: { value: 'followsInstructions:no' } })
 
     expect(screen.getByText('Filters match 1 of 2 saved records')).toBeInTheDocument()
-    expect(screen.getByText('The turn broke an instruction.')).toBeInTheDocument()
-    expect(screen.queryByText('The turn followed instructions.')).not.toBeInTheDocument()
+    expect(screen.getAllByText('The turn broke an instruction.').length).toBeGreaterThanOrEqual(1)
+    const agentTurnsCategory = Array.from(document.querySelectorAll('.analysis-category-card')).find((category) => category.textContent.includes('Agent turns'))
+    expect(agentTurnsCategory.querySelector('.analysis-evidence-list')).not.toHaveTextContent('The turn followed instructions.')
   })
 
   it('renders v2 turn, tool, skill, file, capture-gap, occurrence, and action evidence with filters', () => {
@@ -354,9 +371,9 @@ describe('InsightCards', () => {
     expect(screen.getAllByText('Schema v2')).toHaveLength(2)
     expect(screen.getByText('Source: session-annotator')).toBeInTheDocument()
     expect(screen.getByText('Source: session-evaluator')).toBeInTheDocument()
-    expect(screen.getByText('The current record; revision history is not stored.')).toBeInTheDocument()
+    expect(screen.getByText(/Annotation and evaluation have separate sources and schema versions with one shared update time\. This response contains only the current pair; revision history is not stored/)).toBeInTheDocument()
     expect(screen.getByLabelText('Saved analysis record').querySelector('time')?.dateTime).toBe('2026-10-24T10:00:00Z')
-    expect(screen.getAllByText('1 labeled / 1 captured')).toHaveLength(5)
+    expect(screen.getAllByText(/Coverage: 1 labeled \/ 1 captured/).length).toBeGreaterThanOrEqual(5)
     expect(screen.getByText('What the user said')).toBeInTheDocument()
     expect(screen.getByText('Only change the evaluation page.')).toBeInTheDocument()
     expect(screen.getByText('Why this message was classified this way')).toBeInTheDocument()
@@ -398,6 +415,74 @@ describe('InsightCards', () => {
     expect(screen.getByText('Filters match 1 of 1 saved records')).toBeInTheDocument()
     expect(document.querySelector('.analysis-capture-gap')).toHaveTextContent('A tool completion was not captured.')
     expect(screen.queryByText('Updated the evaluation interface.')).not.toBeInTheDocument()
+  })
+
+  it('separates saved rows from v2 coverage and shows each neutral rationale or marks it unclear', async () => {
+    const user = userEvent.setup()
+    render(<InsightCards forceAnalysis analysis={{
+      updated_at: '2026-10-25T10:00:00Z',
+      annotation: {
+        schema_version: '2',
+        source: 'session-annotator',
+        coverage: { agent_turns: { captured: 4, labeled: 3, unclear: 0 } },
+        turns: [
+          { event_id: 'neutral-event-1', response_summary: 'The first response restated the request.', performance: 'neutral', rationale: 'The response restated the request without adding a useful next step.' },
+          { event_id: 'neutral-event-2', response_summary: 'The second response repeated the same check.', performance: 'neutral', rationale: 'The repeated check did not change the outcome.' },
+          { event_id: 'neutral-event-3', response_summary: 'The third response listed unchanged results.', performance: 'neutral' },
+        ],
+      },
+      evaluation: { ...evaluation, review_signals: [] },
+    }} />)
+
+    expect(screen.getAllByText('The response restated the request without adding a useful next step.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('The repeated check did not change the outcome.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Rationale unclear — no explanation was saved with this label.').length).toBeGreaterThanOrEqual(1)
+    await user.click(screen.getByText('Evidence details'))
+    expect(screen.getAllByText('3 saved records').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('Coverage: 3 labeled / 4 captured agent turns')).toBeInTheDocument()
+    expect(screen.getByText('Coverage source: Saved schema v2 coverage')).toBeInTheDocument()
+    expect(screen.getByText(/This response contains only the current pair; revision history is not stored/)).toBeInTheDocument()
+  })
+
+  it('filters signals by severity and category and names fields missing from saved occurrences', async () => {
+    const user = userEvent.setup()
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: null,
+      evaluation: {
+        ...evaluation,
+        review_signals: [
+          {
+            name: 'unmatched_tool_hook_pairs',
+            count: 3,
+            severity: 'warning',
+            detail: 'The invocation has no captured completion hook.',
+            occurrences: [{ event_id: 'unmatched-hook-1', event_kind: 'PreToolUse' }],
+          },
+          {
+            name: 'authenticated_browser_evidence',
+            count: 1,
+            severity: 'info',
+            detail: 'The authenticated browser flow was not recorded.',
+            occurrences: [],
+          },
+        ],
+      },
+    }} />)
+
+    expect(screen.getByText('Not recorded in this saved occurrence: occurrence time, event summary, impact.')).toBeInTheDocument()
+    expect(screen.getAllByText('The invocation has no captured completion hook.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('The authenticated browser flow was not recorded.')).toBeInTheDocument()
+    const category = screen.getByLabelText('Signal category')
+    expect(category.tagName).toBe('SELECT')
+    await user.selectOptions(category, 'unmatched_tool_hook_pairs')
+    expect(screen.getByText('Filters match 1 of 2 findings')).toBeInTheDocument()
+    expect(screen.getAllByText('The invocation has no captured completion hook.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('The authenticated browser flow was not recorded.')).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Signal severity'), 'info')
+    expect(screen.getByText('Filters match 0 of 2 findings')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByText('Filters match 2 of 2 findings')).toBeInTheDocument()
   })
 
   it('shows the captured context behind unclear tools and necessary skills', () => {

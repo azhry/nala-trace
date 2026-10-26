@@ -22,6 +22,12 @@
 - Use project-documented run commands and environment names unchanged in manual verification unless the task explicitly changes them. Verify the actual running URL and port from authoritative project knowledge or the process before writing a command; do not guess or silently substitute ports.
 - Do not change an existing PR from ready for review back to draft. Use draft only when creating a new PR or when the user explicitly requests draft.
 
+## Local service operations
+
+- Use the Nala Ctrl desktop app to manage local services from this repository whenever the project is configured there. Select the matching project and service, check its running state before acting, use that service's Run or Stop control, and confirm the state afterward. Use Nala Ctrl's log view for output. Changing the selected project or service does not stop a running process.
+- For branch questions, read the branch shown by Nala Ctrl for the selected project. This is the current branch of the Git working tree containing the added project folder; Nala Ctrl does not record which branch was checked out when a service started. If the service's configured `cwd` is a different Git working tree, check that exact directory with `git -C <cwd> branch --show-current` and report it as the service working tree's current branch. Do not present the current branch as the process's startup branch unless it is independently established.
+- Nala Ctrl manages only folders explicitly added to the app and services declared in that folder's `nala.yml`. If the project is not listed, add its folder in Nala Ctrl and complete its service setup there. If the app or service cannot be accessed in Nala Ctrl, state that limitation; use a documented direct-run fallback only when the task explicitly requires one, and check for an existing process before starting it.
+
 ## Branches and publication
 
 - Start new work from `main` on a `task/<topic>` branch.

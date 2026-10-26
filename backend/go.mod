@@ -10,7 +10,7 @@ require (
 )
 
 require (
-	github.com/azhry/nala-auth-go v0.0.0-20261026105953-263c3f22f136
+	github.com/azhry/nala-auth-go v0.1.0
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect

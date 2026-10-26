@@ -57,6 +57,72 @@ function cleanString(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+const WINDOWS_1252_SPECIAL_BYTES = new Map([
+  ['€', 0x80], ['‚', 0x82], ['ƒ', 0x83], ['„', 0x84], ['…', 0x85],
+  ['†', 0x86], ['‡', 0x87], ['ˆ', 0x88], ['‰', 0x89], ['Š', 0x8a],
+  ['‹', 0x8b], ['Œ', 0x8c], ['Ž', 0x8e], ['‘', 0x91], ['’', 0x92],
+  ['“', 0x93], ['”', 0x94], ['•', 0x95], ['–', 0x96], ['—', 0x97],
+  ['˜', 0x98], ['™', 0x99], ['š', 0x9a], ['›', 0x9b], ['œ', 0x9c],
+  ['ž', 0x9e], ['Ÿ', 0x9f],
+])
+const UTF8_DECODER = typeof TextDecoder === 'undefined' ? null : new TextDecoder('utf-8', { fatal: true })
+
+function windows1252Byte(character) {
+  const codePoint = character.codePointAt(0)
+  if (codePoint <= 0xff) return codePoint
+  return WINDOWS_1252_SPECIAL_BYTES.get(character) ?? null
+}
+
+function escapeCharacterClass(value) {
+  return Array.from(value, (character) => /[\\\]^-]/.test(character) ? `\\${character}` : character).join('')
+}
+
+function hasControlCharacters(value) {
+  return Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0)
+    return codePoint <= 0x08 || codePoint === 0x0b || codePoint === 0x0c || (codePoint >= 0x0e && codePoint <= 0x1f) || (codePoint >= 0x7f && codePoint <= 0x9f)
+  }).some(Boolean)
+}
+
+const WINDOWS_1252_CONTINUATION_GLYPHS = [
+  ...Array.from({ length: 0x40 }, (_value, index) => String.fromCharCode(0x80 + index)),
+  ...Array.from(WINDOWS_1252_SPECIAL_BYTES.entries())
+    .filter(([, byte]) => byte >= 0x80 && byte <= 0xbf)
+    .map(([character]) => character),
+].join('')
+const MOJIBAKE_SEQUENCE = new RegExp(`[\\u00c2-\\u00f4][${escapeCharacterClass(WINDOWS_1252_CONTINUATION_GLYPHS)}]{1,3}`, 'gu')
+
+function repairMojibakeSequences(value) {
+  if (!UTF8_DECODER) return value
+  return value.replace(MOJIBAKE_SEQUENCE, (sequence) => {
+    const bytes = Array.from(sequence, windows1252Byte)
+    if (bytes.some((byte) => byte === null)) return sequence
+
+    try {
+      const decoded = UTF8_DECODER.decode(Uint8Array.from(bytes))
+      return hasControlCharacters(decoded) ? sequence : decoded
+    } catch {
+      return sequence
+    }
+  })
+}
+
+export function repairCapturedText(value) {
+  if (typeof value !== 'string' || !value) return value
+
+  let repaired = value
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const candidate = repairMojibakeSequences(repaired)
+    if (candidate === repaired) break
+    repaired = candidate
+  }
+  return repaired
+}
+
+function cleanText(value) {
+  return repairCapturedText(cleanString(value))
+}
+
 function schemaVersion(value) {
   const raw = typeof value === 'number' ? String(value) : cleanString(value)
   return raw.toLowerCase().replace(/^v/, '') || null
@@ -144,7 +210,7 @@ function normalizedEnum(value, allowed, aliases = {}) {
 }
 
 function contentText(value) {
-  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'string') return cleanText(value)
   if (Array.isArray(value)) return value.map(contentText).filter(Boolean).join(' ').trim()
   if (!isObject(value)) return ''
 
@@ -161,7 +227,7 @@ function contentText(value) {
 }
 
 function clipTurnPreview(value) {
-  const text = contentText(value).replace(/\s+/g, ' ').trim()
+  const text = repairCapturedText(contentText(value)).replace(/\s+/g, ' ').trim()
   return text.length <= TURN_PREVIEW_LIMIT ? text : `${text.slice(0, TURN_PREVIEW_LIMIT).trimEnd()}…`
 }
 
@@ -174,7 +240,7 @@ function normalizedValue(value) {
 }
 
 function humanizeValue(value) {
-  return cleanString(value).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+  return cleanText(value).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function humanizeSignalName(value) {
@@ -270,7 +336,7 @@ function normalizeTurn(record = {}, trace = {}) {
     verification: normalizedEnum(record.verification, VERIFICATION_VALUES, { unverified: 'not_verified' }),
     performance: validEnum(record.performance, PERFORMANCE_VERDICTS),
     relatedEventIds: stringList(record.related_event_ids ?? record.relatedEventIds),
-    rationale: cleanString(record.rationale) || null,
+    rationale: cleanText(record.rationale) || null,
   }
 }
 
@@ -282,7 +348,7 @@ function normalizeUserTurn(record = {}) {
     signalType: humanizeValue(signalType) || 'Other',
     summary: clipTurnPreview(record.summary ?? record.user_summary ?? record.userSummary ?? record.content) || null,
     relatedEventIds: stringList(record.related_event_ids ?? record.relatedEventIds),
-    rationale: cleanString(record.rationale) || null,
+    rationale: cleanText(record.rationale) || null,
   }
 }
 
@@ -318,10 +384,11 @@ function linkedSkillInvocation(trace, record) {
 
 function normalizeTool(record = {}, trace = {}) {
   const toolCall = linkedToolCall(trace, record)
-  const toolName = cleanString(record.tool_name ?? record.toolName) || cleanString(toolCall?.tool_name ?? toolCall?.toolName) || null
+  const rawToolName = cleanString(record.tool_name ?? record.toolName) || cleanString(toolCall?.tool_name ?? toolCall?.toolName) || null
+  const toolName = rawToolName ? repairCapturedText(rawToolName) : null
   const toolUseId = cleanString(record.tool_use_id ?? record.toolUseId) || cleanString(toolCall?.tool_use_id ?? toolCall?.toolUseId) || null
   const input = record.input ?? record.tool_input ?? toolCall?.input
-  const inputPreview = input == null ? null : getToolInputPreview(toolName || '', input)
+  const inputPreview = input == null ? null : getToolInputPreview(rawToolName || '', input)
   const inputSummary = clipTurnPreview(record.input_summary ?? record.inputSummary) || (inputPreview?.kind === 'missing' ? null : inputPreview?.text || null)
   const outputSummary = clipTurnPreview(record.output_summary ?? record.outputSummary) || null
   const completionStatus = cleanString(record.completion_status ?? record.completionStatus ?? toolCall?.status ?? toolCall?.tool_status).toLowerCase() || null
@@ -345,15 +412,16 @@ function normalizeTool(record = {}, trace = {}) {
     completionStatus,
     completionDetail,
     necessary: validEnum(record.necessary, ANNOTATION_VERDICTS),
-    rationale: cleanString(record.rationale) || null,
+    rationale: cleanText(record.rationale) || null,
   }
 }
 
 function normalizeSkill(record = {}, trace = {}) {
   const invocation = linkedSkillInvocation(trace, record)
   const eventId = cleanString(record.event_id ?? record.eventId) || cleanString(invocation?.event_id ?? invocation?.eventId) || 'Event ID not recorded'
-  const skillName = cleanString(record.skill_name ?? record.skillName) || cleanString(invocation?.name ?? invocation?.skill_name ?? invocation?.skillName) || 'Skill name not recorded'
-  const toolName = cleanString(invocation?.tool_name ?? invocation?.toolName) || null
+  const rawSkillName = cleanString(record.skill_name ?? record.skillName) || cleanString(invocation?.name ?? invocation?.skill_name ?? invocation?.skillName) || 'Skill name not recorded'
+  const skillName = repairCapturedText(rawSkillName)
+  const toolName = repairCapturedText(cleanString(invocation?.tool_name ?? invocation?.toolName)) || null
   const toolUseId = cleanString(invocation?.tool_use_id ?? invocation?.toolUseId) || null
   const confidence = cleanString(invocation?.confidence) || null
   const invocationDetail = [
@@ -373,7 +441,7 @@ function normalizeSkill(record = {}, trace = {}) {
     summary: clipTurnPreview(record.summary ?? record.skill_summary ?? record.skillSummary) || null,
     invocationDetail,
     necessary: validEnum(record.necessary, ANNOTATION_VERDICTS),
-    rationale: cleanString(record.rationale) || null,
+    rationale: cleanText(record.rationale) || null,
   }
 }
 
@@ -384,7 +452,7 @@ function normalizeFile(record = {}) {
     operation: humanizeValue(record.operation) || 'Operation not recorded',
     summary: clipTurnPreview(record.summary ?? record.file_summary ?? record.fileSummary) || null,
     necessary: validEnum(record.necessary ?? record.relevance, ANNOTATION_VERDICTS),
-    rationale: cleanString(record.rationale) || null,
+    rationale: cleanText(record.rationale) || null,
   }
 }
 
@@ -528,7 +596,7 @@ function displayVerdict(value) {
 
 function normalizeReviewSignal(record = {}) {
   const severity = validEnum(record.severity, new Set(['info', 'warning', 'critical', 'unknown'])) || 'unknown'
-  const detail = cleanString(record.detail) || 'Signal detail not recorded'
+  const detail = cleanText(record.detail) || 'Signal detail not recorded'
   const signalName = cleanString(record.name)
   const occurrences = safeArray(record.occurrences).map((occurrence = {}) => ({
     eventId: cleanString(occurrence.event_id ?? occurrence.eventId) || 'Event ID not recorded',
@@ -540,7 +608,7 @@ function normalizeReviewSignal(record = {}) {
   const count = numberOrNull(record.count) ?? (Array.isArray(record.occurrences) ? occurrences.length : null)
   return {
     signalKey: signalName || null,
-    name: humanizeSignalName(signalName),
+    name: repairCapturedText(humanizeSignalName(signalName)),
     count,
     severity,
     severityMeaning: SIGNAL_SEVERITY_MEANINGS[severity],
@@ -568,8 +636,8 @@ function normalizeAlignment(alignment) {
   return {
     status,
     label: status === 'aligned' ? 'Aligned' : status === 'not_aligned' ? 'Not aligned' : 'Not recorded',
-    humanLabel: cleanString(value.human_label ?? value.humanLabel) || null,
-    evaluatorLabel: cleanString(value.evaluator_label ?? value.evaluatorLabel) || null,
+    humanLabel: cleanText(value.human_label ?? value.humanLabel) || null,
+    evaluatorLabel: cleanText(value.evaluator_label ?? value.evaluatorLabel) || null,
     agreement: typeof value.agreement === 'boolean' ? value.agreement : null,
     dataset: cleanString(value.dataset) || null,
   }
@@ -586,8 +654,8 @@ function normalizeLedger(ledger) {
       targetLabel: target.label,
       targetValid: target.valid,
       outOfScopeReason: target.reason || null,
-      change: cleanString(improvement.change) || 'Change not recorded',
-      reason: cleanString(improvement.reason) || 'Reason not recorded',
+      change: cleanText(improvement.change) || 'Change not recorded',
+      reason: cleanText(improvement.reason) || 'Reason not recorded',
       evidenceEventIds: stringList(improvement.evidence_event_ids ?? improvement.evidenceEventIds),
     }
   })
@@ -610,7 +678,7 @@ function normalizeEvaluation(evaluation) {
     source: cleanString(evaluation?.source) || null,
     verdict,
     verdictLabel: displayVerdict(verdict),
-    critique: cleanString(evaluation?.critique) || null,
+    critique: cleanText(evaluation?.critique) || null,
     reviewSignals,
     followUps: reviewSignals.filter((signal) => signal.severity === 'warning' || signal.severity === 'critical').map(normalizeFollowUp),
     judgeAlignment: normalizeAlignment(evaluation?.judge_alignment ?? evaluation?.judgeAlignment),

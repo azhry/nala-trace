@@ -696,6 +696,38 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .analysis-capture-gap-list { display: grid; gap: 12px; margin: 14px 0 0; padding: 0; list-style: none; }
 .analysis-capture-gap { display: grid; gap: 10px; padding: 15px; border: 1px solid var(--line); border-radius: 5px; }
 .analysis-capture-gap .analysis-evidence-context { margin: 0; }
+.analysis-highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+/* The impact readout leads; findings and capture limits share the secondary row. */
+.analysis-highlight-block { min-width: 0; padding: 14px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); }
+.analysis-highlight-block:first-child { grid-column: 1 / -1; }
+.analysis-highlight-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.analysis-highlight-heading h3 { margin: 0; color: var(--text); font-size: 17px; }
+.analysis-highlight-heading > span { color: var(--muted); font-size: 13px; line-height: 1.4; text-align: right; }
+.analysis-highlight-block > p { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.analysis-highlight-counts { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 9px; color: var(--muted); font-size: 14px; }
+.analysis-highlight-counts strong { color: var(--text); font-size: 17px; }
+.analysis-turn-impact-list, .analysis-priority-findings-list, .analysis-evidence-gap-highlights { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.analysis-turn-impact-item { display: grid; grid-template-columns: minmax(100px, max-content) minmax(0, 1fr); align-items: start; gap: 8px 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.analysis-turn-impact-item > span:last-child { color: var(--text); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.analysis-priority-finding, .analysis-evidence-gap-highlight { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); }
+.analysis-priority-finding-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; }
+.analysis-priority-finding-heading strong, .analysis-evidence-gap-highlight > strong { color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+.analysis-priority-finding p, .analysis-evidence-gap-highlight p { margin: 6px 0 0; color: var(--text); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.analysis-priority-finding > div > span, .analysis-evidence-gap-highlight > span { display: block; margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.analysis-list-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.analysis-list-pagination button { min-width: 44px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface-soft); color: var(--text); cursor: pointer; font: inherit; }
+.analysis-list-pagination button:hover { background: var(--surface); }
+.analysis-list-pagination button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+.analysis-pagination-note { margin: 0 14px 10px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.analysis-performance-turns { margin: 4px 0 0; padding: 0; list-style: none; }
+@media (max-width: 720px) {
+  .analysis-highlights { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .analysis-highlight-block:first-child { grid-column: auto; }
+  .analysis-turn-impact-item { grid-template-columns: minmax(0, 1fr); }
+  .analysis-highlight-heading > span { text-align: left; }
+  .analysis-list-pagination { align-items: stretch; flex-direction: column; }
+  .analysis-list-pagination button { width: 100%; }
+}
 .analysis-filter-controls select:disabled { cursor: not-allowed; opacity: .7; }
 .analysis-card-kicker { font-size: 14px; }
 .analysis-breakdown-row, .analysis-breakdown-value { font-size: 14px; }

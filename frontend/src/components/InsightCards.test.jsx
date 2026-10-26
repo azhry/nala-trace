@@ -133,7 +133,7 @@ describe('InsightCards', () => {
     expect(screen.getByText('No explicit occurrences saved')).toBeInTheDocument()
     expect(screen.queryByText(/ObjectID\("stop-1"\)/)).not.toBeInTheDocument()
     expect(screen.getByText('2 occurrences · Warning')).toBeInTheDocument()
-    expect(screen.getByText('Review concern')).toBeInTheDocument()
+    expect(screen.getAllByText('Review concern').length).toBeGreaterThanOrEqual(2)
   })
 
   it('shows a cited ObjectId as readable tool context, separately from saved occurrence counts', () => {
@@ -302,7 +302,7 @@ describe('InsightCards', () => {
 
     fireEvent.change(screen.getByLabelText('Decision or label'), { target: { value: 'followsInstructions:no' } })
 
-    expect(screen.getByText('Showing 1 of 2 saved records')).toBeInTheDocument()
+    expect(screen.getByText('Filters match 1 of 2 saved records')).toBeInTheDocument()
     expect(screen.getByText('The turn broke an instruction.')).toBeInTheDocument()
     expect(screen.queryByText('The turn followed instructions.')).not.toBeInTheDocument()
   })
@@ -389,13 +389,13 @@ describe('InsightCards', () => {
 
     fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'turns' } })
     fireEvent.change(screen.getByLabelText('Decision or label'), { target: { value: 'scopeAdherence:deviation' } })
-    expect(screen.getByText('Showing 1 of 1 saved records')).toBeInTheDocument()
+    expect(screen.getByText('Filters match 1 of 1 saved records')).toBeInTheDocument()
     expect(screen.getByText('Updated the evaluation interface.')).toBeInTheDocument()
     expect(screen.queryByText('Only change the evaluation page.')).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'capture_gaps' } })
     expect(screen.getByLabelText('Decision or label')).toBeDisabled()
-    expect(screen.getByText('Showing 1 of 1 saved records')).toBeInTheDocument()
+    expect(screen.getByText('Filters match 1 of 1 saved records')).toBeInTheDocument()
     expect(document.querySelector('.analysis-capture-gap')).toHaveTextContent('A tool completion was not captured.')
     expect(screen.queryByText('Updated the evaluation interface.')).not.toBeInTheDocument()
   })
@@ -509,6 +509,90 @@ describe('InsightCards', () => {
     expect(screen.getByText('Judge alignment')).toBeInTheDocument()
     expect(screen.getByText('Comparison unavailable: a human label and evaluator label were not both recorded.')).toBeInTheDocument()
     expect(screen.queryByText('No analysis recorded')).not.toBeInTheDocument()
+  })
+
+  it('bounds large saved evidence and action lists without changing their totals', async () => {
+    const user = userEvent.setup()
+    const userTurns = Array.from({ length: 10 }, (_value, index) => ({
+      event_id: `user-event-${index + 1}`,
+      signal_type: 'request',
+      summary: `Captured user turn ${index + 1}`,
+      rationale: 'Saved as a plain UI fixture.',
+    }))
+    const improvements = Array.from({ length: 10 }, (_value, index) => ({
+      target_type: 'agent_instructions',
+      change: `Update agent guidance ${index + 1}`,
+      reason: 'Keep the saved action explicit.',
+      evidence_event_ids: Array.from({ length: 10 }, (_event, eventIndex) => `action-event-${index + 1}-${eventIndex + 1}`),
+    }))
+
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: { schema_version: '2', user_turns: userTurns },
+      evaluation: { ...evaluation, schema_version: '2', evaluation_ledger: { improvements } },
+    }} />)
+
+    expect(screen.getByText('10 valid agent actions')).toBeInTheDocument()
+    expect(screen.getByText('Update agent guidance 1')).toBeInTheDocument()
+    expect(screen.queryByText('Update agent guidance 9')).not.toBeInTheDocument()
+    expect(screen.getByText('Showing 8 of 10 agent improvement actions')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Load more agent improvement actions' }))
+    expect(screen.getByText('Update agent guidance 9')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show fewer agent improvement actions' })).toBeInTheDocument()
+
+    const firstAction = document.querySelector('.analysis-actions-list > li')
+    expect(firstAction).not.toBeNull()
+    expect(firstAction.querySelector('.analysis-event-reference')).toHaveTextContent('action-event-1-1')
+    expect(firstAction.querySelector('.analysis-list-pagination')).toHaveTextContent('Showing 8 of 10 action evidence references')
+    await user.click(firstAction.querySelector('.analysis-list-pagination button'))
+    expect(firstAction).toHaveTextContent('action-event-1-10')
+
+    const userTurnSummary = Array.from(document.querySelectorAll('.analysis-category-summary'))
+      .find((summary) => summary.textContent.includes('User turns'))
+    expect(userTurnSummary).toBeDefined()
+    await user.click(userTurnSummary)
+    expect(screen.getByText('Captured user turn 8')).toBeInTheDocument()
+    expect(screen.queryByText('Captured user turn 9')).not.toBeInTheDocument()
+    expect(screen.getByText('Showing 8 of 10 evidence records')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Load more evidence records' }))
+    expect(screen.getByText('Captured user turn 9')).toBeInTheDocument()
+    expect(screen.getByText('Filters match 10 of 10 saved records')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'user_turns' } })
+    expect(screen.getByText('Showing 8 of 10 evidence records')).toBeInTheDocument()
+  })
+
+  it('bounds saved signal occurrences while retaining the evaluator total', async () => {
+    const user = userEvent.setup()
+    const occurrences = Array.from({ length: 10 }, (_value, index) => ({
+      event_id: `signal-event-${index + 1}`,
+      event_kind: 'PreToolUse',
+      summary: `Occurrence summary ${index + 1}`,
+      impact: 'The matching completion is not recorded.',
+    }))
+
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: null,
+      evaluation: {
+        ...evaluation,
+        schema_version: '2',
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 11,
+          severity: 'warning',
+          detail: 'A completion event is missing.',
+          occurrences,
+        }],
+      },
+    }} />)
+
+    expect(screen.getByText('10 located of 11 recorded')).toBeInTheDocument()
+    expect(screen.getAllByText('Occurrence summary 1').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('Occurrence summary 9')).not.toBeInTheDocument()
+    expect(screen.getByText('Showing 8 of 10 signal occurrences')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Load more signal occurrences' }))
+    expect(screen.getAllByText('Occurrence summary 9').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Showing 10 of 10 signal occurrences')).toBeInTheDocument()
+    expect(screen.getByText(/1 more are included in the count/)).toBeInTheDocument()
   })
 
   it('preserves the legacy fixture-shaped insights when no API trace is supplied', () => {

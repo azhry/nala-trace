@@ -1,4 +1,5 @@
 import InsightCards from './InsightCards'
+import { repairCapturedText } from '../sessionAnalysis'
 
 function sessionIdFor(session) {
   return session.id || session.session_id || ''
@@ -6,7 +7,9 @@ function sessionIdFor(session) {
 
 export default function EvaluationPage({ session, analysis, analysisState = 'ready', analysisError, onAnalysisRetry, onBack }) {
   const sessionId = sessionIdFor(session)
-  const sessionTitle = session.title || sessionId || 'Untitled session'
+  const sessionTitle = typeof session.title === 'string'
+    ? repairCapturedText(session.title).trim() || sessionId || 'Untitled session'
+    : sessionId || 'Untitled session'
 
   return <section className="page-section evaluation-page" aria-labelledby="evaluation-page-title">
     <button type="button" className="back-button" onClick={() => onBack()}>← <span>Session detail</span></button>

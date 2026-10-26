@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeSessionAnalysis } from './sessionAnalysis'
+import { normalizeSessionAnalysis, repairCapturedText } from './sessionAnalysis'
 
 const trace = {
   conversation: [
@@ -67,6 +67,62 @@ const analysis = {
 }
 
 describe('session analysis view model', () => {
+  it('repairs recognizable text mojibake while preserving valid Unicode and identifiers', () => {
+    const validUnicode = 'café — 東京 — 🙂'
+    expect(repairCapturedText(validUnicode)).toBe(validUnicode)
+    expect(repairCapturedText('café, FranÃ§ais, itâ€™s ä¸­ and ðŸ˜Š')).toBe('café, Français, it’s 中 and 😊')
+
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '2',
+        user_turns: [{ event_id: 'event-Ã©-1', summary: 'café — FranÃ§ais, itâ€™s 東京 🙂', rationale: 'The captured text is readable.' }],
+        capture_gaps: [{ category: 'tool calls', event_ids: ['gap-Ã©-1'], summary: 'A tool result was not capturÃ©.', impact: 'Its result canâ€™t be verified.' }],
+      },
+      evaluation: {
+        schema_version: '2',
+        verdict: 'fail',
+        critique: 'The evaluator noted a FranÃ§ais response.',
+        review_signals: [{
+          name: 'signal_Ã©',
+          severity: 'warning',
+          count: 1,
+          detail: 'The result was incompletÃ©.',
+          occurrences: [{ event_id: 'occurrence-Ã©-1', summary: 'A tool result was not capturÃ©.', impact: 'It canâ€™t be verified.' }],
+        }],
+        evaluation_ledger: {
+          improvements: [{
+            target_type: 'agent_instructions',
+            change: 'Add a tool-completion check.',
+            reason: 'The result was incompletÃ©.',
+            evidence_event_ids: ['action-Ã©-1'],
+          }],
+        },
+      },
+    })
+    const userTurn = model.annotation.categories.find((category) => category.key === 'user_turns').records[0]
+
+    expect(userTurn).toMatchObject({
+      eventId: 'event-Ã©-1',
+      summary: 'café — Français, it’s 東京 🙂',
+    })
+    expect(model.annotation.captureGaps[0]).toMatchObject({
+      eventIds: ['gap-Ã©-1'],
+      summary: 'A tool result was not capturé.',
+      impact: 'Its result can’t be verified.',
+    })
+    expect(model.evaluation.critique).toBe('The evaluator noted a Français response.')
+    expect(model.evaluation.reviewSignals[0]).toMatchObject({
+      signalKey: 'signal_Ã©',
+      detail: 'The result was incompleté.',
+      occurrences: [{ eventId: 'occurrence-Ã©-1', summary: 'A tool result was not capturé.', impact: 'It can’t be verified.' }],
+    })
+    expect(model.evaluation.evaluationLedger.improvements[0]).toMatchObject({
+      change: 'Add a tool-completion check.',
+      reason: 'The result was incompleté.',
+      evidenceEventIds: ['action-Ã©-1'],
+    })
+  })
+
   it('normalizes the API contract and calculates evidence coverage without inventing verdicts', () => {
     const model = normalizeSessionAnalysis(analysis, trace)
 

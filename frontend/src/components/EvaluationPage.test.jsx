@@ -31,6 +31,12 @@ const session = {
 }
 
 describe('EvaluationPage', () => {
+  it('repairs a mojibaked session title without changing the session identifier', () => {
+    render(<EvaluationPage session={{ ...session, id: 'session-Ã©', title: 'FranÃ§ais — 東京' }} analysis={session.analysis} onBack={vi.fn()} />)
+
+    expect(screen.getByText('Français — 東京 · session-Ã©')).toBeInTheDocument()
+  })
+
   it('shows the full review without the detail-page guide', () => {
     const onBack = vi.fn()
     render(<EvaluationPage session={session} analysis={session.analysis} onBack={onBack} />)
@@ -57,6 +63,50 @@ describe('EvaluationPage', () => {
     expect(evidenceDetails).toHaveAttribute('open')
     fireEvent.click(screen.getByText('Evidence details'))
     expect(evidenceDetails).not.toHaveAttribute('open')
+  })
+
+  it('places result impact, priority findings, agent changes, and evidence gaps before the audit trail', () => {
+    const analysis = {
+      annotation: {
+        schema_version: '2',
+        turns: [
+          { event_id: 'turn-worsened', performance: 'worsened', response_summary: 'The missing tool result worsened the result.' },
+          { event_id: 'turn-improved', performance: 'improved', response_summary: 'The later verified action improved the result.' },
+        ],
+        capture_gaps: [{ category: 'Tool calls', summary: 'Tool completion was not captured.', impact: 'The result cannot be verified.' }],
+      },
+      evaluation: {
+        schema_version: '2',
+        verdict: 'fail',
+        critique: 'One evidence gap limits this evaluation.',
+        review_signals: [{ name: 'unmatched_tool_hook_pairs', severity: 'warning', count: 1, detail: 'A completion event was missing.' }],
+        evaluation_ledger: {
+          improvements: [{
+            target_type: 'agent_instructions',
+            change: 'Require tool completion verification.',
+            reason: 'The prior run ended before the result was checked.',
+          }],
+        },
+      },
+    }
+    render(<EvaluationPage session={session} analysis={analysis} onBack={vi.fn()} />)
+
+    const orderedContent = [
+      screen.getByRole('heading', { name: 'Review at a glance' }),
+      screen.getByRole('heading', { name: 'Turn impact' }),
+      screen.getByRole('heading', { name: 'Priority findings' }),
+      screen.getByRole('heading', { name: 'What to improve' }),
+      screen.getByRole('heading', { name: 'Evidence gaps' }),
+      screen.getByText('Evidence details').closest('summary'),
+    ]
+    for (let index = 0; index < orderedContent.length - 1; index += 1) {
+      expect(orderedContent[index].compareDocumentPosition(orderedContent[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    }
+
+    expect(screen.getAllByText('The missing tool result worsened the result.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('The later verified action improved the result.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Require tool completion verification.')).toBeInTheDocument()
+    expect(screen.getAllByText('Tool completion was not captured.').length).toBeGreaterThanOrEqual(1)
   })
 
   it('distinguishes loading, missing, failed, and empty analysis states', () => {

@@ -1,8 +1,10 @@
-import { useState } from 'react'
-import { normalizeSessionAnalysis } from '../sessionAnalysis'
+import { useId, useState } from 'react'
+import { normalizeSessionAnalysis, repairCapturedText } from '../sessionAnalysis'
 
 const TONE_CLASSES = ['green', 'purple', 'amber']
 const ALL_FILTER = 'all'
+const INITIAL_LIST_SIZE = 8
+const LOAD_MORE_SIZE = 8
 const EVIDENCE_TYPE_OPTIONS = [
   { value: ALL_FILTER, label: 'All evidence' },
   { value: 'user_turns', label: 'User turns' },
@@ -46,6 +48,29 @@ function LegacyInsightCards({ insights = {} }) {
 
 function StatusPill({ children, tone = 'unknown' }) {
   return <span className={`analysis-status-pill ${tone}`}>{children}</span>
+}
+
+function BoundedList({ items, itemLabel, resetKey = '', ordered = false, className, renderItem }) {
+  const listId = useId()
+  const [page, setPage] = useState({ key: resetKey, count: INITIAL_LIST_SIZE })
+  const visibleCount = Math.min(items.length, page.key === resetKey ? page.count : INITIAL_LIST_SIZE)
+  const visibleItems = items.slice(0, visibleCount)
+  const List = ordered ? 'ol' : 'ul'
+  const loadMore = () => setPage((current) => ({
+    key: resetKey,
+    count: Math.min(items.length, (current.key === resetKey ? current.count : INITIAL_LIST_SIZE) + LOAD_MORE_SIZE),
+  }))
+  const showFewer = () => setPage({ key: resetKey, count: INITIAL_LIST_SIZE })
+
+  return <>
+    <List id={listId} className={className}>{visibleItems.map(renderItem)}</List>
+    {items.length > INITIAL_LIST_SIZE && <div className="analysis-list-pagination">
+      <span role="status" aria-live="polite">Showing {visibleCount.toLocaleString()} of {items.length.toLocaleString()} {itemLabel}</span>
+      {visibleCount < items.length
+        ? <button type="button" aria-controls={listId} onClick={loadMore}>Load more {itemLabel}</button>
+        : <button type="button" aria-controls={listId} onClick={showFewer}>Show fewer {itemLabel}</button>}
+    </div>}
+  </>
 }
 
 function annotationStatus(category) {
@@ -160,7 +185,7 @@ function traceValue(value) {
 }
 
 function tracePreview(value) {
-  const text = traceValue(value)?.replace(/\s+/g, ' ').trim()
+  const text = repairCapturedText(traceValue(value)?.replace(/\s+/g, ' ').trim() || '')
   if (!text) return null
   return text.length > 1000 ? `${text.slice(0, 1000).trimEnd()}…` : text
 }
@@ -335,25 +360,54 @@ function EventEvidenceRow({ eventId, eventContextLookup, referenceLabel = 'Relat
   return <li className="analysis-related-event"><EventEvidence eventId={eventId} eventContextLookup={eventContextLookup} referenceLabel={referenceLabel} referenceType={referenceType} /></li>
 }
 
-function RelatedEvents({ eventIds, eventContextLookup }) {
-  return <div className="analysis-evidence-context"><span>Related captured events</span><ul className="analysis-related-events">{eventIds.map((eventId, index) => <EventEvidenceRow key={`${eventId}-${index}`} eventId={eventId} eventContextLookup={eventContextLookup} />)}</ul></div>
+function RelatedEvents({ eventIds, eventContextLookup, label = 'Related captured events' }) {
+  return <div className="analysis-evidence-context">
+    <span>{label}</span>
+    <BoundedList items={eventIds} itemLabel="related event references" resetKey={eventIds.length} className="analysis-related-events" renderItem={(eventId, index) => <EventEvidenceRow key={eventId + '-' + index} eventId={eventId} eventContextLookup={eventContextLookup} />} />
+  </div>
 }
 
 function Breakdown({ breakdowns }) {
   return <div className="analysis-breakdown">{breakdowns.map((breakdown) => <div className="analysis-breakdown-row" key={breakdown.label}><span>{breakdown.label}</span><div>{breakdown.values.map(({ value, count }) => <span className="analysis-breakdown-value" key={value}><strong>{count}</strong> {evidenceValue(value)}</span>)}</div></div>)}</div>
 }
 
-function AnnotationCategory({ category, visibleRecords, visibleBreakdowns, filtersActive, eventContextLookup }) {
+function AnnotationCategory({ category, visibleRecords, visibleBreakdowns, filtersActive, eventContextLookup, filterKey }) {
   const unlabeledCount = category.capturedCount == null ? null : Math.max(category.capturedCount - category.annotatedCount, 0)
   const coverageDetail = category.capturedCount == null
     ? category.coverageDetail
     : `${category.coverageDetail}${unlabeledCount ? ` · ${unlabeledCount.toLocaleString()} not labeled` : ''}`
   const stateLabel = !category.recorded ? 'Not included in this analysis' : category.annotatedCount ? 'Evidence recorded' : 'No labels recorded'
-  return <details className="analysis-category-card"><summary className="analysis-category-summary"><div className="analysis-category-header"><div><span className="analysis-card-kicker">{category.label}</span><strong>{category.coverageValue}</strong><small>{category.recorded ? coverageDetail : category.unavailableDetail || coverageDetail}</small>{category.recorded && <small className="analysis-category-unclear">{category.unclearCount ? `${category.unclearCount.toLocaleString()} ${category.unclearCount === 1 ? 'record has' : 'records have'} one or more unclear decisions.` : 'No records have an unclear decision.'}</small>}</div><div className="analysis-category-summary-side"><StatusPill tone={annotationStatus(category)}>{stateLabel}</StatusPill><span className="analysis-disclosure-hint">Open records</span></div></div></summary><div className="analysis-category-content">{category.recorded && <Breakdown breakdowns={visibleBreakdowns} />}{category.recorded && <div className="analysis-evidence-heading"><span>Saved evidence in this category</span><strong>{filtersActive ? `${visibleRecords.length.toLocaleString()} matching / ${category.annotatedCount.toLocaleString()} labeled records` : `${category.annotatedCount.toLocaleString()} labeled records`}</strong></div>}{visibleRecords.length ? <ul className="analysis-evidence-list">{visibleRecords.map((record, index) => <EvidenceRecord category={category} record={record} eventContextLookup={eventContextLookup} key={`${record.eventId}-${index}`} />)}</ul> : <p className="analysis-empty-copy">{!category.recorded ? category.unavailableDetail || 'This category was not stored in the saved analysis.' : filtersActive ? 'No records match the current filters.' : `No ${category.label.toLowerCase()} labels were stored.`}</p>}</div></details>
+
+  return <details className="analysis-category-card">
+    <summary className="analysis-category-summary">
+      <div className="analysis-category-header">
+        <div>
+          <span className="analysis-card-kicker">{category.label}</span>
+          <strong>{category.coverageValue}</strong>
+          <small>{category.recorded ? coverageDetail : category.unavailableDetail || coverageDetail}</small>
+          {category.recorded && <small className="analysis-category-unclear">{category.unclearCount ? `${category.unclearCount.toLocaleString()} ${category.unclearCount === 1 ? 'record has' : 'records have'} one or more unclear decisions.` : 'No records have an unclear decision.'}</small>}
+        </div>
+        <div className="analysis-category-summary-side">
+          <StatusPill tone={annotationStatus(category)}>{stateLabel}</StatusPill>
+          <span className="analysis-disclosure-hint">Open records</span>
+        </div>
+      </div>
+    </summary>
+    <div className="analysis-category-content">
+      {category.recorded && <Breakdown breakdowns={visibleBreakdowns} />}
+      {category.recorded && <div className="analysis-evidence-heading">
+        <span>Saved evidence in this category</span>
+        <strong>{filtersActive ? `${visibleRecords.length.toLocaleString()} matching / ${category.annotatedCount.toLocaleString()} labeled records` : `${category.annotatedCount.toLocaleString()} labeled records`}</strong>
+      </div>}
+      {visibleRecords.length
+        ? <BoundedList items={visibleRecords} itemLabel="evidence records" resetKey={filterKey} className="analysis-evidence-list" renderItem={(record, index) => <EvidenceRecord category={category} record={record} eventContextLookup={eventContextLookup} key={record.eventId + '-' + index} />} />
+        : <p className="analysis-empty-copy">{!category.recorded ? category.unavailableDetail || 'This category was not stored in the saved analysis.' : filtersActive ? 'No records match the current filters.' : `No ${category.label.toLowerCase()} labels were stored.`}</p>}
+    </div>
+  </details>
 }
 
 function PerformanceSummary({ annotation }) {
-  return <div className="analysis-performance-summary"><div className="analysis-subsection-heading"><span>Effect on the result</span><strong>{annotation.performanceLabeledCount ? `${annotation.performanceLabeledCount} agent turns labeled` : 'Not recorded'}</strong></div><p className="analysis-performance-copy">“No outcome change recorded” means the evaluator did not see this turn change the result. It does not mean the response was good or bad.</p>{annotation.performanceLabeledCount ? <div className="analysis-performance-values">{annotation.performanceSummary.map((item) => <div className={`analysis-performance-value ${item.value}`} key={item.value}><div><strong>{evidenceValue(item.value)}</strong><span>{item.count} {item.count === 1 ? 'agent turn' : 'agent turns'}</span></div>{item.count ? <div className="analysis-performance-turns">{item.turns.map((turn, index) => <span className="analysis-performance-turn" key={`${turn.id}-${index}`} title={turn.id}><strong>{turnRoleLabel(turn.role)}</strong><span>{turn.preview || 'Response summary not included in this analysis version.'}</span></span>)}</div> : <em>No turns have this label</em>}</div>)}</div> : <p className="analysis-empty-copy">This analysis did not store a turn-effect label.</p>}</div>
+  return <div className="analysis-performance-summary"><div className="analysis-subsection-heading"><span>Effect on the result</span><strong>{annotation.performanceLabeledCount ? `${annotation.performanceLabeledCount} agent turns labeled` : 'Not recorded'}</strong></div><p className="analysis-performance-copy">“No outcome change recorded” means the evaluator did not see this turn change the result. It does not mean the response was good or bad.</p>{annotation.performanceLabeledCount ? <div className="analysis-performance-values">{annotation.performanceSummary.map((item) => <div className={`analysis-performance-value ${item.value}`} key={item.value}><div><strong>{evidenceValue(item.value)}</strong><span>{item.count} {item.count === 1 ? 'agent turn' : 'agent turns'}</span></div>{item.count ? <BoundedList items={item.turns} itemLabel={evidenceValue(item.value).toLowerCase() + ' agent turns'} resetKey={'performance-' + item.value} className="analysis-performance-turns" renderItem={(turn, index) => <li className="analysis-performance-turn" key={turn.id + '-' + index} title={turn.id}><strong>{turnRoleLabel(turn.role)}</strong><span>{turn.preview || 'Response summary not included in this analysis version.'}</span></li>} /> : <em>No turns have this label</em>}</div>)}</div> : <p className="analysis-empty-copy">This analysis did not store a turn-effect label.</p>}</div>
 }
 
 function categorySupportsDecision(category, decisionFilter) {
@@ -382,7 +436,7 @@ function filteredCategory(category, evidenceType, decisionFilter) {
 
 function AnnotationFilters({ evidenceType, decisionFilter, onEvidenceTypeChange, onDecisionChange, onClear, visibleCount, eligibleCount }) {
   const filtersActive = evidenceType !== ALL_FILTER || decisionFilter !== ALL_FILTER
-  return <div className="analysis-filter-panel"><div className="analysis-filter-controls"><label>Evidence type<select aria-label="Evidence type" value={evidenceType} onChange={(event) => onEvidenceTypeChange(event.target.value)}>{EVIDENCE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label>Decision or label<select aria-label="Decision or label" value={decisionFilter} disabled={evidenceType === 'capture_gaps'} onChange={(event) => onDecisionChange(event.target.value)}>{DECISION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>{filtersActive && <button type="button" className="analysis-filter-clear" onClick={onClear}>Clear filters</button>}</div><p className="analysis-filter-summary">Showing {visibleCount.toLocaleString()} of {eligibleCount.toLocaleString()} saved records</p></div>
+  return <div className="analysis-filter-panel"><div className="analysis-filter-controls"><label>Evidence type<select aria-label="Evidence type" value={evidenceType} onChange={(event) => onEvidenceTypeChange(event.target.value)}>{EVIDENCE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label>Decision or label<select aria-label="Decision or label" value={decisionFilter} disabled={evidenceType === 'capture_gaps'} onChange={(event) => onDecisionChange(event.target.value)}>{DECISION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>{filtersActive && <button type="button" className="analysis-filter-clear" onClick={onClear}>Clear filters</button>}</div><p className="analysis-filter-summary" aria-live="polite">Filters match {visibleCount.toLocaleString()} of {eligibleCount.toLocaleString()} saved records</p></div>
 }
 
 function CaptureGaps({ annotation, visible, eventContextLookup }) {
@@ -392,7 +446,19 @@ function CaptureGaps({ annotation, visible, eventContextLookup }) {
     ? annotation.schemaVersion === '1' ? 'Capture gaps are not represented by schema v1.' : 'Capture-gap records were not included in this analysis.'
     : gaps.length ? `${gaps.length.toLocaleString()} evidence limitations recorded.` : 'No capture gaps were recorded.'
 
-  return <section className="analysis-capture-gaps" aria-labelledby="capture-gaps-title"><div className="analysis-subsection-heading"><div><span className="section-label">Evidence limitations</span><h4 id="capture-gaps-title">Capture gaps</h4></div><strong>{annotation.captureGapsRecorded ? `${gaps.length.toLocaleString()} recorded` : 'Not included'}</strong></div><p className="analysis-empty-copy">{availability}</p>{gaps.length > 0 && <ol className="analysis-capture-gap-list">{gaps.map((gap, index) => <li className="analysis-capture-gap" key={`${gap.category}-${index}`}><div className="analysis-evidence-record-heading"><strong>{gap.category}</strong></div><div className="analysis-evidence-context"><span>Limitation</span><p>{gap.summary || 'No limitation summary was saved.'}</p></div><div className="analysis-evidence-context"><span>Impact</span><p>{gap.impact || 'Impact was not recorded.'}</p></div>{gap.eventIds.length > 0 && <div className="analysis-evidence-context"><span>Affected evidence</span><ul className="analysis-related-events">{gap.eventIds.map((eventId) => <EventEvidenceRow key={eventId} eventId={eventId} eventContextLookup={eventContextLookup} referenceLabel="Affected event ID" />)}</ul></div>}</li>)}</ol>}</section>
+  return <section className="analysis-capture-gaps" aria-labelledby="capture-gaps-title">
+    <div className="analysis-subsection-heading">
+      <div><span className="section-label">Evidence limitations</span><h4 id="capture-gaps-title">Capture gaps</h4></div>
+      <strong>{annotation.captureGapsRecorded ? `${gaps.length.toLocaleString()} recorded` : 'Not included'}</strong>
+    </div>
+    <p className="analysis-empty-copy">{availability}</p>
+    {gaps.length > 0 && <BoundedList items={gaps} itemLabel="capture gaps" ordered className="analysis-capture-gap-list" resetKey="capture-gaps" renderItem={(gap, index) => <li className="analysis-capture-gap" key={gap.category + index}>
+      <div className="analysis-evidence-record-heading"><strong>{gap.category}</strong></div>
+      <div className="analysis-evidence-context"><span>Limitation</span><p>{gap.summary || 'No limitation summary was saved.'}</p></div>
+      <div className="analysis-evidence-context"><span>Impact</span><p>{gap.impact || 'Impact was not recorded.'}</p></div>
+      {gap.eventIds.length > 0 && <RelatedEvents eventIds={gap.eventIds} eventContextLookup={eventContextLookup} label="Affected evidence" />}
+    </li>} />}
+  </section>
 }
 
 function AnnotationPanel({ annotation, eventContextLookup }) {
@@ -400,7 +466,13 @@ function AnnotationPanel({ annotation, eventContextLookup }) {
   const [decisionFilter, setDecisionFilter] = useState(ALL_FILTER)
 
   if (!annotation.recorded) {
-    return <section className="analysis-block annotation-block" aria-labelledby="annotation-title"><div className="analysis-block-heading"><div><span className="section-label">Annotation</span><h3 id="annotation-title">Reviewed evidence</h3><p>This analysis response contains no saved annotation.</p></div><StatusPill tone="unknown">Not recorded</StatusPill></div><div className="analysis-inline-empty"><strong>Annotation not recorded</strong><span>No user-turn, agent-turn, tool, skill, or file labels were saved for this session.</span></div></section>
+    return <section className="analysis-block annotation-block" aria-labelledby="annotation-title">
+      <div className="analysis-block-heading">
+        <div><span className="section-label">Annotation</span><h3 id="annotation-title">Reviewed evidence</h3><p>This analysis response contains no saved annotation.</p></div>
+        <StatusPill tone="unknown">Not recorded</StatusPill>
+      </div>
+      <div className="analysis-inline-empty"><strong>Annotation not recorded</strong><span>No user-turn, agent-turn, tool, skill, or file labels were saved for this session.</span></div>
+    </section>
   }
 
   const filteredCategories = annotation.categories
@@ -414,8 +486,24 @@ function AnnotationPanel({ annotation, eventContextLookup }) {
   const visibleCount = filteredCategories.reduce((total, item) => total + item.visibleRecords.length, 0)
     + (showCaptureGaps ? annotation.captureGaps.length : 0)
   const filtersActive = evidenceType !== ALL_FILTER || decisionFilter !== ALL_FILTER
+  const filterKey = evidenceType + ':' + decisionFilter
 
-  return <section className="analysis-block annotation-block" aria-labelledby="annotation-title"><div className="analysis-block-heading"><div><span className="section-label">Annotation</span><h3 id="annotation-title">Reviewed evidence</h3><p>Counts describe saved labels. V2 records include every captured item per category. Unclear counts are records with at least one unclear decision.</p></div><StatusPill tone="positive">Saved</StatusPill></div><AnnotationFilters evidenceType={evidenceType} decisionFilter={decisionFilter} onEvidenceTypeChange={(value) => { setEvidenceType(value); if (value === 'capture_gaps') setDecisionFilter(ALL_FILTER) }} onDecisionChange={setDecisionFilter} onClear={() => { setEvidenceType(ALL_FILTER); setDecisionFilter(ALL_FILTER) }} visibleCount={visibleCount} eligibleCount={eligibleCount} /><PerformanceSummary annotation={annotation} /><CaptureGaps annotation={annotation} visible={showCaptureGaps} eventContextLookup={eventContextLookup} /><div className="analysis-category-list">{filteredCategories.map(({ category, visibleRecords, visibleBreakdowns }) => <AnnotationCategory key={category.key} category={category} visibleRecords={visibleRecords} visibleBreakdowns={visibleBreakdowns} filtersActive={filtersActive} eventContextLookup={eventContextLookup} />)}</div></section>
+  return <section className="analysis-block annotation-block" aria-labelledby="annotation-title">
+    <div className="analysis-block-heading">
+      <div><span className="section-label">Annotation</span><h3 id="annotation-title">Reviewed evidence</h3><p>Counts describe saved labels. V2 records include every captured item per category. Unclear counts are records with at least one unclear decision.</p></div>
+      <StatusPill tone="positive">Saved</StatusPill>
+    </div>
+    <AnnotationFilters evidenceType={evidenceType} decisionFilter={decisionFilter}
+      onEvidenceTypeChange={(value) => { setEvidenceType(value); if (value === 'capture_gaps') setDecisionFilter(ALL_FILTER) }}
+      onDecisionChange={setDecisionFilter}
+      onClear={() => { setEvidenceType(ALL_FILTER); setDecisionFilter(ALL_FILTER) }}
+      visibleCount={visibleCount} eligibleCount={eligibleCount} />
+    <PerformanceSummary annotation={annotation} />
+    <CaptureGaps annotation={annotation} visible={showCaptureGaps} eventContextLookup={eventContextLookup} />
+    <div className="analysis-category-list">{filteredCategories.map(({ category, visibleRecords, visibleBreakdowns }) => <AnnotationCategory
+      key={category.key} category={category} visibleRecords={visibleRecords} visibleBreakdowns={visibleBreakdowns}
+      filtersActive={filtersActive} eventContextLookup={eventContextLookup} filterKey={filterKey} />)}</div>
+  </section>
 }
 
 function SignalOccurrence({ occurrence, index, signalName, eventContextLookup }) {
@@ -446,6 +534,35 @@ function signalOccurrenceSummary(signal) {
   return { headline: `${available.toLocaleString()} located of ${total.toLocaleString()} recorded`, detail: missing ? `${missing.toLocaleString()} more are included in the count but have no saved occurrence detail. References cited in the description do not add to the located count.` : 'Each listed row comes from an explicit occurrence in the saved evaluation. References cited in the description are separate.' }
 }
 
+function SignalCard({ signal, index, eventContextLookup, filterKey }) {
+  const summary = signalOccurrenceSummary(signal)
+  const description = signalDescriptionReferences(signal.detail)
+  const severityLabel = signal.severity.charAt(0).toUpperCase() + signal.severity.slice(1)
+
+  return <li className={'analysis-signal-row ' + signal.severity} key={signal.signalKey || index}>
+    <div className="analysis-signal-body">
+      <strong>{signal.name}</strong>
+      <span>{description.readableDescription}</span>
+      <em>{signal.severityMeaning}</em>
+      {description.eventIds.length > 0 && <div className="analysis-signal-description-references">
+        <span>References cited in finding description</span>
+        <p>These prose references are separate from occurrence records and do not change the count.</p>
+        <BoundedList items={description.eventIds} itemLabel="signal references" resetKey={filterKey} className="analysis-related-events" renderItem={(eventId, referenceIndex) => <EventEvidenceRow key={eventId + '-' + referenceIndex} eventId={eventId} eventContextLookup={eventContextLookup} referenceLabel="Event ID cited in prose" />} />
+      </div>}
+      <details className="analysis-signal-details" open>
+        <summary><strong>Occurrence details</strong><span>{summary.headline}</span></summary>
+        <div className="analysis-signal-occurrences">
+          {summary.detail && <p className="analysis-signal-occurrences-note">{summary.detail}</p>}
+          {signal.occurrences.length
+            ? <BoundedList items={signal.occurrences} itemLabel="signal occurrences" ordered className="analysis-signal-occurrence-list" resetKey={filterKey + ':' + signal.signalKey} renderItem={(occurrence, occurrenceIndex) => <SignalOccurrence key={occurrence.eventId + '-' + occurrenceIndex} occurrence={occurrence} index={occurrenceIndex} signalName={signal.name} eventContextLookup={eventContextLookup} />} />
+            : <p className="analysis-empty-copy">No explicit occurrence rows were saved. IDs cited in the description are references only, not located occurrences.</p>}
+        </div>
+      </details>
+    </div>
+    <StatusPill tone={signal.severity}>{signal.count == null ? 'Count not recorded' : signal.count.toLocaleString() + ' ' + (signal.count === 1 ? 'occurrence' : 'occurrences') + ' · ' + severityLabel}</StatusPill>
+  </li>
+}
+
 function ReviewSignals({ signals, eventContextLookup }) {
   const [severityFilter, setSeverityFilter] = useState(ALL_FILTER)
   const [query, setQuery] = useState('')
@@ -458,9 +575,24 @@ function ReviewSignals({ signals, eventContextLookup }) {
       .some((value) => value.toLowerCase().includes(normalizedQuery))
   })
   const filtersActive = severityFilter !== ALL_FILTER || Boolean(normalizedQuery)
+  const filterKey = severityFilter + ':' + normalizedQuery
   const clearFilters = () => { setSeverityFilter(ALL_FILTER); setQuery('') }
 
-  return <div className="analysis-subsection"><div className="analysis-subsection-heading"><span>Review signals</span><strong>{signals.length ? `${signals.length} recorded findings` : 'Not recorded'}</strong></div>{signals.length ? <><p className="analysis-signal-legend">Warning and critical labels need review. Info labels provide context. Each listed occurrence is an explicit saved event, not an example parsed from the description.</p><div className="analysis-signal-filters"><label>Severity<select aria-label="Signal severity" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}><option value={ALL_FILTER}>All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option><option value="unknown">Unknown</option></select></label><label>Find a signal or event<input aria-label="Find a signal or event" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, event ID, or evidence text" /></label>{filtersActive && <button type="button" className="analysis-filter-clear" onClick={clearFilters}>Clear filters</button>}</div><p className="analysis-filter-summary" aria-live="polite">Showing {filteredSignals.length} of {signals.length} findings</p>{filteredSignals.length ? <ul className="analysis-signal-list">{filteredSignals.map((signal, index) => { const summary = signalOccurrenceSummary(signal); const description = signalDescriptionReferences(signal.detail); const severityLabel = signal.severity.charAt(0).toUpperCase() + signal.severity.slice(1); return <li className={`analysis-signal-row ${signal.severity}`} key={`${signal.name}-${index}`}><div className="analysis-signal-body"><strong>{signal.name}</strong><span>{description.readableDescription}</span><em>{signal.severityMeaning}</em>{description.eventIds.length > 0 && <div className="analysis-signal-description-references"><span>References cited in finding description</span><p>These prose references are separate from occurrence records and do not change the count.</p><ul className="analysis-related-events">{description.eventIds.map((eventId, referenceIndex) => <EventEvidenceRow key={`${eventId}-${referenceIndex}`} eventId={eventId} eventContextLookup={eventContextLookup} referenceLabel="Event ID cited in prose" />)}</ul></div>}<details className="analysis-signal-details" open><summary><strong>Occurrence details</strong><span>{summary.headline}</span></summary><div className="analysis-signal-occurrences">{summary.detail && <p className="analysis-signal-occurrences-note">{summary.detail}</p>}{signal.occurrences.length ? <ol>{signal.occurrences.map((occurrence, occurrenceIndex) => <SignalOccurrence key={`${occurrence.eventId}-${occurrenceIndex}`} occurrence={occurrence} index={occurrenceIndex} signalName={signal.name} eventContextLookup={eventContextLookup} />)}</ol> : <p className="analysis-empty-copy">No explicit occurrence rows were saved. IDs cited in the description are references only, not located occurrences.</p>}</div></details></div><StatusPill tone={signal.severity}>{signal.count == null ? 'Count not recorded' : `${signal.count.toLocaleString()} ${signal.count === 1 ? 'occurrence' : 'occurrences'} · ${severityLabel}`}</StatusPill></li> })}</ul> : <p className="analysis-empty-copy">No findings match these filters.</p>}</> : <p className="analysis-empty-copy">No review signals were saved in this evaluation.</p>}</div>
+  return <div id="analysis-detailed-signals" className="analysis-subsection">
+    <div className="analysis-subsection-heading"><span>Review signals</span><strong>{signals.length ? signals.length.toLocaleString() + ' recorded findings' : 'Not recorded'}</strong></div>
+    {signals.length ? <>
+      <p className="analysis-signal-legend">Warning and critical labels need review. Info labels provide context. Each listed occurrence is an explicit saved event, not an example parsed from the description.</p>
+      <div className="analysis-signal-filters">
+        <label>Severity<select aria-label="Signal severity" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}><option value={ALL_FILTER}>All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option><option value="unknown">Unknown</option></select></label>
+        <label>Find a signal or event<input aria-label="Find a signal or event" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, event ID, or evidence text" /></label>
+        {filtersActive && <button type="button" className="analysis-filter-clear" onClick={clearFilters}>Clear filters</button>}
+      </div>
+      <p className="analysis-filter-summary" aria-live="polite">Filters match {filteredSignals.length.toLocaleString()} of {signals.length.toLocaleString()} findings</p>
+      {filteredSignals.length
+        ? <BoundedList items={filteredSignals} itemLabel="signal findings" resetKey={filterKey} className="analysis-signal-list" renderItem={(signal, index) => <SignalCard key={signal.signalKey || index} signal={signal} index={index} eventContextLookup={eventContextLookup} filterKey={filterKey} />} />
+        : <p className="analysis-empty-copy">No findings match these filters.</p>}
+    </> : <p className="analysis-empty-copy">No review signals were saved in this evaluation.</p>}
+  </div>
 }
 
 function JudgeAlignment({ alignment }) {
@@ -505,15 +637,64 @@ function EvaluationOverview({ analysis }) {
   const coverage = evidenceCoverage(annotation.categories.find((category) => category.key === 'turns'))
   const signalCount = evaluation.reviewSignals.length
   const concernOccurrences = concerns.reduce((total, signal) => total + (signal.count || 0), 0)
+  const concernOccurrenceTotalsKnown = concerns.every((signal) => signal.count !== null)
   const concernValue = concerns.length ? concerns.length.toLocaleString() : 'None'
   const concernDetail = concerns.length
-    ? `${concerns.length === 1 ? 'warning or critical signal' : 'warning or critical signals'} · ${concernOccurrences.toLocaleString()} recorded occurrences`
+    ? `${concerns.length === 1 ? 'warning or critical signal' : 'warning or critical signals'} · ${concernOccurrenceTotalsKnown ? `${concernOccurrences.toLocaleString()} recorded occurrences` : 'occurrence totals not recorded'}`
     : `${signalCount.toLocaleString()} ${signalCount === 1 ? 'signal' : 'signals'} observed`
   const actionCount = evaluation.followUps.length + evaluation.evaluationLedger.improvements.length
 
   return <section className={`analysis-overview ${evaluation.verdict}`} aria-labelledby="analysis-overview-title"><div className="analysis-overview-readout"><span className="section-label">Evaluation summary</span><h3 id="analysis-overview-title">Review at a glance</h3><strong className="analysis-overview-verdict">{overviewReadout(evaluation.verdict)}</strong><p>{evaluation.critique || 'No written critique was recorded.'}</p></div><div className="analysis-overview-stats"><div><span>Outcome</span><strong>{evaluation.verdictLabel}</strong><small>evaluator result</small></div><div><span>Findings</span><strong>{concernValue}</strong><small>{concernDetail}</small></div><div><span>Agent next steps</span><strong>{actionCount ? actionCount.toLocaleString() : 'None'}</strong><small>{actionCount ? 'recorded changes and finding-based follow-ups' : 'no action was recorded'}</small></div><div><span>Agent turns reviewed</span><strong>{coverage.value}</strong><small>{coverage.detail}</small></div></div></section>
 }
 
+function TurnImpactHighlights({ annotation }) {
+  const improved = annotation.performanceSummary.find((item) => item.value === 'improved')
+  const worsened = annotation.performanceSummary.find((item) => item.value === 'worsened')
+  const turns = [improved, worsened].flatMap((item) => (item?.turns || []).map((turn) => ({ ...turn, effect: item.value })))
+
+  return <section className="analysis-highlight-block" aria-labelledby="analysis-turn-impact-title">
+    <div className="analysis-highlight-heading"><h3 id="analysis-turn-impact-title">Turn impact</h3><span>{annotation.performanceLabeledCount.toLocaleString()} labeled</span></div>
+    {annotation.performanceLabeledCount ? <>
+      <div className="analysis-highlight-counts"><span><strong>{(improved?.count || 0).toLocaleString()}</strong> improved</span><span><strong>{(worsened?.count || 0).toLocaleString()}</strong> worsened</span></div>
+      {turns.length > 0 && <BoundedList items={turns} itemLabel="turn impact records" ordered className="analysis-turn-impact-list" resetKey="turn-impact" renderItem={(turn, index) => <li className="analysis-turn-impact-item" key={turn.id || index}><StatusPill tone={turn.effect === 'worsened' ? 'critical' : 'positive'}>{turn.effect === 'worsened' ? 'Worsened' : 'Improved'}</StatusPill><span>{turn.preview || 'Response summary not included in this analysis version.'}</span></li>} />}
+    </> : <p>No turn effect labels were recorded. The result impact is unknown.</p>}
+  </section>
+}
+
+function PriorityFindingHighlights({ signals }) {
+  const concerns = reviewConcernSignals(signals)
+
+  return <section className="analysis-highlight-block" aria-labelledby="analysis-priority-findings-title">
+    <div className="analysis-highlight-heading"><h3 id="analysis-priority-findings-title">Priority findings</h3><span>{concerns.length ? `${concerns.length.toLocaleString()} warning or critical` : 'None recorded'}</span></div>
+    {concerns.length ? <>
+      <p>Warning and critical findings are listed first; informational signals remain in the evidence details.</p>
+      <BoundedList items={concerns} itemLabel="priority findings" resetKey="priority-findings" className="analysis-priority-findings-list" renderItem={(signal, index) => <li className="analysis-priority-finding" key={signal.signalKey || index}><div><div className="analysis-priority-finding-heading"><strong>{signal.name}</strong><StatusPill tone={signal.severity}>{signal.severityMeaning}</StatusPill></div><p>{signalDescriptionReferences(signal.detail).readableDescription}</p><span>{signal.count == null ? 'Occurrence count not recorded' : `${signal.count.toLocaleString()} ${signal.count === 1 ? 'recorded occurrence' : 'recorded occurrences'}`}</span></div></li>} />
+    </> : <p>No warning or critical findings were recorded{signals.length ? '. Informational signals remain in the evidence details.' : ' in this evaluation.'}</p>}
+  </section>
+}
+
+function EvidenceGapHighlights({ annotation }) {
+  const gaps = annotation.captureGaps
+  const status = !annotation.captureGapsRecorded
+    ? 'Not included'
+    : gaps.length ? `${gaps.length.toLocaleString()} recorded` : 'None recorded'
+  const availability = !annotation.captureGapsRecorded
+    ? annotation.schemaVersion === '1' ? 'Capture gaps are not represented by schema v1.' : 'Capture-gap records were not included in this analysis.'
+    : gaps.length ? 'Recorded capture limitations and their impact.' : 'No capture gaps were recorded.'
+
+  return <section className="analysis-highlight-block" aria-labelledby="analysis-evidence-gaps-title">
+    <div className="analysis-highlight-heading"><h3 id="analysis-evidence-gaps-title">Evidence gaps</h3><span>{status}</span></div>
+    <p>{availability}</p>
+    {gaps.length > 0 && <BoundedList items={gaps} itemLabel="evidence gaps" ordered className="analysis-evidence-gap-highlights" resetKey="evidence-gaps" renderItem={(gap, index) => <li className="analysis-evidence-gap-highlight" key={gap.category + index}><strong>{gap.category}</strong><p>{gap.summary || 'No limitation summary was saved.'}</p><span><b>Impact:</b> {gap.impact || 'Impact was not recorded.'}</span></li>} />}
+  </section>
+}
+
+function EvaluationHighlights({ annotation, evaluation }) {
+  return <section className="analysis-highlights" aria-label="Key result and findings">
+    <TurnImpactHighlights annotation={annotation} />
+    <PriorityFindingHighlights signals={evaluation.reviewSignals} />
+  </section>
+}
 function EvidenceDisclosure({ annotation, evaluation, eventContextLookup }) {
   const categories = annotation.categories
   const categoryCount = categories.filter((category) => category.annotatedCount > 0).length
@@ -524,7 +705,7 @@ function EvidenceDisclosure({ annotation, evaluation, eventContextLookup }) {
     concernCount ? `${concernCount} ${concernCount === 1 ? 'concern' : 'concerns'}` : 'no concerns',
   ].join(' · ')
 
-  return <details className="analysis-evidence-disclosure" open><summary><span className="analysis-disclosure-summary-copy"><span className="section-label">Audit trail</span><strong>Evidence details</strong><span>Saved turns, tool calls, skills, files, signals, and judge comparison.</span></span><span className="analysis-disclosure-summary-meta">{evidenceSummary}<span className="analysis-disclosure-toggle">Collapse evidence</span></span></summary><div className="analysis-disclosure-content"><AnnotationPanel annotation={annotation} eventContextLookup={eventContextLookup} /><EvaluationPanel evaluation={evaluation} eventContextLookup={eventContextLookup} /></div></details>
+  return <details className="analysis-evidence-disclosure" open><summary><span className="analysis-disclosure-summary-copy"><span className="section-label">Audit trail</span><strong>Evidence details</strong><span>Saved turns, tool calls, skills, files, signals, and judge comparison.</span></span><span className="analysis-disclosure-summary-meta">{evidenceSummary}<span className="analysis-disclosure-toggle">Collapse evidence</span></span></summary><div className="analysis-disclosure-content"><p className="analysis-pagination-note">Lists start with 8 rows. Load more reveals rows already loaded for this evaluation; it does not fetch additional data.</p><AnnotationPanel annotation={annotation} eventContextLookup={eventContextLookup} /><EvaluationPanel evaluation={evaluation} eventContextLookup={eventContextLookup} /></div></details>
 }
 
 function ImprovementActions({ ledger, followUps = [], eventContextLookup }) {
@@ -533,17 +714,77 @@ function ImprovementActions({ ledger, followUps = [], eventContextLookup }) {
   const hasActions = improvements.length > 0
   const hasLegacyActions = legacyImprovements.length > 0
   const hasFollowUps = followUps.length > 0
-  const recordedLabel = `${improvements.length.toLocaleString()} valid agent ${improvements.length === 1 ? 'action' : 'actions'}`
-  const followUpLabel = `${followUps.length.toLocaleString()} ${followUps.length === 1 ? 'follow-up' : 'follow-ups'} from warning findings`
-  const followUpStatusLabel = `${followUps.length.toLocaleString()} ${followUps.length === 1 ? 'follow-up' : 'follow-ups'}`
-  const legacyLabel = `${legacyImprovements.length.toLocaleString()} legacy ${legacyImprovements.length === 1 ? 'target' : 'targets'} excluded`
-  const statusLabel = [hasActions && `${improvements.length.toLocaleString()} valid`, hasFollowUps && followUpStatusLabel, hasLegacyActions && legacyLabel].filter(Boolean).join(' · ')
+  const recordedLabel = improvements.length.toLocaleString() + ' valid agent ' + (improvements.length === 1 ? 'action' : 'actions')
+  const followUpLabel = followUps.length.toLocaleString() + ' ' + (followUps.length === 1 ? 'follow-up' : 'follow-ups') + ' from warning findings'
+  const followUpStatusLabel = followUps.length.toLocaleString() + ' ' + (followUps.length === 1 ? 'follow-up' : 'follow-ups')
+  const legacyLabel = legacyImprovements.length.toLocaleString() + ' legacy ' + (legacyImprovements.length === 1 ? 'target' : 'targets') + ' excluded'
+  const statusLabel = [
+    hasActions && improvements.length.toLocaleString() + ' valid',
+    hasFollowUps && followUpStatusLabel,
+    hasLegacyActions && legacyLabel,
+  ].filter(Boolean).join(' · ')
 
-  return <section className={`analysis-block analysis-actions-block ${hasActions || hasFollowUps ? 'has-actions' : 'is-empty'}`} aria-labelledby="analysis-actions-title"><div className="analysis-block-heading"><div><span className="section-label">Action plan</span><h3 id="analysis-actions-title">What to improve</h3><p>Every action targets agent behavior or agent instruction Markdown. The project name is context only.</p></div><StatusPill tone={hasActions || hasFollowUps ? 'positive' : hasLegacyActions ? 'warning' : 'unknown'}>{statusLabel || 'No actions recorded'}</StatusPill></div>{ledger?.project && <div className="analysis-ledger-context"><span>Project context</span><strong>{ledger.project}</strong><p>This is the evaluated project, not an improvement target.</p></div>}{hasActions && <div className="analysis-actions-group"><div className="analysis-actions-group-heading"><strong>Evaluator-recorded changes</strong><span>{recordedLabel}</span></div><ol className="analysis-actions-list">{improvements.map((improvement, index) => <li key={`${improvement.target}-${index}`}><div className="analysis-action-field"><span>Change</span><strong>{improvement.change}</strong></div><div className="analysis-action-field"><span>Target</span><strong>{improvement.targetLabel}</strong>{improvement.path && <code>{improvement.path}</code>}</div><div className="analysis-action-field"><span>Why</span><p>{improvement.reason}</p></div><ActionEvidence eventIds={improvement.evidenceEventIds} eventContextLookup={eventContextLookup} /></li>)}</ol></div>}{hasFollowUps && <div className="analysis-actions-group analysis-derived-actions"><div className="analysis-actions-group-heading"><strong>Next steps from findings</strong><span>{followUpLabel}</span></div><ol className="analysis-actions-list">{followUps.map((followUp, index) => <li key={`${followUp.signalKey}-${index}`}><div className="analysis-action-field"><span>Finding</span><strong>{followUp.title}</strong></div><div className="analysis-action-field"><span>Next step for the agent</span><strong>{followUp.action}</strong></div><div className="analysis-action-field"><span>Why this is here</span><p>{signalDescriptionReferences(followUp.reason || '').readableDescription}</p></div><div className="analysis-action-field"><span>Target</span><strong>{followUp.targetLabel}</strong></div>{followUp.occurrenceCount != null && <div className="analysis-action-field"><span>Recorded occurrences</span><span>{followUp.occurrenceCount.toLocaleString()}</span></div>}<ActionEvidence eventIds={followUp.evidenceEventIds} eventContextLookup={eventContextLookup} /><span className="analysis-action-source">Suggested from a saved warning or critical finding</span></li>)}</ol></div>}{hasLegacyActions && <div className="analysis-actions-group analysis-derived-actions analysis-legacy-actions"><div className="analysis-actions-group-heading"><strong>Older out-of-scope targets</strong><span>{legacyLabel}</span></div><p className="analysis-action-legacy-note">These older records point to project source. They remain visible for context but are excluded from the agent action plan.</p><ol className="analysis-actions-list">{legacyImprovements.map((improvement, index) => <li key={`${improvement.target}-${index}`}><div className="analysis-action-field"><span>Target</span><strong>{improvement.targetLabel}</strong>{improvement.path && <code>{improvement.path}</code>}</div><div className="analysis-action-field"><span>Status</span><strong>Excluded from agent improvements</strong></div><div className="analysis-action-field"><span>Recorded change</span><strong>{improvement.change}</strong></div><div className="analysis-action-field"><span>Why excluded</span><p>{improvement.outOfScopeReason}</p></div><ActionEvidence eventIds={improvement.evidenceEventIds} eventContextLookup={eventContextLookup} /></li>)}</ol></div>}{!hasActions && !hasFollowUps && !hasLegacyActions && <div className="analysis-inline-empty"><strong>No improvement actions recorded</strong><span>This evaluation did not save a concrete agent behavior or instruction change.</span></div>}{!hasActions && !hasFollowUps && hasLegacyActions && <div className="analysis-inline-empty"><strong>No agent improvement actions recorded</strong><span>The saved evaluation contains only older targets outside the agent and instruction Markdown scope.</span></div>}</section>
+  return <section className={'analysis-block analysis-actions-block ' + (hasActions || hasFollowUps ? 'has-actions' : 'is-empty')} aria-labelledby="analysis-actions-title">
+    <div className="analysis-block-heading">
+      <div>
+        <span className="section-label">Action plan</span>
+        <h3 id="analysis-actions-title">What to improve</h3>
+        <p>Every action targets agent behavior or agent instruction Markdown. The project name is context only.</p>
+      </div>
+      <StatusPill tone={hasActions || hasFollowUps ? 'positive' : hasLegacyActions ? 'warning' : 'unknown'}>{statusLabel || 'No actions recorded'}</StatusPill>
+    </div>
+    {ledger?.project && <div className="analysis-ledger-context">
+      <span>Project context</span><strong>{ledger.project}</strong>
+      <p>This is the evaluated project, not an improvement target.</p>
+    </div>}
+    {hasActions && <div className="analysis-actions-group">
+      <div className="analysis-actions-group-heading"><strong>Evaluator-recorded changes</strong><span>{recordedLabel}</span></div>
+      <BoundedList items={improvements} itemLabel="agent improvement actions" ordered className="analysis-actions-list" resetKey="recorded-actions" renderItem={(improvement, index) => <li key={improvement.target + '-' + index}>
+        <div className="analysis-action-field"><span>Change</span><strong>{improvement.change}</strong></div>
+        <div className="analysis-action-field"><span>Target</span><strong>{improvement.targetLabel}</strong>{improvement.path && <code>{improvement.path}</code>}</div>
+        <div className="analysis-action-field"><span>Why</span><p>{improvement.reason}</p></div>
+        <ActionEvidence eventIds={improvement.evidenceEventIds} eventContextLookup={eventContextLookup} />
+      </li>} />
+    </div>}
+    {hasFollowUps && <div className="analysis-actions-group analysis-derived-actions">
+      <div className="analysis-actions-group-heading"><strong>Next steps from findings</strong><span>{followUpLabel}</span></div>
+      <BoundedList items={followUps} itemLabel="finding-based follow-ups" ordered className="analysis-actions-list" resetKey="finding-follow-ups" renderItem={(followUp, index) => <li key={followUp.signalKey + '-' + index}>
+        <div className="analysis-action-field"><span>Finding</span><strong>{followUp.title}</strong></div>
+        <div className="analysis-action-field"><span>Next step for the agent</span><strong>{followUp.action}</strong></div>
+        <div className="analysis-action-field"><span>Why this is here</span><p>{signalDescriptionReferences(followUp.reason || '').readableDescription}</p></div>
+        <div className="analysis-action-field"><span>Target</span><strong>{followUp.targetLabel}</strong></div>
+        {followUp.occurrenceCount != null && <div className="analysis-action-field"><span>Recorded occurrences</span><span>{followUp.occurrenceCount.toLocaleString()}</span></div>}
+        <ActionEvidence eventIds={followUp.evidenceEventIds} eventContextLookup={eventContextLookup} />
+        <span className="analysis-action-source">Suggested from a saved warning or critical finding</span>
+      </li>} />
+    </div>}
+    {hasLegacyActions && <div className="analysis-actions-group analysis-derived-actions analysis-legacy-actions">
+      <div className="analysis-actions-group-heading"><strong>Older out-of-scope targets</strong><span>{legacyLabel}</span></div>
+      <p className="analysis-action-legacy-note">These older records point to project source. They remain visible for context but are excluded from the agent action plan.</p>
+      <BoundedList items={legacyImprovements} itemLabel="legacy targets" ordered className="analysis-actions-list" resetKey="legacy-actions" renderItem={(improvement, index) => <li key={improvement.target + '-' + index}>
+        <div className="analysis-action-field"><span>Target</span><strong>{improvement.targetLabel}</strong>{improvement.path && <code>{improvement.path}</code>}</div>
+        <div className="analysis-action-field"><span>Status</span><strong>Excluded from agent improvements</strong></div>
+        <div className="analysis-action-field"><span>Recorded change</span><strong>{improvement.change}</strong></div>
+        <div className="analysis-action-field"><span>Why excluded</span><p>{improvement.outOfScopeReason}</p></div>
+        <ActionEvidence eventIds={improvement.evidenceEventIds} eventContextLookup={eventContextLookup} />
+      </li>} />
+    </div>}
+    {!hasActions && !hasFollowUps && !hasLegacyActions && <div className="analysis-inline-empty">
+      <strong>No improvement actions recorded</strong><span>This evaluation did not save a concrete agent behavior or instruction change.</span>
+    </div>}
+    {!hasActions && !hasFollowUps && hasLegacyActions && <div className="analysis-inline-empty">
+      <strong>No agent improvement actions recorded</strong><span>The saved evaluation contains only older targets outside the agent and instruction Markdown scope.</span>
+    </div>}
+  </section>
 }
 
-function ActionEvidence({ eventIds, eventContextLookup }) {
-  return <div className="analysis-action-field"><span>Evidence</span>{eventIds.length ? <ul className="analysis-related-events">{eventIds.map((eventId) => <EventEvidenceRow key={eventId} eventId={eventId} eventContextLookup={eventContextLookup} referenceLabel="Action evidence ID" />)}</ul> : <p>Event-level evidence IDs were not stored for this action.</p>}</div>
+function ActionEvidence({ eventIds = [], eventContextLookup }) {
+  return <div className="analysis-action-field">
+    <span>Evidence</span>
+    {eventIds.length
+      ? <BoundedList items={eventIds} itemLabel="action evidence references" className="analysis-related-events" resetKey={eventIds.length} renderItem={(eventId, index) => <EventEvidenceRow key={eventId + '-' + index} eventId={eventId} eventContextLookup={eventContextLookup} referenceLabel="Action evidence ID" />} />
+      : <p>Event-level evidence IDs were not stored for this action.</p>}
+  </div>
 }
 
 function EvaluationPanel({ evaluation, eventContextLookup }) {
@@ -574,7 +815,27 @@ function CompactAnalysisSummary({ analysis, sessionId }) {
 function AnalysisCards({ analysis, trace, compact = false, sessionId }) {
   if (compact) return <CompactAnalysisSummary analysis={analysis} sessionId={sessionId} />
   const eventContextLookup = createEventContextLookup(analysis.annotation, analysis.evaluation, trace)
-  return <aside className={`insights-section analysis-insights analysis-full-page ${analysis.recorded ? '' : 'is-unrecorded'}`} aria-labelledby="analysis-details-title"><div className="section-heading-row analysis-heading"><div><p className="section-label">Evaluation review</p><h2 id="analysis-details-title">Review details</h2><p className="section-description">Outcome and agent next steps appear first. Evidence records stay open below.</p></div><StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Recorded' : 'Not recorded'}</StatusPill></div>{analysis.recorded ? <><AnalysisRecordMetadata analysis={analysis} /><div className="analysis-content">{analysis.evaluation.recorded && <EvaluationOverview analysis={analysis} />}{analysis.evaluation.recorded && <ImprovementActions ledger={analysis.evaluation.evaluationLedger} followUps={analysis.evaluation.followUps} eventContextLookup={eventContextLookup} />}{analysis.evaluation.recorded ? <EvidenceDisclosure annotation={analysis.annotation} evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} /> : <><AnnotationPanel annotation={analysis.annotation} eventContextLookup={eventContextLookup} /><EvaluationPanel evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} /></>}</div></> : <NoAnalysisState />}</aside>
+
+  return <aside className={'insights-section analysis-insights analysis-full-page' + (analysis.recorded ? '' : ' is-unrecorded')} aria-labelledby="analysis-details-title">
+    <div className="section-heading-row analysis-heading">
+      <div>
+        <p className="section-label">Evaluation review</p>
+        <h2 id="analysis-details-title">Review details</h2>
+        <p className="section-description">Outcome, turn impact, priorities, actions, and evidence gaps appear before the detailed audit trail.</p>
+      </div>
+      <StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Recorded' : 'Not recorded'}</StatusPill>
+    </div>
+    {analysis.recorded ? <div className="analysis-content">
+      {analysis.evaluation.recorded && <EvaluationOverview analysis={analysis} />}
+      {analysis.evaluation.recorded && <EvaluationHighlights annotation={analysis.annotation} evaluation={analysis.evaluation} />}
+      {analysis.evaluation.recorded && <ImprovementActions ledger={analysis.evaluation.evaluationLedger} followUps={analysis.evaluation.followUps} eventContextLookup={eventContextLookup} />}
+      <EvidenceGapHighlights annotation={analysis.annotation} />
+      <AnalysisRecordMetadata analysis={analysis} />
+      {analysis.evaluation.recorded
+        ? <EvidenceDisclosure annotation={analysis.annotation} evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} />
+        : <><AnnotationPanel annotation={analysis.annotation} eventContextLookup={eventContextLookup} /><EvaluationPanel evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} /></>}
+    </div> : <NoAnalysisState />}
+  </aside>
 }
 
 export default function InsightCards({ analysis, trace, insights, compact = false, sessionId, forceAnalysis = false }) {

@@ -263,17 +263,53 @@ describe('TraceView API conversation', () => {
     expect(container.querySelectorAll('.token-usage-metric')).toHaveLength(5)
   })
 
-  it('bounds the initially mounted stream and loads more rows on demand', () => {
-    const { container } = render(<TraceView session={createLargeTrace()} />)
+  it('renders every row in the received response without local pagination', () => {
+    const { container } = render(<TraceView session={createLargeTrace(61)} />)
 
-    expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
-    expect(screen.getByText('Showing 60 of 125 rows')).toBeInTheDocument()
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
+    expect(screen.getByText('Showing 61 of 61 rows')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Load more rows' })).not.toBeInTheDocument()
+  })
+
+  it('shows the complete fetched page and requests more events from the API on demand', () => {
+    const onLoadMore = vi.fn()
+    const trace = {
+      ...createLargeTrace(61),
+      summary: { event_count: 125, tool_call_count: 125, skill_invocation_count: 25 },
+      pagination: { offset: 0, limit: 61, total: 125, has_more: true },
+    }
+    const { container } = render(<TraceView session={trace} onLoadMore={onLoadMore} />)
+
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
+    expect(screen.getByText('Loaded 61 of 125 captured events · 61 rows shown.')).toBeInTheDocument()
+    expect(container.querySelector('.trace-summary > div:first-child strong')).toHaveTextContent('25')
     expect(screen.getByRole('button', { name: 'Load more rows' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Load more rows' }))
 
-    expect(container.querySelectorAll('.tool-card')).toHaveLength(120)
-    expect(screen.getByText('Showing 120 of 125 rows')).toBeInTheDocument()
+    expect(onLoadMore).toHaveBeenCalledExactlyOnceWith()
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
+  })
+
+  it('announces page loading and errors without hiding already loaded events', () => {
+    const onLoadMore = vi.fn()
+    const trace = {
+      ...createLargeTrace(60),
+      pagination: { offset: 0, limit: 100, total: 125, has_more: true },
+    }
+    const { container, rerender } = render(<TraceView session={trace} onLoadMore={onLoadMore} isLoadingMore />)
+
+    expect(screen.getByText('Loading the next page of events. Loaded rows remain on screen.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Loading next page…' })).toBeDisabled()
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
+
+    rerender(<TraceView session={trace} onLoadMore={onLoadMore} loadMoreError />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('The next page could not be loaded.')
+    expect(screen.getByRole('button', { name: 'Retry loading more rows' })).toBeEnabled()
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading more rows' }))
+    expect(onLoadMore).toHaveBeenCalledExactlyOnceWith()
   })
 
   it('renders and focuses a deep evidence match before scrolling to it', () => {
@@ -283,7 +319,7 @@ describe('TraceView API conversation', () => {
     HTMLElement.prototype.scrollIntoView = scrollIntoView
 
     try {
-      expect(container.querySelector('[data-trace-event-id="tool-124"]')).not.toBeInTheDocument()
+      expect(container.querySelector('[data-trace-event-id="tool-124"]')).toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('button', { name: 'Locate captured instruction source .agents/workflows/deep.md in the trace' }))
 
@@ -298,25 +334,24 @@ describe('TraceView API conversation', () => {
       if (originalScrollIntoView) HTMLElement.prototype.scrollIntoView = originalScrollIntoView
       else delete HTMLElement.prototype.scrollIntoView
     }
-  })
+  }, 15000)
 
-  it('resets the mounted window when the filter and selected session change', () => {
-    const firstTrace = createLargeTrace()
-    const secondTrace = { ...createLargeTrace(), session_id: 'large-session-2' }
+  it('keeps all received rows available when the filter and selected session change', () => {
+    const firstTrace = createLargeTrace(61)
+    const secondTrace = { ...createLargeTrace(61), session_id: 'large-session-2' }
     const { container, rerender } = render(<TraceView session={firstTrace} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load more rows' }))
-    expect(container.querySelectorAll('.tool-card')).toHaveLength(120)
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
 
     fireEvent.click(screen.getByRole('button', { name: 'Conversation' }))
     expect(screen.getByText('Showing 0 of 0 rows')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Everything' }))
-    expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
 
     rerender(<TraceView session={secondTrace} />)
-    expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
-  })
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
+  }, 15000)
 
   it('renders the Everything stream in API timeline order across messages and tool calls', () => {
     const trace = {

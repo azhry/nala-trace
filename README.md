@@ -95,7 +95,33 @@ curl --fail-with-body --silent --show-error http://127.0.0.1:3003/healthz
 
 - `POST /ingest` — accept one authenticated Codex hook event.
 - `GET /sessions` — list owner-scoped session summaries.
-- `GET /sessions/:id` — read one reconstructed owner-scoped trace.
+- `GET /sessions/:id?offset=0&limit=100` — read one page of the reconstructed,
+  owner-scoped trace with its `analysis.annotation` and
+  `analysis.evaluation` results. `limit` defaults to 100 and is capped at 200;
+  `offset` defaults to 0. The response includes `pagination.offset`,
+  `pagination.limit`, `pagination.total`, and `pagination.has_more`. Session
+  summary counts and saved analysis describe the full session, while the trace
+  collections contain only the requested page. Both analysis values are
+  `null` until the corresponding analysis is persisted.
+- `GET /sessions/:id/analysis` — read only the owner-scoped saved annotation and
+  evaluation, without reconstructing or transferring the full trace. Missing
+  analysis returns an empty analysis object.
+- `POST /sessions/:id/annotations` — persist the structured result produced by
+  `.agents/skills/session-annotator`.
+- `POST /sessions/:id/evaluation` — persist the structured result produced by
+  `.agents/skills/session-evaluator` after annotation.
+
+New annotation and evaluation writes use schema version `2`; existing schema
+version `1` records remain readable and accepted for legacy clients. The
+annotator records user signals, assistant-turn instruction/scope/groundedness/
+verification/performance labels, tool/skill/file evidence summaries, and exact
+coverage counts. The evaluator records `pass`, `fail`, or `unknown`, review
+signals with one event-linked occurrence per count, optional real judge
+alignment, and evidence-backed improvement actions restricted to agent
+behavior or agent-instruction Markdown. The skills' `references/result-schema.md`
+files are the canonical request examples. Analysis is stored in the MongoDB
+`session_analysis` collection with an owner/session unique key; raw trace events
+remain append-only.
 
 Session summaries expose a `token_usage` object with `input_tokens`,
 `cached_input_tokens`, `output_tokens`, `reasoning_tokens`, `total_tokens`,

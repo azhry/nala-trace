@@ -313,4 +313,22 @@ describe('normalizeTraceViewModel', () => {
     expect(model.mcpServers).toEqual(['github', 'linear'])
     expect(model.signalCounts).toEqual({ skills: 3, files: 4, fileReads: 3, mcpCalls: 4, mcpServers: 2 })
   })
+
+  it('uses full-session evidence counts when a trace page contains only scoped records', () => {
+    const model = normalizeTraceViewModel({
+      schema_version: '1',
+      timeline: [{ id: 'page-event', hook_event_name: 'PreToolUse', occurred_at: '2026-08-19T08:00:00Z' }],
+      conversation: [],
+      tool_calls: [],
+      skill_invocations: [{ name: 'frontend-design', event_id: 'page-event' }],
+      files: [{ path: 'README.md', operation: 'read', event_id: 'page-event' }],
+      pagination: { offset: 0, limit: 100, total: 101, has_more: true },
+      summary: { skill_invocation_count: 8, file_operation_count: 12, file_read_count: 9 },
+    })
+
+    expect(model.skillInvocationCount).toBe(8)
+    expect(model.fileOperationCount).toBe(12)
+    expect(model.fileReadCount).toBe(9)
+    expect(model.signalCounts).toMatchObject({ skills: 8, files: 12, fileReads: 9 })
+  })
 })

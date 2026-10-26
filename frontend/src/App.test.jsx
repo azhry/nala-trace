@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, clearAuthConfiguration, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
+import { ApiError, clearAuthConfiguration, getSessionAnalysis, getSessions, getTrace, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY, resolveSession } from './api'
 import { redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import App, { TRACE_LOADING_MIN_DURATION_MS } from './App'
 
@@ -8,6 +8,7 @@ vi.mock('./api', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
+    getSessionAnalysis: vi.fn(),
     getSessions: vi.fn(),
     getTrace: vi.fn(),
     resolveSession: vi.fn(),
@@ -73,6 +74,36 @@ const apiTracePayload = {
   summary: { event_count: 3, message_count: 3, tool_call_count: 0 },
 }
 
+const paginatedTraceEvents = Array.from({ length: 101 }, (_, index) => ({
+  id: `page-event-${index}`,
+  hook_event_name: index === 0 || index === 100 ? 'UserPromptSubmit' : 'SessionStart',
+  occurred_at: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+  turn_id: `turn-${index}`,
+  index,
+  content: index === 100 ? 'Next page event' : `Initial page event ${index}`,
+}))
+
+function paginatedTracePage(offset) {
+  const events = paginatedTraceEvents.slice(offset, offset + 100)
+  return {
+    ...apiTracePayload,
+    timeline: events.map(({ id, hook_event_name, occurred_at, turn_id }) => ({ id, hook_event_name, occurred_at, turn_id, raw: {} })),
+    conversation: events.filter((event) => event.index === 0 || event.index === 100).map(({ id, content, occurred_at, turn_id }) => ({
+      event_id: id,
+      role: 'user',
+      content,
+      occurred_at,
+      turn_id,
+      raw: { hook_event_name: 'UserPromptSubmit' },
+    })),
+    tool_calls: [],
+    skill_invocations: [],
+    files: [],
+    summary: { event_count: 101, message_count: 101, tool_call_count: 9, skill_invocation_count: 8 },
+    pagination: { offset, limit: 100, total: 101, has_more: offset + events.length < 101 },
+  }
+}
+
 describe('authenticated sessions flow', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/#/sessions')
@@ -86,6 +117,7 @@ describe('authenticated sessions flow', () => {
     redeemNalaLabsAuthCode.mockResolvedValue({ attempted: false, authenticated: false })
     resolveSession.mockResolvedValue({ authenticated: true, user: { id: 'user-1' } })
     getSessions.mockResolvedValue(sessionPayload)
+    getSessionAnalysis.mockResolvedValue({ session_id: 'authenticated-session', analysis: null })
     getTrace.mockResolvedValue({})
   })
 
@@ -276,7 +308,189 @@ describe('authenticated sessions flow', () => {
     expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
     expect(screen.getByText('Keep the next turn visible.')).toBeInTheDocument()
     expect(screen.getByText('turn turn-2')).toBeInTheDocument()
-    expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session')
+    expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session', { offset: 0, limit: 100 })
+  })
+
+  it('requests and appends the next trace page only after the user asks, keeping whole-session totals', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    const firstPage = paginatedTracePage(0)
+    const nextPage = paginatedTracePage(100)
+    nextPage.timeline.unshift(firstPage.timeline[99])
+    nextPage.conversation.unshift(firstPage.conversation[0])
+    getTrace.mockResolvedValueOnce(firstPage).mockResolvedValueOnce(nextPage)
+
+    const { container } = render(<App />)
+
+    expect(await screen.findByText('Initial page event 0')).toBeInTheDocument()
+    expect(screen.queryByText('Next page event')).not.toBeInTheDocument()
+    expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session', { offset: 0, limit: 100 })
+    expect(screen.getByText('Loaded 100 of 101 captured events · 100 rows shown.')).toBeInTheDocument()
+    expect(container.querySelector('.trace-summary > div:first-child strong')).toHaveTextContent('8')
+    expect(container.querySelector('.trace-summary > div:nth-child(2) strong')).toHaveTextContent('9')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more rows' }))
+
+    await waitFor(() => expect(getTrace).toHaveBeenNthCalledWith(2, 'authenticated-session', { offset: 100, limit: 100 }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(await screen.findByText('Next page event')).toBeInTheDocument()
+    expect(container.querySelector('.trace-stream-pagination [role="status"]').textContent).toBe('Loaded 101 of 101 captured events · 101 rows shown.')
+    expect(getTrace).toHaveBeenNthCalledWith(2, 'authenticated-session', { offset: 100, limit: 100 })
+    expect(screen.getAllByText('Initial page event 0')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-trace-event-id="page-event-99"]')).toHaveLength(1)
+    expect(container.querySelector('.trace-summary > div:first-child strong')).toHaveTextContent('8')
+    expect(container.querySelector('.trace-summary > div:nth-child(2) strong')).toHaveTextContent('9')
+  }, 15000)
+
+  it('keeps paired tool calls intact when a completion hook arrives on the next page', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    const firstPage = paginatedTracePage(0)
+    firstPage.timeline[0] = { id: 'first-tool-start', hook_event_name: 'PreToolUse', tool_call_index: 0, raw: {} }
+    firstPage.tool_calls = [{ tool_use_id: 'first-tool', tool_name: 'shell_command', input: { command: 'first' }, output: 'completed first', status: 'completed' }]
+    firstPage.summary = { ...firstPage.summary, event_count: 102, tool_call_count: 9 }
+    firstPage.pagination = { ...firstPage.pagination, total: 102, has_more: true }
+
+    const nextPage = paginatedTracePage(100)
+    nextPage.timeline = [
+      { id: 'next-tool-start', hook_event_name: 'PreToolUse', tool_call_index: 10, raw: {} },
+      { id: 'first-tool-completion', hook_event_name: 'PostToolUse', tool_call_index: 0, raw: {} },
+    ]
+    nextPage.tool_calls = [{ tool_use_id: 'next-tool', tool_name: 'shell_command', input: { command: 'next' }, output: 'completed next', status: 'completed' }]
+    nextPage.summary = { ...firstPage.summary, event_count: 102, tool_call_count: 9 }
+    nextPage.pagination = { offset: 100, limit: 100, total: 102, has_more: false }
+    getTrace.mockResolvedValueOnce(firstPage).mockResolvedValueOnce(nextPage)
+
+    const { container } = render(<App />)
+
+    expect(await screen.findByText('Initial page event 0')).toBeInTheDocument()
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Load more rows' }))
+
+    expect(await screen.findByText('Next page event')).toBeInTheDocument()
+    expect(container.querySelectorAll('.tool-card')).toHaveLength(2)
+    expect(screen.queryByText('PreToolUse')).not.toBeInTheDocument()
+    expect(screen.queryByText('PostToolUse')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.tool-card-status')).toHaveLength(2)
+    expect([...container.querySelectorAll('.tool-card-status')].every((status) => status.textContent.includes('completed'))).toBe(true)
+  })
+
+  it('keeps loaded trace rows visible when a page fails and retries the same offset', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    getTrace.mockResolvedValueOnce(paginatedTracePage(0))
+      .mockRejectedValueOnce(new ApiError('Request failed', 503))
+      .mockResolvedValueOnce(paginatedTracePage(100))
+
+    render(<App />)
+
+    expect(await screen.findByText('Initial page event 0')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more rows' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The next page could not be loaded.')
+    expect(screen.getByText('Initial page event 0')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading more rows' }))
+
+    expect(await screen.findByText('Next page event')).toBeInTheDocument()
+    expect(getTrace).toHaveBeenNthCalledWith(2, 'authenticated-session', { offset: 100, limit: 100 })
+    expect(getTrace).toHaveBeenNthCalledWith(3, 'authenticated-session', { offset: 100, limit: 100 })
+  }, 15000)
+
+  it('renders persisted session analysis from the live detail response', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    getTrace.mockResolvedValueOnce({
+      ...apiTracePayload,
+      analysis: {
+        annotation: {
+          schema_version: '1',
+          source: 'session-annotator',
+          turns: [{ event_id: 'stop-1', turn_id: 'turn-1', follows_instructions: 'yes', performance: 'improved', rationale: 'The recorded turn followed the task.' }],
+          tools: [],
+          skills: [],
+        },
+        evaluation: {
+          schema_version: '1',
+          source: 'session-evaluator',
+          verdict: 'fail',
+          critique: 'The evaluator recorded a review concern.',
+          review_signals: [{ name: 'review required', count: 1, severity: 'warning', detail: 'One concern was recorded.' }],
+          judge_alignment: { status: 'not_recorded' },
+          evaluation_ledger: { project: 'nala-trace', improvements: [] },
+        },
+      },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('Evaluation summary')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open full evaluation' })).toHaveAttribute('href', '#/sessions/authenticated-session/evaluation')
+    expect(screen.getByText('Fail')).toBeInTheDocument()
+    expect(screen.queryByText('The evaluator recorded a review concern.')).not.toBeInTheDocument()
+  })
+
+  it('shows an annotation and evaluation link beside the session title', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session')
+    getTrace.mockResolvedValueOnce(apiTracePayload)
+
+    render(<App />)
+
+    const title = await screen.findByRole('heading', { level: 1 })
+    const evaluationLink = await screen.findByRole('link', { name: 'View annotation and evaluation' })
+
+    expect(evaluationLink).toBeVisible()
+    expect(title.parentElement).toContainElement(evaluationLink)
+    expect(evaluationLink).toHaveAttribute('href', '#/sessions/authenticated-session/evaluation')
+  })
+
+  it('opens the full evaluation review on its dedicated route', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session/evaluation')
+    getSessionAnalysis.mockResolvedValueOnce({
+      session_id: 'authenticated-session',
+      analysis: {
+        annotation: {
+          schema_version: '1',
+          source: 'session-annotator',
+          turns: [{ event_id: 'stop-1', turn_id: 'turn-1', follows_instructions: 'yes', performance: 'improved', rationale: 'The recorded turn followed the task.' }],
+          tools: [],
+          skills: [],
+        },
+        evaluation: {
+          schema_version: '1',
+          source: 'session-evaluator',
+          verdict: 'fail',
+          critique: 'The evaluator recorded a review concern.',
+          review_signals: [{ name: 'review required', count: 1, severity: 'warning', detail: 'One concern was recorded.' }],
+          judge_alignment: { status: 'not_recorded' },
+          evaluation_ledger: { project: 'nala-trace', improvements: [] },
+        },
+      },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Session evaluation', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Review details' })).toBeInTheDocument()
+    expect(await screen.findByText('The evaluator recorded a review concern.')).toBeInTheDocument()
+    expect(screen.getAllByText('review required').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByRole('heading', { name: 'Evaluation summary' })).not.toBeInTheDocument()
+    expect(getSessionAnalysis).toHaveBeenCalledExactlyOnceWith('authenticated-session')
+    expect(getTrace).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '← Session detail' }))
+    await waitFor(() => expect(window.location.hash).toBe('#/sessions/authenticated-session'))
+  })
+
+  it('shows separate loading, failure, retry, and empty states without requesting the full trace', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session/evaluation')
+    let rejectAnalysis
+    getSessionAnalysis.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectAnalysis = reject }))
+
+    render(<App />)
+
+    await waitFor(() => expect(getSessionAnalysis).toHaveBeenCalledExactlyOnceWith('authenticated-session'))
+    expect(await screen.findByText('Loading saved evaluation')).toBeInTheDocument()
+    await act(async () => rejectAnalysis(new ApiError('analysis failed', 500)))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Saved evaluation could not be loaded')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry analysis request' }))
+    expect(await screen.findByText('No analysis saved')).toBeInTheDocument()
+    expect(getSessionAnalysis).toHaveBeenCalledTimes(2)
+    expect(getTrace).not.toHaveBeenCalled()
   })
 
   it('shows an accessible stable loader during the initial detail request', async () => {
@@ -288,7 +502,7 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    await waitFor(() => expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session'))
+    await waitFor(() => expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session', { offset: 0, limit: 100 }))
     const loadingStatus = screen.getByRole('status')
     expect(loadingStatus).toHaveTextContent('Loading trace conversation…')
     expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
@@ -307,7 +521,7 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    await waitFor(() => expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session'))
+    await waitFor(() => expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session', { offset: 0, limit: 100 }))
     const loadingStatus = screen.getByRole('status')
 
     expect(loadingStatus).toHaveClass('trace-loading-panel')
@@ -327,7 +541,7 @@ describe('authenticated sessions flow', () => {
       render(<App />)
 
       await act(async () => { await Promise.resolve() })
-      expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session')
+      expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session', { offset: 0, limit: 100 })
       expect(screen.getByText('Loading trace conversation…')).toBeInTheDocument()
 
       await act(async () => { await vi.advanceTimersByTimeAsync(TRACE_LOADING_MIN_DURATION_MS - 1) })

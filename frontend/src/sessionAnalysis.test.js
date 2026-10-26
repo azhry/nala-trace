@@ -1,0 +1,562 @@
+import { describe, expect, it } from 'vitest'
+import { normalizeSessionAnalysis, repairCapturedText } from './sessionAnalysis'
+
+const trace = {
+  conversation: [
+    { event_id: 'prompt-1', role: 'user', content: 'Please inspect the repository.', turn_id: 'turn-1' },
+    { event_id: 'stop-1', role: 'assistant', content: 'The assistant completed the requested inspection.', turn_id: 'turn-1' },
+    { event_id: 'prompt-2', role: 'user', content: 'Summarize the result.', turn_id: 'turn-2' },
+  ],
+  tool_calls: [{ tool_use_id: 'tool-1', tool_name: 'rg', input: { cmd: 'rg --files' } }, { tool_name: 'git' }],
+  timeline: [{ id: 'stop-1', hook_event_name: 'Stop' }],
+  skill_invocations: [{ name: 'frontend-design' }],
+}
+
+const analysis = {
+  updated_at: '2026-08-19T08:10:00Z',
+  annotation: {
+    schema_version: '1',
+    source: 'session-annotator',
+    turns: [{
+      event_id: 'stop-1',
+      turn_id: 'turn-1',
+      follows_instructions: 'yes',
+      performance: 'improved',
+      rationale: 'The recorded response followed the requested workflow.',
+    }],
+    tools: [{
+      event_id: 'pre-tool-1',
+      tool_use_id: 'tool-1',
+      necessary: 'unclear',
+      rationale: 'The trace does not establish whether this lookup was required.',
+    }],
+    skills: [{
+      event_id: 'skill-1',
+      skill_name: 'frontend-design',
+      necessary: 'yes',
+      rationale: 'The task changes an existing frontend surface.',
+    }],
+  },
+  evaluation: {
+    schema_version: '1',
+    source: 'session-evaluator',
+    verdict: 'fail',
+    critique: 'The result contains a recorded review concern.',
+    review_signals: [{
+      name: 'unmatched_tool_hook_pairs',
+      count: 2,
+      severity: 'warning',
+      detail: 'Unmatched event: ObjectID("stop-1").',
+    }],
+    judge_alignment: {
+      status: 'not_aligned',
+      human_label: 'fail',
+      evaluator_label: 'pass',
+      agreement: false,
+      dataset: 'golden-set-v1',
+    },
+    evaluation_ledger: {
+      project: 'nala-trace',
+      improvements: [{
+        path: 'AGENTS.md',
+        change: 'Clarify the frontend handoff boundary.',
+        reason: 'The review found an ambiguous ownership rule.',
+      }],
+    },
+  },
+}
+
+describe('session analysis view model', () => {
+  it('repairs recognizable text mojibake while preserving valid Unicode and identifiers', () => {
+    const validUnicode = 'café — 東京 — 🙂'
+    expect(repairCapturedText(validUnicode)).toBe(validUnicode)
+    expect(repairCapturedText('café, FranÃ§ais, itâ€™s ä¸­ and ðŸ˜Š')).toBe('café, Français, it’s 中 and 😊')
+
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '2',
+        user_turns: [{ event_id: 'event-Ã©-1', summary: 'café — FranÃ§ais, itâ€™s 東京 🙂', rationale: 'The captured text is readable.' }],
+        capture_gaps: [{ category: 'tool calls', event_ids: ['gap-Ã©-1'], summary: 'A tool result was not capturÃ©.', impact: 'Its result canâ€™t be verified.' }],
+      },
+      evaluation: {
+        schema_version: '2',
+        verdict: 'fail',
+        critique: 'The evaluator noted a FranÃ§ais response.',
+        review_signals: [{
+          name: 'signal_Ã©',
+          severity: 'warning',
+          count: 1,
+          detail: 'The result was incompletÃ©.',
+          occurrences: [{ event_id: 'occurrence-Ã©-1', summary: 'A tool result was not capturÃ©.', impact: 'It canâ€™t be verified.' }],
+        }],
+        evaluation_ledger: {
+          improvements: [{
+            target_type: 'agent_instructions',
+            change: 'Add a tool-completion check.',
+            reason: 'The result was incompletÃ©.',
+            evidence_event_ids: ['action-Ã©-1'],
+          }],
+        },
+      },
+    })
+    const userTurn = model.annotation.categories.find((category) => category.key === 'user_turns').records[0]
+
+    expect(userTurn).toMatchObject({
+      eventId: 'event-Ã©-1',
+      summary: 'café — Français, it’s 東京 🙂',
+    })
+    expect(model.annotation.captureGaps[0]).toMatchObject({
+      eventIds: ['gap-Ã©-1'],
+      summary: 'A tool result was not capturé.',
+      impact: 'Its result can’t be verified.',
+    })
+    expect(model.evaluation.critique).toBe('The evaluator noted a Français response.')
+    expect(model.evaluation.reviewSignals[0]).toMatchObject({
+      signalKey: 'signal_Ã©',
+      detail: 'The result was incompleté.',
+      occurrences: [{ eventId: 'occurrence-Ã©-1', summary: 'A tool result was not capturé.', impact: 'It can’t be verified.' }],
+    })
+    expect(model.evaluation.evaluationLedger.improvements[0]).toMatchObject({
+      change: 'Add a tool-completion check.',
+      reason: 'The result was incompleté.',
+      evidenceEventIds: ['action-Ã©-1'],
+    })
+  })
+
+  it('normalizes the API contract and calculates evidence coverage without inventing verdicts', () => {
+    const model = normalizeSessionAnalysis(analysis, trace)
+
+    expect(model).toMatchObject({
+      recorded: true,
+      updatedAt: '2026-08-19T08:10:00Z',
+      annotation: { recorded: true, source: 'session-annotator' },
+      evaluation: { recorded: true, verdict: 'fail', verdictLabel: 'Fail' },
+    })
+    expect(model.annotation.categories).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'user_turns', recorded: false, coverageValue: 'Not included' }),
+      expect.objectContaining({ key: 'turns', coverageValue: '1 labeled / 1 captured', coverageDetail: '100% of captured records labeled' }),
+      expect.objectContaining({ key: 'tools', coverageValue: '1 labeled / 2 captured', coverageDetail: '50% of captured records labeled' }),
+      expect.objectContaining({ key: 'skills', coverageValue: '1 labeled / 1 captured', coverageDetail: '100% of captured records labeled' }),
+      expect.objectContaining({ key: 'files', recorded: false, coverageValue: 'Not included' }),
+    ]))
+    expect(model.annotation.performanceSummary).toEqual([
+      { value: 'improved', count: 1, turnIds: ['turn-1'], turns: [{ id: 'turn-1', role: 'assistant', preview: 'The assistant completed the requested inspection.' }] },
+      { value: 'neutral', count: 0, turnIds: [], turns: [] },
+      { value: 'worsened', count: 0, turnIds: [], turns: [] },
+      { value: 'unclear', count: 0, turnIds: [], turns: [] },
+    ])
+    expect(model.annotation.categories.find((category) => category.key === 'turns').records[0]).toMatchObject({
+      turnId: 'turn-1',
+      turnRole: 'assistant',
+      turnPreview: 'The assistant completed the requested inspection.',
+    })
+    expect(model.annotation.categories.find((category) => category.key === 'tools').records[0]).toMatchObject({
+      toolName: 'rg',
+      toolUseId: 'tool-1',
+      inputPreview: expect.stringContaining('rg --files'),
+    })
+    expect(model.annotation.categories.find((category) => category.key === 'turns').breakdowns[0].values).toEqual([
+      { value: 'yes', count: 1 },
+      { value: 'no', count: 0 },
+      { value: 'unclear', count: 0 },
+    ])
+    expect(model.evaluation.reviewSignals[0]).toMatchObject({
+      name: 'Unmatched tool hook pairs',
+      count: 2,
+      severity: 'warning',
+      severityMeaning: 'Review concern',
+      detail: 'Unmatched event: ObjectID("stop-1").',
+    })
+    expect(model.evaluation.judgeAlignment).toMatchObject({ status: 'not_aligned', label: 'Not aligned', agreement: false })
+    expect(model.evaluation.evaluationLedger).toMatchObject({ project: 'nala-trace', projectContextOnly: true })
+    expect(model.evaluation.evaluationLedger.improvements[0]).toMatchObject({
+      path: 'AGENTS.md',
+      target: 'AGENTS.md',
+      targetKind: 'instruction',
+      targetLabel: 'Agent instructions',
+      targetValid: true,
+    })
+    expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([])
+  })
+
+  it('keeps agent behavior and instruction Markdown targets in the actionable ledger', () => {
+    const model = normalizeSessionAnalysis({
+      evaluation: {
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [
+            { path: 'agent behavior', change: 'Use a bounded verification loop.', reason: 'The agent stopped before checking the rendered result.' },
+            { path: '.agents/skills/session-evaluator/references/result-schema.md', change: 'State the target boundary.', reason: 'The evaluation had no safe destination for its next step.' },
+            { path: '.agents/workflows/frontend.md', change: 'Require the mobile check.', reason: 'The responsive flow was not observed.' },
+          ],
+        },
+      },
+    })
+
+    expect(model.evaluation.evaluationLedger.improvements).toEqual([
+      expect.objectContaining({ target: 'Agent behavior', targetKind: 'agent', targetLabel: 'Agent behavior', targetValid: true }),
+      expect.objectContaining({ target: '.agents/skills/session-evaluator/references/result-schema.md', targetKind: 'skill', targetLabel: 'Skill instructions', targetValid: true }),
+      expect.objectContaining({ target: '.agents/workflows/frontend.md', targetKind: 'workflow', targetLabel: 'Workflow instructions', targetValid: true }),
+    ])
+    expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([])
+  })
+
+  it('recognizes equivalent agent instruction locations and semantic targets', () => {
+    const model = normalizeSessionAnalysis({
+      evaluation: {
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [
+            { path: 'CODEX.md', change: 'Document the verification boundary.', reason: 'The agent did not know which evidence was required.' },
+            { path: '.codex/hooks.md', change: 'Require completed hook evidence.', reason: 'The evaluator found unmatched tool hooks.' },
+            { target: 'skill', change: 'Keep the skill selection rule explicit.', reason: 'The agent needs a reusable instruction.' },
+            { target: 'workflow', change: 'Require the authenticated browser check.', reason: 'The workflow omitted a required verification step.' },
+          ],
+        },
+      },
+    })
+
+    expect(model.evaluation.evaluationLedger.improvements).toEqual([
+      expect.objectContaining({ target: 'CODEX.md', targetKind: 'instruction', targetLabel: 'Agent instructions', targetValid: true }),
+      expect.objectContaining({ target: '.codex/hooks.md', targetKind: 'instruction', targetLabel: 'Agent instructions', targetValid: true }),
+      expect.objectContaining({ target: 'Skill instructions', targetKind: 'skill', targetLabel: 'Skill instructions', targetValid: true }),
+      expect.objectContaining({ target: 'Workflow instructions', targetKind: 'workflow', targetLabel: 'Workflow instructions', targetValid: true }),
+    ])
+    expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([])
+  })
+
+  it('moves legacy project-source targets out of the actionable ledger', () => {
+    const model = normalizeSessionAnalysis({
+      evaluation: {
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [{ path: 'frontend/src/App.jsx', change: 'Refactor the component.', reason: 'The page is hard to scan.' }],
+        },
+      },
+    })
+
+    expect(model.evaluation.evaluationLedger.improvements).toEqual([])
+    expect(model.evaluation.evaluationLedger.legacyImprovements).toEqual([
+      expect.objectContaining({
+        path: 'frontend/src/App.jsx',
+        target: 'frontend/src/App.jsx',
+        targetKind: 'legacy_out_of_scope',
+        targetLabel: 'Out of scope — project source',
+        targetValid: false,
+        outOfScopeReason: expect.stringContaining('shown for traceability only'),
+      }),
+    ])
+  })
+
+  it.each([
+    ['null analysis', null],
+    ['empty analysis', { annotation: null, evaluation: null }],
+    ['missing analysis', undefined],
+  ])('keeps %s explicitly unrecorded', (_label, value) => {
+    const model = normalizeSessionAnalysis(value, { ...trace, summary: { tool_call_count: 9 } })
+
+    expect(model.recorded).toBe(false)
+    expect(model.annotation.recorded).toBe(false)
+    expect(model.evaluation.recorded).toBe(false)
+    expect(model.evaluation.verdict).toBeNull()
+    expect(model.evaluation.reviewSignals).toEqual([])
+  })
+
+  it('keeps an empty but stored annotation distinct from no analysis', () => {
+    const model = normalizeSessionAnalysis({ annotation: { schema_version: '1', source: 'session-annotator', turns: [], tools: [], skills: [] }, evaluation: null }, trace)
+
+    expect(model.recorded).toBe(true)
+    expect(model.annotation.categories.every((category) => category.annotatedCount === 0)).toBe(true)
+    expect(model.evaluation.recorded).toBe(false)
+  })
+
+  it('does not infer v1 signal occurrences from prose or trace evidence', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '1',
+        source: 'session-annotator',
+        turns: [],
+        tools: [
+          { event_id: 'pre-tool-1', tool_use_id: 'tool-1', necessary: 'unclear', rationale: 'Completion hook was unmatched.' },
+          { event_id: 'pre-tool-2', tool_use_id: 'tool-2', necessary: 'unclear', rationale: 'Completion hook was unmatched.' },
+        ],
+        skills: [],
+      },
+      evaluation: {
+        schema_version: '1',
+        source: 'session-evaluator',
+        verdict: 'fail',
+        critique: 'The trace contains unmatched tool hooks.',
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 2,
+          severity: 'warning',
+          detail: 'The persisted annotation marked two tool records unclear because their completion hooks were unmatched.',
+        }],
+        judge_alignment: { status: 'not_recorded' },
+        evaluation_ledger: { project: 'nala-trace', improvements: [] },
+      },
+    }, {
+      ...trace,
+      timeline: [
+        { id: 'pre-tool-1', hook_event_name: 'PreToolUse', tool_call_index: 0 },
+        { id: 'pre-tool-2', hook_event_name: 'PreToolUse', tool_call_index: 1 },
+      ],
+      tool_calls: [
+        { tool_use_id: 'tool-1', tool_name: 'view_image', input: { detail: 'high', path: 'one.svg' } },
+        { tool_use_id: 'tool-2', tool_name: 'rg', input: { cmd: 'rg --files' } },
+      ],
+    })
+
+    expect(model.evaluation.reviewSignals[0]).toMatchObject({
+      occurrenceCount: 2,
+      detail: expect.stringContaining('marked two tool records unclear'),
+      occurrences: [],
+    })
+    expect(model.evaluation.followUps[0].evidenceEventIds).toEqual([])
+  })
+
+  it('normalizes explicit v2 evidence, capture gaps, signal occurrences, coverage, and action targets', () => {
+    const model = normalizeSessionAnalysis({
+      updated_at: '2026-10-24T10:20:00Z',
+      annotation: {
+        schema_version: 'v2',
+        user_turns: [{
+          event_id: 'user-event-1',
+          signal_type: 'clarification',
+          summary: 'Please only change the evaluation page.',
+          rationale: 'The user clarified the implementation boundary.',
+        }],
+        turns: [{
+          event_id: 'assistant-event-1',
+          response_summary: 'Updated the evaluation view and checked its narrow layout.',
+          scope_adherence: 'deviation',
+          groundedness: 'unsupported',
+          verification: 'not_verified',
+          performance: 'worsened',
+          related_event_ids: ['tool-event-1'],
+        },
+        { event_id: 'assistant-event-2', response_summary: 'No verification was required.', scope_adherence: 'within_scope', verification: 'not_applicable' },
+        { event_id: 'assistant-event-3', response_summary: 'Evidence is incomplete.', scope_adherence: 'unclear', verification: 'unclear' }],
+        tools: [{
+          event_id: 'tool-event-1',
+          tool_name: 'Bash',
+          input_summary: 'npm run build',
+          output_summary: 'Vite produced the frontend bundle.',
+          completion_status: 'incomplete',
+          necessary: 'unclear',
+        },
+        { event_id: 'tool-event-2', tool_name: 'Bash', input_summary: 'npm test', output_summary: 'All checks passed.', completion_status: 'completed', necessary: 'yes' },
+        { event_id: 'tool-event-3', tool_name: 'Bash', input_summary: 'npm run lint', output_summary: 'Lint failed.', completion_status: 'failed', necessary: 'yes' },
+        { event_id: 'tool-event-4', tool_name: 'Bash', input_summary: 'npm run build', output_summary: 'No result captured.', completion_status: 'unknown', necessary: 'yes' }],
+        skills: [{ event_id: 'skill-event-1', skill_name: 'frontend-design', summary: 'Reshaped the evidence review layout.' }],
+        files: [{ event_id: 'file-event-1', path: 'AGENTS.md', operation: 'read', summary: 'Checked repository task instructions.' }],
+        capture_gaps: [{
+          category: 'tool calls',
+          event_ids: ['tool-gap-1'],
+          summary: 'One tool result was not captured.',
+          impact: 'The tool outcome cannot be verified from this record.',
+        }],
+        coverage: {
+          user_turns: { captured: 1, labeled: 1, unclear: 0 },
+          agent_turns: { captured: 3, labeled: 3, unclear: 1 },
+          tool_calls: { captured: 4, labeled: 4, unclear: 1 },
+          skill_invocations: { captured: 1, labeled: 1, unclear: 0 },
+          file_operations: { captured: 1, labeled: 1, unclear: 0 },
+        },
+      },
+      evaluation: {
+        schema_version: 'v2',
+        verdict: 'fail',
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 1,
+          severity: 'warning',
+          detail: 'A tool invocation has no captured completion.',
+          occurrences: [{
+            event_id: 'tool-gap-1',
+            event_kind: 'PreToolUse',
+            occurred_at: '2026-10-24T10:00:00Z',
+            summary: 'The tool started without a matching completion event.',
+            impact: 'Its result cannot be confirmed.',
+          }],
+        }],
+        evaluation_ledger: {
+          improvements: [{
+            target_type: 'agent_instructions',
+            change: 'Require explicit completion-hook checks.',
+            reason: 'The prior review treated incomplete evidence ambiguously.',
+            evidence_event_ids: ['tool-gap-1'],
+          },
+          { target_type: 'agent_behavior', change: 'Summarize the outcome.', reason: 'Make handoff intent explicit.' },
+          { target_type: 'skill_instructions', change: 'Document the evidence boundary.', reason: 'Keep skill behavior auditable.' },
+          { target_type: 'workflow_instructions', change: 'Record the final check.', reason: 'Make the handoff reproducible.' }],
+        },
+      },
+    })
+    const category = (key) => model.annotation.categories.find((item) => item.key === key)
+
+    expect(model.annotation.schemaVersion).toBe('2')
+    expect(category('user_turns')).toMatchObject({ coverageValue: '1 labeled / 1 captured', unclearCount: 0 })
+    expect(category('user_turns').records[0]).toMatchObject({
+      eventId: 'user-event-1',
+      summary: 'Please only change the evaluation page.',
+      rationale: 'The user clarified the implementation boundary.',
+    })
+    expect(category('turns')).toMatchObject({ coverageValue: '3 labeled / 3 captured', unclearCount: 1 })
+    expect(category('turns').records[0]).toMatchObject({
+      responseSummary: 'Updated the evaluation view and checked its narrow layout.',
+      scopeAdherence: 'deviation',
+      groundedness: 'unsupported',
+      verification: 'not_verified',
+      relatedEventIds: ['tool-event-1'],
+    })
+    expect(category('turns').records.map((record) => record.verification)).toEqual(['not_verified', 'not_applicable', 'unclear'])
+    expect(category('tools')).toMatchObject({ coverageValue: '4 labeled / 4 captured', unclearCount: 1 })
+    expect(category('tools').records[0]).toMatchObject({
+      toolName: 'Bash',
+      inputPreview: 'npm run build',
+      outputSummary: 'Vite produced the frontend bundle.',
+      completionStatus: 'incomplete',
+      completionDetail: 'The tool call was recorded, but its completion evidence is incomplete.',
+    })
+    expect(category('tools').records.map((record) => record.completionStatus)).toEqual(['incomplete', 'completed', 'failed', 'unknown'])
+    expect(category('skills').records[0]).toMatchObject({ skillName: 'frontend-design', summary: 'Reshaped the evidence review layout.' })
+    expect(category('files').records[0]).toMatchObject({ path: 'AGENTS.md', operation: 'Read', summary: 'Checked repository task instructions.' })
+    expect(model.annotation.captureGaps).toEqual([{
+      category: 'Tool Calls',
+      eventIds: ['tool-gap-1'],
+      summary: 'One tool result was not captured.',
+      impact: 'The tool outcome cannot be verified from this record.',
+    }])
+    expect(model.evaluation.reviewSignals[0].occurrences[0]).toMatchObject({
+      eventId: 'tool-gap-1',
+      eventKind: 'PreToolUse',
+      occurredAt: '2026-10-24T10:00:00Z',
+      summary: 'The tool started without a matching completion event.',
+      impact: 'Its result cannot be confirmed.',
+    })
+    expect(model.evaluation.evaluationLedger.improvements[0]).toMatchObject({
+      targetLabel: 'Agent instructions',
+      targetKind: 'instruction',
+      targetValid: true,
+      evidenceEventIds: ['tool-gap-1'],
+    })
+    expect(model.evaluation.evaluationLedger.improvements.map(({ targetKind, targetLabel, targetValid }) => ({ targetKind, targetLabel, targetValid }))).toEqual([
+      { targetKind: 'instruction', targetLabel: 'Agent instructions', targetValid: true },
+      { targetKind: 'agent', targetLabel: 'Agent behavior', targetValid: true },
+      { targetKind: 'skill', targetLabel: 'Skill instructions', targetValid: true },
+      { targetKind: 'workflow', targetLabel: 'Workflow instructions', targetValid: true },
+    ])
+  })
+
+  it('does not normalize the noncanonical v2 verification value partial', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '2',
+        turns: [{ event_id: 'agent-event-partial-verification', verification: 'partial' }],
+        coverage: { agent_turns: { captured: 1, labeled: 1, unclear: 0 } },
+      },
+      evaluation: null,
+    })
+    const turns = model.annotation.categories.find((category) => category.key === 'turns')
+
+    expect(turns.records[0].verification).toBeNull()
+    expect(turns.breakdowns.find((breakdown) => breakdown.label === 'Verification').values.map(({ value }) => value)).not.toContain('partial')
+  })
+
+  it('preserves captured invocation and completion evidence for annotation records', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '1',
+        source: 'session-annotator',
+        turns: [],
+        tools: [{
+          event_id: 'patch-pre-1',
+          tool_use_id: 'patch-use-1',
+          necessary: 'unclear',
+          rationale: 'The captured apply_patch call has no completed hook pair in this snapshot, so its necessity cannot be confirmed from complete evidence.',
+        }],
+        skills: [{
+          event_id: 'skill-pre-1',
+          skill_name: 'frontend-design',
+          necessary: 'yes',
+          rationale: 'The skill supported the required frontend design, responsive interaction, or browser verification work.',
+        }],
+      },
+      evaluation: null,
+    }, {
+      ...trace,
+      timeline: [{ id: 'patch-pre-1', hook_event_name: 'PreToolUse', tool_call_index: 0 }],
+      tool_calls: [{
+        tool_use_id: 'patch-use-1',
+        tool_name: 'apply_patch',
+        input: { patch: '*** Update File: frontend/src/App.jsx' },
+        status: 'unmatched',
+      }],
+      skill_invocations: [{
+        name: 'frontend-design',
+        event_id: 'skill-pre-1',
+        tool_use_id: 'skill-use-1',
+        tool_name: 'skill',
+        confidence: 'explicit',
+      }],
+    })
+
+    const tool = model.annotation.categories.find((category) => category.key === 'tools').records[0]
+    const skill = model.annotation.categories.find((category) => category.key === 'skills').records[0]
+
+    expect(tool).toMatchObject({
+      toolName: 'apply_patch',
+      inputPreview: expect.stringContaining('frontend/src/App.jsx'),
+      completionStatus: 'unmatched',
+      completionDetail: expect.stringContaining('No matching completion hook'),
+    })
+    expect(skill).toMatchObject({
+      skillName: 'frontend-design',
+      toolName: 'skill',
+      toolUseId: 'skill-use-1',
+      confidence: 'explicit',
+      invocationDetail: expect.stringContaining('frontend-design'),
+    })
+  })
+
+  it('derives one actionable follow-up per recorded warning signal', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: { schema_version: '1', source: 'session-annotator', turns: [], tools: [], skills: [] },
+      evaluation: {
+        schema_version: '1',
+        source: 'session-evaluator',
+        verdict: 'fail',
+        critique: 'The result has review findings.',
+        review_signals: [
+          { name: 'unmatched_tool_hook_pairs', count: 15, severity: 'warning', detail: 'Fifteen tool records have incomplete hook evidence.' },
+          { name: 'unverified_authenticated_browser_flow', count: 1, severity: 'warning', detail: 'Authenticated browser evidence is missing.' },
+          { name: 'delivery_branch_collision_recovered', count: 1, severity: 'warning', detail: 'A branch collision was recovered.' },
+          { name: 'environment_retry_without_regression', count: 1, severity: 'info', detail: 'A retry completed without regression.' },
+        ],
+        judge_alignment: { status: 'not_recorded' },
+        evaluation_ledger: {
+          project: 'nala-trace',
+          improvements: [{ path: 'AGENTS.md', change: 'Clarify review ownership.', reason: 'The rule was ambiguous.' }],
+        },
+      },
+    }, trace)
+
+    expect(model.evaluation.followUps).toEqual([
+      expect.objectContaining({
+        signalKey: 'unmatched_tool_hook_pairs',
+        action: 'Keep tool necessity marked unknown when the completion event is missing, and verify the event pair before relying on that tool result.',
+        occurrenceCount: 15,
+      }),
+      expect.objectContaining({
+        signalKey: 'unverified_authenticated_browser_flow',
+        action: 'For browser-dependent work, run the authenticated desktop and mobile checks and record what each one showed.',
+      }),
+      expect.objectContaining({
+        signalKey: 'delivery_branch_collision_recovered',
+        action: 'Before handoff, verify that the final branch and pull request use the requested base and contain the intended changes.',
+      }),
+    ])
+  })
+})

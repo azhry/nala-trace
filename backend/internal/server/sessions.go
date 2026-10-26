@@ -13,10 +13,13 @@ import (
 	"github.com/azhry/nala-trace/backend/internal/auth"
 	"github.com/azhry/nala-trace/backend/internal/reconstruction"
 	"github.com/azhry/nala-trace/backend/internal/storage"
+	"github.com/azhry/nala-trace/backend/internal/trace"
 )
 
 const (
 	defaultSessionLimit                     = 100
+	defaultTracePageSize                    = 100
+	maxTracePageSize                        = 200
 	maxSessionSummaryFeatureWorkers         = 16
 	sessionSummaryFeatureEventQueueCapacity = 256
 )
@@ -334,7 +337,11 @@ func listSessionSummaryWindow(ctx context.Context, userID string, limit int, sum
 	return rows, nil
 }
 
-func NewSessionTraceHandler(repository SessionEventReader) http.Handler {
+func NewSessionTraceHandler(repository SessionEventReader, analysisReaders ...storage.SessionAnalysisReader) http.Handler {
+	var analysisReader storage.SessionAnalysisReader
+	if len(analysisReaders) > 0 {
+		analysisReader = analysisReaders[0]
+	}
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			WriteError(response, http.StatusMethodNotAllowed, "method_not_allowed", "method is not allowed")
@@ -350,6 +357,11 @@ func NewSessionTraceHandler(repository SessionEventReader) http.Handler {
 			WriteError(response, http.StatusNotFound, "trace_not_found", "session trace was not found")
 			return
 		}
+		page, err := parseTracePage(request)
+		if err != nil {
+			WriteError(response, http.StatusBadRequest, "invalid_query", "query parameters are invalid")
+			return
+		}
 		if repository == nil {
 			WriteError(response, http.StatusServiceUnavailable, "trace_unavailable", "session trace is unavailable")
 			return
@@ -363,8 +375,107 @@ func NewSessionTraceHandler(repository SessionEventReader) http.Handler {
 			WriteError(response, http.StatusNotFound, "trace_not_found", "session trace was not found")
 			return
 		}
-		WriteJSON(response, http.StatusOK, reconstruction.Reconstruct(sessionID, user.ID, events))
+		result := reconstruction.Reconstruct(sessionID, user.ID, events)
+		if analysisReader != nil {
+			analysis, err := analysisReader.GetSessionAnalysisForUser(request.Context(), user.ID, sessionID)
+			if err != nil {
+				WriteError(response, http.StatusInternalServerError, "analysis_failed", "session analysis could not be loaded")
+				return
+			}
+			result.Analysis = analysis
+		} else {
+			result.Analysis = trace.NewAnalysis()
+		}
+		result = paginateTrace(result, page)
+		WriteJSON(response, http.StatusOK, result)
 	})
+}
+
+type tracePageRequest struct {
+	offset int
+	limit  int
+}
+
+func parseTracePage(request *http.Request) (tracePageRequest, error) {
+	values := request.URL.Query()
+	for key := range values {
+		if key != "offset" && key != "limit" {
+			return tracePageRequest{}, strconv.ErrSyntax
+		}
+	}
+
+	page := tracePageRequest{limit: defaultTracePageSize}
+	if offsets, exists := values["offset"]; exists {
+		if len(offsets) != 1 || strings.TrimSpace(offsets[0]) == "" {
+			return tracePageRequest{}, strconv.ErrSyntax
+		}
+		offset, err := strconv.Atoi(offsets[0])
+		if err != nil || offset < 0 {
+			return tracePageRequest{}, strconv.ErrSyntax
+		}
+		page.offset = offset
+	}
+	if limits, exists := values["limit"]; exists {
+		if len(limits) != 1 || strings.TrimSpace(limits[0]) == "" {
+			return tracePageRequest{}, strconv.ErrSyntax
+		}
+		limit, err := strconv.Atoi(limits[0])
+		if err != nil || limit < 1 || limit > maxTracePageSize {
+			return tracePageRequest{}, strconv.ErrSyntax
+		}
+		page.limit = limit
+	}
+	return page, nil
+}
+
+func paginateTrace(result trace.Trace, page tracePageRequest) trace.Trace {
+	total := len(result.Timeline)
+	start := page.offset
+	if start > total {
+		start = total
+	}
+	end := total
+	if page.offset < total && page.limit < total-page.offset {
+		end = page.offset + page.limit
+	}
+
+	result.Timeline = append([]trace.TimelineEvent(nil), result.Timeline[start:end]...)
+	result.Pagination = &trace.Pagination{
+		Offset:  page.offset,
+		Limit:   page.limit,
+		Total:   total,
+		HasMore: end < total,
+	}
+
+	eventIDs := make(map[string]struct{}, end-start)
+	toolIndexes := make(map[int]struct{})
+	for _, event := range result.Timeline {
+		eventIDs[event.ID] = struct{}{}
+		if event.HookEventName == "PreToolUse" && event.ToolCallIndex != nil {
+			toolIndexes[*event.ToolCallIndex] = struct{}{}
+		}
+	}
+	result.Conversation = filterTraceItems(result.Conversation, func(item trace.ConversationItem) string { return item.EventID }, eventIDs)
+	result.SkillInvocations = filterTraceItems(result.SkillInvocations, func(item trace.SkillInvocation) string { return item.EventID }, eventIDs)
+	result.Files = filterTraceItems(result.Files, func(item trace.FileOperation) string { return item.EventID }, eventIDs)
+	toolCalls := make([]trace.ToolCall, 0, len(toolIndexes))
+	for index, item := range result.ToolCalls {
+		if _, include := toolIndexes[index]; include {
+			toolCalls = append(toolCalls, item)
+		}
+	}
+	result.ToolCalls = toolCalls
+	return result
+}
+
+func filterTraceItems[T any](items []T, eventID func(T) string, included map[string]struct{}) []T {
+	filtered := make([]T, 0, len(items))
+	for _, item := range items {
+		if _, ok := included[eventID(item)]; ok {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func sessionIDFromPath(requestPath string) string {

@@ -587,15 +587,16 @@ function apiTraceViewModel(trace) {
   const fileOperationSource = firstArray(trace, ['files', 'fileOperations'])
   const skillInvocations = (skillInvocationSource || EMPTY_LIST).map(normalizeSkillInvocation)
   const files = (fileOperationSource || EMPTY_LIST).map(normalizeFileOperation)
-  const skillInvocationCount = skillInvocationSource
+  const isPaginatedTrace = Boolean(trace.pagination)
+  const skillInvocationCount = skillInvocationSource && !isPaginatedTrace
     ? skillInvocations.length
-    : summaryCount(summary, ['skill_invocation_count', 'skillInvocationCount'])
-  const fileOperationCount = fileOperationSource
+    : summaryCount(summary, ['skill_invocation_count', 'skillInvocationCount'], skillInvocations.length)
+  const fileOperationCount = fileOperationSource && !isPaginatedTrace
     ? files.length
-    : summaryCount(summary, ['file_operation_count', 'fileOperationCount'])
-  const fileReadCount = fileOperationSource
+    : summaryCount(summary, ['file_operation_count', 'fileOperationCount'], files.length)
+  const fileReadCount = fileOperationSource && !isPaginatedTrace
     ? files.filter((file) => file.operation === 'read').length
-    : summaryCount(summary, ['file_read_count', 'fileReadCount'])
+    : summaryCount(summary, ['file_read_count', 'fileReadCount'], files.filter((file) => file.operation === 'read').length)
   const mcpCallCount = summaryCount(summary, ['mcp_call_count', 'mcpCallCount'])
   const mcpServers = summaryServerNames(summary)
   const projectedSignals = projectApiSignals({ timelineEvents, toolEvents, skillInvocations, files })

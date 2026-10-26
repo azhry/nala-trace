@@ -497,6 +497,22 @@ function countVerdicts(records, key, values) {
   }))
 }
 
+function markSharedNeutralRationales(turns) {
+  const rationaleCounts = new Map()
+  turns.forEach((turn) => {
+    if (turn.performance !== 'neutral' || !turn.rationale) return
+    const key = turn.rationale.trim().replace(/\s+/g, ' ').toLowerCase()
+    rationaleCounts.set(key, (rationaleCounts.get(key) || 0) + 1)
+  })
+
+  return turns.map((turn) => {
+    if (turn.performance !== 'neutral' || !turn.rationale) return turn
+    const key = turn.rationale.trim().replace(/\s+/g, ' ').toLowerCase()
+    const rationaleRepeatCount = rationaleCounts.get(key) || 0
+    return rationaleRepeatCount > 1 ? { ...turn, rationaleRepeatCount } : turn
+  })
+}
+
 function coverageCopy(labeledCount, capturedCountValue, unit, isRecorded) {
   if (!isRecorded) return { value: 'Not included', detail: 'This category was not stored in this analysis version' }
   if (labeledCount === null && capturedCountValue === null) return { value: 'Coverage unavailable', detail: 'No saved labeled total or captured total is available' }
@@ -549,7 +565,7 @@ function normalizeAnnotation(annotation, trace) {
   const skillsRecorded = Array.isArray(annotation?.skills)
   const filesRecorded = Array.isArray(annotation?.files)
   const userTurns = safeArray(annotation?.user_turns ?? annotation?.userTurns).map(normalizeUserTurn)
-  const turns = safeArray(annotation?.turns).map((record) => normalizeTurn(record, trace))
+  const turns = markSharedNeutralRationales(safeArray(annotation?.turns).map((record) => normalizeTurn(record, trace)))
   const tools = safeArray(annotation?.tools).map((record) => normalizeTool(record, trace))
   const skills = safeArray(annotation?.skills).map((record) => normalizeSkill(record, trace))
   const files = safeArray(annotation?.files).map(normalizeFile)
@@ -572,6 +588,7 @@ function normalizeAnnotation(annotation, trace) {
       role: turn.turnRole,
       preview: turn.turnPreview,
       rationale: turn.rationale,
+      ...(turn.rationaleRepeatCount > 1 ? { rationaleRepeatCount: turn.rationaleRepeatCount } : {}),
     })),
   }))
 

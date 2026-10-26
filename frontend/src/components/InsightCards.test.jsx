@@ -444,6 +444,32 @@ describe('InsightCards', () => {
     expect(screen.getByText(/This response contains only the current pair; revision history is not stored/)).toBeInTheDocument()
   })
 
+  it('marks a generic rationale repeated across neutral turns unclear while preserving the saved text', async () => {
+    const user = userEvent.setup()
+    const sharedRationale = 'The bounded environment and credential limitation kept each response to the same status.'
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: {
+        schema_version: '2',
+        source: 'session-annotator',
+        coverage: { agent_turns: { captured: 3, labeled: 3, unclear: 0 } },
+        turns: [
+          { event_id: 'shared-neutral-1', response_summary: 'The first response summarized the repository.', performance: 'neutral', rationale: sharedRationale },
+          { event_id: 'shared-neutral-2', response_summary: 'The second response listed available tests.', performance: 'neutral', rationale: sharedRationale },
+          { event_id: 'shared-neutral-3', response_summary: 'The third response repeated the result.', performance: 'neutral', rationale: sharedRationale },
+        ],
+      },
+      evaluation: { ...evaluation, review_signals: [] },
+    }} />)
+
+    await user.click(screen.getByText('Evidence details'))
+
+    expect(screen.getAllByText('Rationale: Unclear')).toHaveLength(9)
+    expect(screen.getAllByText(/This rationale is repeated across 3 neutral turns and does not distinguish this turn/)).toHaveLength(9)
+    expect(screen.getAllByText((_, element) => element.tagName === 'P' && element.textContent.includes(`Saved rationale: “${sharedRationale}”`))).toHaveLength(9)
+    const agentTurnsCategory = Array.from(document.querySelectorAll('.analysis-category-card')).find((category) => category.textContent.includes('Agent turns'))
+    expect(agentTurnsCategory.querySelector('.analysis-evidence-list')).toHaveTextContent('Rationale: Unclear')
+  })
+
   it('filters signals by severity and category and names fields missing from saved occurrences', async () => {
     const user = userEvent.setup()
     render(<InsightCards forceAnalysis analysis={{

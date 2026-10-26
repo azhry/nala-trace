@@ -715,7 +715,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .analysis-highlight-counts strong { color: var(--text); font-size: 17px; }
 .analysis-turn-impact-list, .analysis-priority-findings-list, .analysis-evidence-gap-highlights { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
 .analysis-turn-impact-item { display: grid; grid-template-columns: minmax(100px, max-content) minmax(0, 1fr); align-items: start; gap: 8px 12px; padding: 9px 0; border-top: 1px solid var(--line); }
-.analysis-turn-impact-item > span:last-child { color: var(--text); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.analysis-turn-impact-status { display: flex; flex-wrap: wrap; align-items: start; gap: 5px; }
+.analysis-turn-impact-item > span { color: var(--text); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .analysis-turn-impact-item > p, .analysis-performance-turn > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .analysis-turn-impact-item > p { grid-column: 2; }
 .analysis-priority-finding, .analysis-evidence-gap-highlight { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); }

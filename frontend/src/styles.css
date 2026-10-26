@@ -235,6 +235,9 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 .analysis-disclosure-summary-copy > span:last-child { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .analysis-disclosure-summary-meta { display: grid; flex: 0 0 auto; gap: 5px; color: var(--faint); font-family: var(--mono); font-size: 9px; text-align: right; }
 .analysis-disclosure-toggle { color: var(--purple); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.analysis-disclosure-collapse { display: none; }
+.analysis-evidence-disclosure[open] .analysis-disclosure-expand { display: none; }
+.analysis-evidence-disclosure[open] .analysis-disclosure-collapse { display: inline; }
 .analysis-disclosure-content { display: grid; gap: 14px; padding: 14px; }
 .analysis-category-list { display: grid; gap: 8px; }
 .analysis-category-card { min-width: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); }

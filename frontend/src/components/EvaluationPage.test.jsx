@@ -60,9 +60,9 @@ describe('EvaluationPage', () => {
     expect(screen.getByText('What to improve')).toBeInTheDocument()
 
     const evidenceDetails = screen.getByText('Evidence details').closest('details')
-    expect(evidenceDetails).toHaveAttribute('open')
-    fireEvent.click(screen.getByText('Evidence details'))
     expect(evidenceDetails).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByText('Evidence details'))
+    expect(evidenceDetails).toHaveAttribute('open')
   })
 
   it('places result impact, priority findings, agent changes, and evidence gaps before the audit trail', () => {

@@ -24,9 +24,16 @@
 
 ## Local service operations
 
-- Use the Nala Ctrl API available to the agent environment for local service lifecycle and status. Do not open or automate the Nala Ctrl desktop UI. Identify the exact project and service from its folder and `nala.yml`, query its status through the API before acting, use the API's run or stop operation, then query status again. Use API-provided service details or logs when available.
-- For branch questions, use Nala Ctrl's API branch-state operation. It reports the current branch of the registered project folder; it does not record the branch checked out when a service started. If the service's configured `cwd` is a different Git worktree, query that exact worktree through the API if supported. If the API cannot report it, say so; do not claim the registered project's branch is the service worktree's branch or infer a startup branch.
-- Nala Ctrl manages only folders explicitly registered and services declared in that folder's `nala.yml`. If the project or service is not available through the API, report that limitation. If API access is unavailable, stop and report the blocker; do not open the UI, run the configured command directly, or stop processes manually unless the user explicitly authorizes that fallback.
+Nala Ctrl is the local process manager in `C:\Users\Lyrid\Documents\Projects\nala-ctrl` (the `nala-ctrl` repository beside these projects under `Projects`). It reads registered folders' `nala.yml`; each entry under `projects` is an independently managed service. It starts the configured `run` command in `cwd`, tracks processes it starts, reports port conflicts, and captures log output. It does not discover arbitrary system processes.
+
+The agent API surface is `ProjectManager` in `nala-ctrl\app.go`, implemented in `manager.go` and `git.go`; the generated Wails bindings are in `frontend\wailsjs\go\main\ProjectManager.js`. Use the Nala Ctrl API client or bridge exposed to the agent and these operation names. Do not open or automate the desktop UI, or call the generated Wails JavaScript binding outside an API bridge.
+
+- Call `GetWorkspace()` to list registered project folders and their project and service IDs. Use the stable service ID for service operations, especially when service names repeat.
+- If the repository folder is not listed, call `LoadFolder(<absolute-folder-path>)` only when it already contains a valid `nala.yml`; this registers the folder with Nala Ctrl. Do not use `ChooseFolder()` because it opens a folder dialog. Do not create or edit `nala.yml` just to make registration work.
+- Before acting, call `GetProjectDetails(<service-id>)`. It returns the service's managed `running` state and PID, configured `cwd`, command, port, log path, and recent log lines. `portOwner` is a separate port-conflict result and may be an unrelated process; do not treat it as Nala Ctrl-managed service state.
+- Start with `RunProject(<service-id>)` and stop with `StopProject(<service-id>)`. After either operation, call `GetProjectDetails(<service-id>)` again to confirm the result. If start returns a `portOwner`, do not terminate it without explicit user authorization; `TerminatePortOwnerAndRun` stops another process.
+- For branch questions, call `GetProjectGitBranchState(<project-id>)` using the project ID from `GetWorkspace()`. It reports the current branch and repository root for the registered project folder; it does not record the branch at process start. If the service's configured `cwd` resolves to a different Git worktree, the current API cannot report that worktree's branch. Say it is unavailable rather than inferring it. Do not call `SwitchProjectGitBranch()` just to inspect branch state.
+- If the Nala Ctrl API client or bridge is unavailable, report that blocker. Do not open the UI, run service commands directly, or stop processes manually unless the user explicitly authorizes that fallback.
 
 ## Branches and publication
 

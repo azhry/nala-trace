@@ -1,6 +1,6 @@
 # Nala Ctrl headless API reference
 
-## Start and authenticate
+## Start the API
 
 The headless server is part of Nala Ctrl's Go command and starts without Wails or the desktop window. Run this in a long-lived terminal:
 
@@ -10,15 +10,14 @@ nala-ctrl api serve --listen 127.0.0.1:47653
 
 If the CLI is not on PATH, do not guess its install path. Report that the Nala Ctrl console command must be installed or made available. When the server prints a different loopback address, use that observed address instead of the default below.
 
-Get the private curl configuration path and verify health from another terminal:
+Verify health from another terminal:
 
 ~~~bash
 api="http://127.0.0.1:47653"
-token_file="$(nala-ctrl api token-file)"
-curl --config "$token_file" --silent --show-error --fail "$api/v1/health"
+curl --silent --show-error --fail "$api/v1/health"
 ~~~
 
-The token file is stored in the user's Nala Ctrl config directory and contains only the curl Authorization header. The CLI prints the path, never the token. Do not cat, print, commit, or transmit the file contents. All routes require that bearer header. The listener accepts loopback addresses only and rejects browser-origin requests.
+The API is unauthenticated and accepts requests only from loopback clients. Browser-origin requests are rejected.
 
 ## Configuration and registration
 
@@ -30,11 +29,11 @@ POST /v1/projects/load accepts one JSON object with a folder field containing th
 
 ## Endpoints
 
-Every request uses the curl config path. These examples assume the default address and that api and token_file were set as above.
+These examples assume the default address and that api is set as above. Requests do not require authentication.
 
 | Request | Response and meaning |
 | --- | --- |
-| GET /v1/health | 200 with {"ok":true} when the authenticated server is ready. |
+| GET /v1/health | 200 with {"ok":true} when the server is ready. |
 | GET /v1/workspace | Workspace folder, needsConfig, hasWarnings, project IDs/folders/names, and service IDs/names/cwd/port/logPath. No run command or log lines are returned. hasWarnings flags persistence or restore problems without returning private diagnostic text. |
 | POST /v1/projects/load | Send Content-Type: application/json and {"folder":"absolute-project-folder"}. Returns the safe workspace after loading. |
 | GET /v1/services/{serviceID} | Returns project/service identity, cwd, port, logPath, configured, running, optional pid, and optional portInUse. |
@@ -46,7 +45,7 @@ Every request uses the curl config path. These examples assume the default addre
 Example health request:
 
 ~~~bash
-curl --config "$token_file" --silent --show-error --fail "$api/v1/health"
+curl --silent --show-error --fail "$api/v1/health"
 ~~~
 
 
@@ -54,36 +53,36 @@ Example explicit project registration request when the user asked to run a valid
 
 ~~~bash
 folder_json="$(python -c 'import json, os; print(json.dumps({"folder": os.getcwd()}))')"
-curl --config "$token_file" --silent --show-error --header 'Content-Type: application/json' --data-binary "$folder_json" "$api/v1/projects/load"
+curl --silent --show-error --header 'Content-Type: application/json' --data-binary "$folder_json" "$api/v1/projects/load"
 ~~~
 
 Example service status request, after selecting the service ID from the workspace response:
 ~~~bash
-curl --config "$token_file" --silent --show-error --fail "$api/v1/services/$service_id"
+curl --silent --show-error --fail "$api/v1/services/$service_id"
 ~~~
 
 Example run request:
 
 ~~~bash
-curl --config "$token_file" --silent --show-error --write-out '\nHTTP %{http_code}\n' --request POST "$api/v1/services/$service_id/run"
+curl --silent --show-error --write-out '\nHTTP %{http_code}\n' --request POST "$api/v1/services/$service_id/run"
 ~~~
 
 Example stop request:
 
 ~~~bash
-curl --config "$token_file" --silent --show-error --write-out '\nHTTP %{http_code}\n' --request POST "$api/v1/services/$service_id/stop"
+curl --silent --show-error --write-out '\nHTTP %{http_code}\n' --request POST "$api/v1/services/$service_id/stop"
 ~~~
 
 Example bounded log request for a failure diagnosis:
 
 ~~~bash
-curl --config "$token_file" --silent --show-error --fail "$api/v1/services/$service_id/logs?limit=100"
+curl --silent --show-error --fail "$api/v1/services/$service_id/logs?limit=100"
 ~~~
 
 Example project-root branch request. project_id is the absolute folder ID selected from the workspace response:
 
 ~~~bash
-curl --config "$token_file" --silent --show-error --fail --get --data-urlencode "projectId=$project_id" "$api/v1/projects/git-branch"
+curl --silent --show-error --fail --get --data-urlencode "projectId=$project_id" "$api/v1/projects/git-branch"
 ~~~
 
 ## State and safety limits

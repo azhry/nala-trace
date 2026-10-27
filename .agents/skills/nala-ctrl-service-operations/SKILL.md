@@ -9,14 +9,14 @@ description: Use Nala Ctrl's loopback HTTP API to inspect a repository's nala.ym
 
 Nala Ctrl manages local services configured in a repository-root nala.yml file. Each item under projects defines one service. Its headless API is a local HTTP service started from the Nala Ctrl command line; it does not require opening the desktop app.
 
-Use the API described in [REFERENCE.md](REFERENCE.md). The command is nala-ctrl api serve --listen 127.0.0.1:47653. Every request requires a bearer token. The command nala-ctrl api token-file prints only a path to a private curl config containing the bearer header; pass that path to curl with --config. Do not read, print, copy, or commit that file's contents.
+Use the API described in [REFERENCE.md](REFERENCE.md). The command is nala-ctrl api serve --listen 127.0.0.1:47653. The API accepts unauthenticated requests only from loopback addresses; call endpoints directly with curl and no Authorization header. Browser-origin requests are rejected.
 
 If the API is not responding, start the serve command in a separate long-running terminal and retry the health request. If the CLI is unavailable or the server cannot start, report that exact blocker. Do not open the desktop UI or fall back to direct process commands.
 
 ## Workflow
 
 1. Check the target repository's root nala.yml and confirm that the requested service key exists under projects. Do not print configured run commands or environment values. Nala Ctrl uses the exact filename nala.yml; a file named .nala.yml is a different contract.
-2. Get the private curl config path and call GET /v1/health. All endpoints, including health, require authentication.
+2. Call GET /v1/health directly with curl and no Authorization header.
 3. Call GET /v1/workspace and match the repository by its normalized absolute folder path, then select the exact service ID. Do not match by project basename alone.
 4. Keep configuration, registration, and process state separate:
    - No matching service in the local nala.yml means it is not configured.

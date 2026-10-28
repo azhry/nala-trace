@@ -476,6 +476,52 @@ describe('authenticated sessions flow', () => {
     await waitFor(() => expect(window.location.hash).toBe('#/sessions/authenticated-session'))
   })
 
+  it('opens a saved occurrence in the paginated trace only after the reviewer follows its link', async () => {
+    window.history.replaceState({}, '', '/#/sessions/authenticated-session/evaluation')
+    getSessionAnalysis.mockResolvedValueOnce({
+      session_id: 'authenticated-session',
+      analysis: {
+        annotation: { schema_version: '2', turns: [] },
+        evaluation: {
+          schema_version: '2',
+          verdict: 'fail',
+          critique: 'One captured event needs review.',
+          review_signals: [{
+            name: 'missing_user_context',
+            count: 1,
+            severity: 'warning',
+            detail: 'A prompt record needs inspection.',
+            occurrences: [{
+              event_id: 'ObjectID("page-event-100")',
+              event_kind: 'UserPromptSubmit',
+              occurred_at: '2026-01-01T01:40:00.000Z',
+              summary: 'Next page event',
+              impact: 'The referenced user request needs review.',
+            }],
+          }],
+          evaluation_ledger: { project: 'nala-trace', improvements: [] },
+        },
+      },
+    })
+    getTrace.mockResolvedValueOnce(paginatedTracePage(0)).mockResolvedValueOnce(paginatedTracePage(100))
+
+    const { container } = render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Priority findings' })).toBeInTheDocument()
+    const traceLink = screen.getAllByRole('link', { name: 'Open full record in session trace' })[0]
+    expect(traceLink).toHaveAttribute('href', '#/sessions/authenticated-session?event=page-event-100')
+    expect(getSessionAnalysis).toHaveBeenCalledExactlyOnceWith('authenticated-session')
+    expect(getTrace).not.toHaveBeenCalled()
+
+    fireEvent.click(traceLink)
+
+    await waitFor(() => expect(window.location.hash).toBe('#/sessions/authenticated-session?event=page-event-100'))
+    await waitFor(() => expect(getTrace).toHaveBeenNthCalledWith(1, 'authenticated-session', expect.objectContaining({ offset: 0 })))
+    await waitFor(() => expect(getTrace).toHaveBeenNthCalledWith(2, 'authenticated-session', expect.objectContaining({ offset: 100 })))
+    expect(await screen.findByText('Next page event')).toBeInTheDocument()
+    await waitFor(() => expect(container.querySelector('[data-trace-event-active="true"]')).toBeInTheDocument())
+  })
+
   it('shows separate loading, failure, retry, and empty states without requesting the full trace', async () => {
     window.history.replaceState({}, '', '/#/sessions/authenticated-session/evaluation')
     let rejectAnalysis

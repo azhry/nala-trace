@@ -1,4 +1,5 @@
 import { getToolInputPreview } from './traceViewModel'
+import { normalizeCapturedEventId } from './eventIds'
 
 const EMPTY_LIST = []
 const TURN_PREVIEW_LIMIT = 240
@@ -94,7 +95,16 @@ const MOJIBAKE_SEQUENCE = new RegExp(`[\\u00c2-\\u00f4][${escapeCharacterClass(W
 
 function repairMojibakeSequences(value) {
   if (!UTF8_DECODER) return value
-  return value.replace(MOJIBAKE_SEQUENCE, (sequence) => {
+  return value.replace(MOJIBAKE_SEQUENCE, (sequence, offset, source) => {
+    const first = sequence.codePointAt(0)
+    const knownLead = [0x00c2, 0x00c3, 0x00e2, 0x00ef, 0x00f0].includes(first)
+    const hasLatin1Continuation = Array.from(sequence.slice(1)).some((character) => {
+      const codePoint = character.codePointAt(0)
+      return codePoint >= 0x80 && codePoint <= 0xbf
+    })
+    const nearbyMarker = /[\u00c2\u00c3\u00e2\u00ef\u00f0]/u.test(source.slice(Math.max(0, offset - 4), offset)) ||
+      /[\u00c2\u00c3\u00e2\u00ef\u00f0]/u.test(source.slice(offset + sequence.length, offset + sequence.length + 4))
+    if (!knownLead && !(sequence.length >= 3 && hasLatin1Continuation) && !nearbyMarker) return sequence
     const bytes = Array.from(sequence, windows1252Byte)
     if (bytes.some((byte) => byte === null)) return sequence
 
@@ -111,7 +121,7 @@ export function repairCapturedText(value) {
   if (typeof value !== 'string' || !value) return value
 
   let repaired = value
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     const candidate = repairMojibakeSequences(repaired)
     if (candidate === repaired) break
     repaired = candidate
@@ -232,7 +242,7 @@ function clipTurnPreview(value) {
 }
 
 function stringList(value) {
-  return safeArray(value).map(cleanString).filter(Boolean)
+  return safeArray(value).map(normalizeCapturedEventId).filter(Boolean)
 }
 
 function normalizedValue(value) {
@@ -312,15 +322,15 @@ function capturedEvidenceCounts(trace = {}, annotation = {}) {
 
 function linkedConversationItem(trace, record) {
   const conversation = safeArray(trace?.conversation)
-  const eventId = cleanString(record.event_id ?? record.eventId)
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId)
   if (eventId) {
-    const byEventId = conversation.find((item) => cleanString(item?.event_id ?? item?.eventId) === eventId)
+    const byEventId = conversation.find((item) => normalizeCapturedEventId(item?.event_id ?? item?.eventId) === eventId)
     if (byEventId) return byEventId
   }
 
   let turnId = cleanString(record.turn_id ?? record.turnId)
   if (!turnId && eventId) {
-    const timelineEvent = safeArray(trace?.timeline).find((event) => cleanString(event?.id) === eventId)
+    const timelineEvent = safeArray(trace?.timeline).find((event) => normalizeCapturedEventId(event?.id) === eventId)
     turnId = cleanString(timelineEvent?.turn_id ?? timelineEvent?.turnId)
   }
   if (!turnId) return null
@@ -334,10 +344,11 @@ function linkedConversationItem(trace, record) {
 
 function normalizeTurn(record = {}, trace = {}) {
   const conversationItem = linkedConversationItem(trace, record)
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId) || normalizeCapturedEventId(conversationItem?.event_id ?? conversationItem?.eventId) || 'Event ID not recorded'
   const turnId = cleanString(record.turn_id ?? record.turnId) || cleanString(conversationItem?.turn_id ?? conversationItem?.turnId) || null
   const responseSummary = clipTurnPreview(record.response_summary ?? record.responseSummary ?? conversationItem?.content) || null
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
+    eventId,
     turnId,
     turnRole: cleanString(record.role ?? record.speaker ?? conversationItem?.role).toLowerCase() || 'assistant',
     turnPreview: responseSummary,
@@ -355,7 +366,7 @@ function normalizeTurn(record = {}, trace = {}) {
 function normalizeUserTurn(record = {}) {
   const signalType = normalizedEnum(record.signal_type ?? record.signalType ?? record.type, USER_SIGNAL_TYPES, { scope_clarification: 'clarification' })
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
+    eventId: normalizeCapturedEventId(record.event_id ?? record.eventId) || 'Event ID not recorded',
     turnId: cleanString(record.turn_id ?? record.turnId) || null,
     signalType: humanizeValue(signalType) || 'Other',
     summary: clipTurnPreview(record.summary ?? record.user_summary ?? record.userSummary ?? record.content) || null,
@@ -372,21 +383,21 @@ function linkedToolCall(trace, record) {
     if (byToolUseId) return byToolUseId
   }
 
-  const eventId = cleanString(record.event_id ?? record.eventId)
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId)
   if (!eventId) return null
   const timeline = safeArray(trace?.timeline)
-  const timelineEvent = timeline.find((event) => cleanString(event?.id) === eventId)
+  const timelineEvent = timeline.find((event) => normalizeCapturedEventId(event?.id) === eventId)
   const toolCallIndex = timelineEvent?.tool_call_index ?? timelineEvent?.toolCallIndex
   if (Number.isInteger(toolCallIndex) && toolCalls[toolCallIndex]) return toolCalls[toolCallIndex]
 
-  return toolCalls.find((call) => cleanString(call?.event_id ?? call?.eventId) === eventId) || null
+  return toolCalls.find((call) => normalizeCapturedEventId(call?.event_id ?? call?.eventId) === eventId) || null
 }
 
 function linkedSkillInvocation(trace, record) {
   const invocations = safeArray(trace?.skill_invocations)
-  const eventId = cleanString(record.event_id ?? record.eventId)
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId)
   if (eventId) {
-    const byEventId = invocations.find((invocation) => cleanString(invocation?.event_id ?? invocation?.eventId) === eventId)
+    const byEventId = invocations.find((invocation) => normalizeCapturedEventId(invocation?.event_id ?? invocation?.eventId) === eventId)
     if (byEventId) return byEventId
   }
 
@@ -415,7 +426,7 @@ function normalizeTool(record = {}, trace = {}) {
     ? completionDetails[completionStatus] || `Captured completion status: ${humanizeValue(completionStatus)}.`
     : 'Completion status not recorded.'
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
+    eventId: normalizeCapturedEventId(record.event_id ?? record.eventId) || 'Event ID not recorded',
     toolUseId,
     toolName,
     inputPreview: inputSummary,
@@ -430,7 +441,7 @@ function normalizeTool(record = {}, trace = {}) {
 
 function normalizeSkill(record = {}, trace = {}) {
   const invocation = linkedSkillInvocation(trace, record)
-  const eventId = cleanString(record.event_id ?? record.eventId) || cleanString(invocation?.event_id ?? invocation?.eventId) || 'Event ID not recorded'
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId) || normalizeCapturedEventId(invocation?.event_id ?? invocation?.eventId) || 'Event ID not recorded'
   const rawSkillName = cleanString(record.skill_name ?? record.skillName) || cleanString(invocation?.name ?? invocation?.skill_name ?? invocation?.skillName) || 'Skill name not recorded'
   const skillName = repairCapturedText(rawSkillName)
   const toolName = repairCapturedText(cleanString(invocation?.tool_name ?? invocation?.toolName)) || null
@@ -459,7 +470,7 @@ function normalizeSkill(record = {}, trace = {}) {
 
 function normalizeFile(record = {}) {
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
+    eventId: normalizeCapturedEventId(record.event_id ?? record.eventId) || 'Event ID not recorded',
     path: cleanString(record.path ?? record.file_path ?? record.filePath) || 'File path not recorded',
     operation: humanizeValue(record.operation) || 'Operation not recorded',
     summary: clipTurnPreview(record.summary ?? record.file_summary ?? record.fileSummary) || null,
@@ -585,9 +596,16 @@ function normalizeAnnotation(annotation, trace) {
     turnIds: turns.filter((turn) => turn.performance === item.value).map((turn) => turn.turnId || turn.eventId),
     turns: turns.filter((turn) => turn.performance === item.value).map((turn) => ({
       id: turn.turnId || turn.eventId,
+      eventId: turn.eventId,
+      turnId: turn.turnId,
       role: turn.turnRole,
       preview: turn.turnPreview,
       rationale: turn.rationale,
+      followsInstructions: turn.followsInstructions,
+      scopeAdherence: turn.scopeAdherence,
+      groundedness: turn.groundedness,
+      verification: turn.verification,
+      relatedEventIds: turn.relatedEventIds,
       ...(turn.rationaleRepeatCount > 1 ? { rationaleRepeatCount: turn.rationaleRepeatCount } : {}),
     })),
   }))
@@ -629,21 +647,24 @@ function displayVerdict(value) {
   return 'Not recorded'
 }
 
-function normalizeReviewSignal(record = {}) {
+function normalizeReviewSignal(record = {}, sourceIndex = 0) {
   const severity = validEnum(record.severity, new Set(['info', 'warning', 'critical', 'unknown'])) || 'unknown'
   const detail = cleanText(record.detail) || 'Signal detail not recorded'
   const signalName = cleanString(record.name)
   const occurrences = safeArray(record.occurrences).map((occurrence = {}) => ({
-    eventId: cleanString(occurrence.event_id ?? occurrence.eventId) || 'Event ID not recorded',
+    eventId: normalizeCapturedEventId(occurrence.event_id ?? occurrence.eventId) || 'Event ID not recorded',
     eventKind: humanizeValue(occurrence.event_kind ?? occurrence.eventKind) || null,
+    toolName: cleanText(occurrence.tool_name ?? occurrence.toolName) || null,
+    commandOrInput: clipTurnPreview(occurrence.command ?? occurrence.command_summary ?? occurrence.commandSummary ?? occurrence.input_summary ?? occurrence.inputSummary ?? occurrence.input ?? occurrence.tool_input ?? occurrence.toolInput) || null,
+    messageSummary: clipTurnPreview(occurrence.message ?? occurrence.content ?? occurrence.prompt) || null,
     summary: clipTurnPreview(occurrence.summary) || null,
     impact: clipTurnPreview(occurrence.impact) || null,
     occurredAt: cleanString(occurrence.occurred_at ?? occurrence.occurredAt) || null,
   }))
   const count = numberOrNull(record.count) ?? (Array.isArray(record.occurrences) ? occurrences.length : null)
   return {
-    signalKey: signalName || null,
-    name: repairCapturedText(humanizeSignalName(signalName)),
+    signalKey: signalName || `review-signal-${sourceIndex + 1}`,
+    name: repairCapturedText(humanizeSignalName(signalName) || `Review finding ${sourceIndex + 1}`),
     count,
     severity,
     severityMeaning: SIGNAL_SEVERITY_MEANINGS[severity],
@@ -710,7 +731,7 @@ function normalizeLedger(ledger) {
 function normalizeEvaluation(evaluation) {
   const recorded = isObject(evaluation)
   const verdict = validEnum(evaluation?.verdict, EVALUATION_VERDICTS)
-  const reviewSignals = safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map(normalizeReviewSignal)
+  const reviewSignals = safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map((record, index) => normalizeReviewSignal(record, index))
   return {
     recorded,
     schemaVersion: schemaVersion(evaluation?.schema_version ?? evaluation?.schemaVersion),

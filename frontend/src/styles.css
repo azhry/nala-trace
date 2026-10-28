@@ -893,7 +893,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .evaluation-page .analysis-record-metadata-grid > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .evaluation-page .analysis-record-metadata-grid > div:last-child { border-bottom: 0; }
   .evaluation-page .analysis-record-metadata-heading { align-items: start; flex-direction: column; gap: 3px; }
-  .evaluation-page .analysis-filter-controls label { font-size: 12px; }
+  .evaluation-page .analysis-filter-controls label { font-size: 14px; }
   .evaluation-page .analysis-filter-controls select { min-height: 44px; font-size: 15px; }
   .analysis-turn-impact-item > p { grid-column: 1; }
   .evaluation-page .analysis-performance-turn > p { text-align: left; }
@@ -901,4 +901,55 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 @media (min-width: 721px) and (max-width: 980px) {
   .analysis-signal-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.evaluation-page { width: 100%; }
+.evaluation-page .analysis-full-page { width: 100%; max-width: none; }
+.evaluation-page .analysis-content { width: 100%; max-width: none; }
+.evaluation-page .analysis-content .analysis-overview-stats small { font-size: 14px; line-height: 1.55; }
+.evaluation-page .analysis-content .analysis-turn-impact-item > span,
+.evaluation-page .analysis-content .analysis-priority-finding > div > span,
+.evaluation-page .analysis-content .analysis-signal-body > span { font-size: 16px; line-height: 1.65; }
+.evaluation-page .analysis-content .analysis-overview-stats > div > span { font-size: 14px; }
+.evaluation-page .analysis-content .analysis-evidence-context > span,
+.evaluation-page .analysis-content .analysis-evidence-turn > span,
+.evaluation-page .analysis-content .analysis-evidence-input > span,
+.evaluation-page .analysis-content .analysis-signal-description-references > span,
+.evaluation-page .analysis-content .analysis-linked-event-detail > span { font-size: 14px; line-height: 1.5; }
+.evaluation-page .analysis-content p { font-size: 16px; line-height: 1.65; }
+.analysis-turn-reasoning { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(240px, .8fr); gap: 12px; margin: 10px 0; }
+.analysis-turn-impact-why, .analysis-turn-impact-basis { min-width: 0; padding: 11px 13px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
+.analysis-turn-impact-why > strong, .analysis-turn-impact-basis > strong { display: block; margin-bottom: 5px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.analysis-turn-impact-why > p, .analysis-turn-impact-basis > p { margin: 0; font-size: 16px; line-height: 1.65; }
+.analysis-turn-impact-basis ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.analysis-turn-impact-basis li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: 14px; line-height: 1.5; }
+.analysis-turn-impact-basis li span { color: var(--muted); }
+.analysis-turn-impact-basis li strong { font-size: 14px; font-weight: 650; }
+.analysis-open-trace-link { display: inline-flex; align-items: center; min-height: 44px; margin: 8px 8px 0 0; padding: 7px 11px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--purple); font-size: 14px; font-weight: 650; line-height: 1.4; text-decoration: underline; text-underline-offset: 3px; }
+.analysis-open-trace-link:hover { background: var(--surface-soft); color: var(--text); }
+.analysis-open-trace-link:focus-visible, .analysis-bounded-text summary:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+.analysis-highlight-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: 10px; margin: 12px 0 8px; }
+.analysis-highlight-filters label { display: grid; min-width: 0; gap: 6px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.analysis-highlight-filters select { width: 100%; min-height: 44px; padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-soft); color: var(--text); font: inherit; }
+.analysis-highlight-clear { min-height: 44px; padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-soft); color: var(--text); cursor: pointer; font: inherit; }
+.analysis-highlight-clear:hover { background: var(--surface); }
+.analysis-highlight-clear:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+.analysis-highlight-filter-count { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.analysis-priority-occurrences { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.analysis-priority-occurrences > strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 13px; }
+.analysis-priority-context-unavailable { padding: 9px 10px; border-left: 3px solid var(--amber); background: var(--surface); color: var(--muted) !important; }
+.analysis-bounded-text > p { margin: 6px 0 0; }
+.analysis-bounded-text details { margin-top: 5px; }
+.analysis-bounded-text summary { display: inline-flex; align-items: center; min-height: 44px; color: var(--purple); cursor: pointer; font-size: 14px; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.analysis-bounded-text details > p { margin: 5px 0 0; }
+.trace-evidence-search-note { margin: 10px 20px; padding: 10px 12px; border-left: 3px solid var(--amber); background: var(--surface-soft); color: var(--text); font-size: 13px; line-height: 1.5; }
+
+@media (max-width: 720px) {
+  .analysis-turn-reasoning { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .analysis-turn-impact-why, .analysis-turn-impact-basis { padding: 10px 11px; }
+  .analysis-highlight-filters { grid-template-columns: minmax(0, 1fr); }
+  .analysis-highlight-clear { width: 100%; }
+  .analysis-open-trace-link { width: fit-content; max-width: 100%; }
+  .trace-evidence-search-note { margin-right: 14px; margin-left: 14px; }
+  .analysis-priority-occurrences > strong { font-size: 14px; }
 }

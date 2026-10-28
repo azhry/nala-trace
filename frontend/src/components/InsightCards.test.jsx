@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import InsightCards from './InsightCards'
@@ -308,9 +308,10 @@ describe('InsightCards', () => {
     }} />)
 
     expect(screen.getByText('2 located of 2 recorded')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Copy Occurrence event ID signal-event-1' })).toBeInTheDocument()
+    const occurrenceButton = screen.getAllByRole('button', { name: 'Copy Occurrence event ID signal-event-1' })[0]
+    expect(occurrenceButton).toBeInTheDocument()
     expect(screen.getAllByText('PreToolUse').length).toBeGreaterThanOrEqual(1)
-    const occurrenceEvidence = screen.getByRole('button', { name: 'Copy Occurrence event ID signal-event-1' }).closest('.analysis-event-evidence')
+    const occurrenceEvidence = occurrenceButton.closest('.analysis-event-evidence')
     expect(occurrenceEvidence).toHaveTextContent('Tool started without a completion.')
     expect(screen.queryByText('mcp__codex_apps__linear__list_comments')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Evidence type')).toBeInTheDocument()
@@ -395,9 +396,9 @@ describe('InsightCards', () => {
     expect(captureGapEvidence).toHaveTextContent('A tool completion was not captured.')
     expect(captureGapEvidence).toHaveTextContent('The tool result cannot be confirmed.')
     expect(screen.getAllByRole('button', { name: 'Copy Action evidence ID gap-event-1' })).toHaveLength(2)
-    const gapOccurrenceEvidence = screen.getByRole('button', { name: 'Copy Occurrence event ID gap-event-1' }).closest('.analysis-event-evidence')
+    const gapOccurrenceEvidence = screen.getAllByRole('button', { name: 'Copy Occurrence event ID gap-event-1' })[0].closest('.analysis-event-evidence')
     expect(gapOccurrenceEvidence).toHaveTextContent('PreToolUse')
-    expect(gapOccurrenceEvidence).toHaveTextContent('2026-10-24T10:00:00Z')
+    expect(gapOccurrenceEvidence.querySelector('time')?.dateTime).toBe('2026-10-24T10:00:00Z')
     expect(gapOccurrenceEvidence).toHaveTextContent('The tool invocation has no completion event.')
     expect(gapOccurrenceEvidence).toHaveTextContent('Its outcome cannot be verified.')
     expect(screen.getByText('Require a completion-event check.')).toBeInTheDocument()
@@ -415,6 +416,173 @@ describe('InsightCards', () => {
     expect(screen.getByText('Filters match 1 of 1 saved records')).toBeInTheDocument()
     expect(document.querySelector('.analysis-capture-gap')).toHaveTextContent('A tool completion was not captured.')
     expect(screen.queryByText('Updated the evaluation interface.')).not.toBeInTheDocument()
+  })
+
+  it('shows per-turn evidence rationales and occurrence details linked to the trace', () => {
+    render(<InsightCards forceAnalysis sessionId="session-review-evidence" analysis={{
+      annotation: {
+        schema_version: '2',
+        turns: [
+          { event_id: 'turn-improved', performance: 'improved', follows_instructions: 'yes', verification: 'verified', rationale: 'The saved checks verified the requested result.', response_summary: 'The requested result was verified.' },
+          { event_id: 'turn-neutral', performance: 'neutral', response_summary: 'The response repeated the current status.' },
+          { event_id: 'turn-worsened', performance: 'worsened', scope_adherence: 'deviation', response_summary: 'The response changed unrelated files.' },
+        ],
+      },
+      evaluation: {
+        ...evaluation,
+        review_signals: [
+          {
+            name: 'unmatched_tool_hook_pairs',
+            count: 1,
+            severity: 'warning',
+            detail: 'A tool result is missing.',
+            occurrences: [{
+              event_id: 'tool-occurrence-1',
+              event_kind: 'PreToolUse',
+              occurred_at: '2026-10-24T10:00:00Z',
+              tool_name: 'Bash',
+              input_summary: 'npm test',
+              summary: 'The command started without a completion event.',
+              impact: 'The result cannot be confirmed.',
+            }],
+          },
+          {
+            name: 'missing_trace_context',
+            count: 1,
+            severity: 'critical',
+            detail: 'Reference ObjectId("missing-event") has no saved event context.',
+            occurrences: [{ event_id: 'missing-event' }],
+          },
+        ],
+      },
+    }} />)
+
+    const turnImpact = document.querySelector('[aria-labelledby="analysis-turn-impact-title"]')
+    const turnCards = Array.from(turnImpact.querySelectorAll('.analysis-turn-impact-item'))
+    expect(turnCards).toHaveLength(3)
+    expect(within(turnCards[0]).getByText('Why this label')).toBeInTheDocument()
+    expect(within(turnCards[0]).getByText('The saved checks verified the requested result.')).toBeInTheDocument()
+    expect(within(turnCards[0]).getByText('Recorded basis')).toBeInTheDocument()
+    expect(within(turnCards[0]).getByText('Instruction following')).toBeInTheDocument()
+    expect(within(turnCards[0]).getByText('Verification')).toBeInTheDocument()
+    expect(within(turnCards[1]).getByText('Why this label')).toBeInTheDocument()
+    expect(within(turnCards[1]).getByText('No rationale recorded.')).toBeInTheDocument()
+    expect(within(turnCards[1]).getByText('No supporting labels recorded.')).toBeInTheDocument()
+    expect(within(turnCards[1]).queryByText(/evaluator marked|captured response says/i)).not.toBeInTheDocument()
+    expect(within(turnCards[2]).getByText('Why this label')).toBeInTheDocument()
+    expect(within(turnCards[2]).getByText('No rationale recorded.')).toBeInTheDocument()
+    expect(within(turnCards[2]).getByText('Recorded basis')).toBeInTheDocument()
+    expect(within(turnCards[2]).getByText('Scope')).toBeInTheDocument()
+    const priorityFinding = document.querySelector('.analysis-priority-finding')
+    expect(priorityFinding).toHaveTextContent('Saved occurrence details')
+    expect(priorityFinding).toHaveTextContent('Tool call · Bash')
+    expect(priorityFinding).toHaveTextContent('npm test')
+    expect(priorityFinding).toHaveTextContent('The command started without a completion event.')
+    expect(priorityFinding.querySelector('time[datetime="2026-10-24T10:00:00Z"]')).toBeInTheDocument()
+    expect(Array.from(priorityFinding.querySelectorAll('.analysis-open-trace-link')).map((link) => link.getAttribute('href'))).toContain('#/sessions/session-review-evidence?event=tool-occurrence-1')
+    const missingPriorityFinding = document.querySelectorAll('.analysis-priority-finding')[1]
+    expect(missingPriorityFinding).toHaveTextContent('Context unavailable')
+    expect(screen.queryByText(/ObjectId\("missing-event"\)/)).not.toBeInTheDocument()
+    expect(Array.from(missingPriorityFinding.querySelectorAll('.analysis-open-trace-link')).map((link) => link.getAttribute('href'))).toContain('#/sessions/session-review-evidence?event=missing-event')
+  })
+
+  it('matches wrapped ObjectID occurrences to plain trace IDs and links with the normalized ID', () => {
+    const eventId = 'abcdef0123456789abcdef01'
+    render(<InsightCards forceAnalysis sessionId="session-object-id" trace={{
+      schema_version: '1',
+      timeline: [{ id: eventId, hook_event_name: 'PreToolUse', occurred_at: '2026-10-24T10:00:00Z', tool_call_index: 0 }],
+      tool_calls: [{ tool_name: 'Bash', input: { command: 'npm test' }, status: 'recorded' }],
+    }} analysis={{
+      annotation: { schema_version: '2', turns: [] },
+      evaluation: {
+        ...evaluation,
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 1,
+          severity: 'warning',
+          detail: 'A tool completion is missing.',
+          occurrences: [{ event_id: `ObjectID("${eventId.toUpperCase()}")`, event_kind: 'PreToolUse', occurred_at: '2026-10-24T10:00:00Z', tool_name: 'Bash', input_summary: 'npm test' }],
+        }],
+      },
+    }} />)
+
+    const occurrence = document.querySelector('.analysis-signal-occurrence')
+    expect(occurrence).toHaveTextContent('Captured tool call · Bash')
+    expect(occurrence).toHaveTextContent('npm test')
+    expect(occurrence.querySelector('.analysis-open-trace-link')).toHaveAttribute('href', `#/sessions/session-object-id?event=${eventId}`)
+    expect(occurrence.querySelector('.analysis-copy-event-id')).toHaveAccessibleName(`Copy Occurrence event ID ${eventId}`)
+    expect(occurrence).not.toHaveTextContent('ObjectID(')
+  })
+
+  it('keeps Why this label and Recorded basis visible on every turn in the first bounded page', () => {
+    const turns = Array.from({ length: 10 }, (_item, index) => ({
+      event_id: `bounded-turn-${index}`,
+      performance: 'improved',
+      rationale: `Saved rationale ${index}.`,
+      follows_instructions: 'yes',
+      response_summary: `Saved response ${index}.`,
+    }))
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: { schema_version: '2', turns },
+      evaluation: { ...evaluation, review_signals: [] },
+    }} />)
+
+    const turnImpact = document.querySelector('[aria-labelledby="analysis-turn-impact-title"]')
+    const visibleCards = Array.from(turnImpact.querySelectorAll('.analysis-turn-impact-item'))
+    expect(visibleCards).toHaveLength(8)
+    for (const card of visibleCards) {
+      expect(within(card).getByText('Why this label')).toBeInTheDocument()
+      expect(within(card).getByText('Recorded basis')).toBeInTheDocument()
+      expect(within(card).getByText('Instruction following')).toBeInTheDocument()
+    }
+    expect(within(turnImpact).getByRole('button', { name: 'Load more turn impact records' })).toBeInTheDocument()
+  })
+
+  it('filters turn impact and priority summaries with counts and reset controls', async () => {
+    const user = userEvent.setup()
+    render(<InsightCards forceAnalysis analysis={{
+      annotation: {
+        schema_version: '2',
+        turns: [
+          { event_id: 'improved-filter-event', performance: 'improved', response_summary: 'The result improved.' },
+          { event_id: 'neutral-filter-event', performance: 'neutral', response_summary: 'The result stayed the same.' },
+          { event_id: 'worsened-filter-event', performance: 'worsened', response_summary: 'The result worsened.' },
+        ],
+      },
+      evaluation: {
+        ...evaluation,
+        review_signals: [
+          { name: 'unmatched_tool_hook_pairs', count: 1, severity: 'warning', detail: 'A tool completion is missing.', occurrences: [] },
+          { name: 'missing_trace_context', count: 1, severity: 'critical', detail: 'A trace reference needs review.', occurrences: [] },
+          { name: 'saved_context_note', count: 1, severity: 'info', detail: 'Additional saved context.', occurrences: [] },
+        ],
+      },
+    }} />)
+
+    const impactSection = document.querySelector('[aria-labelledby="analysis-turn-impact-title"]')
+    const impactFilter = screen.getByLabelText('Turn impact value')
+    expect(screen.getByRole('option', { name: 'Improved (1)' })).toBeInTheDocument()
+    expect(impactSection.querySelector('.analysis-highlight-filter-count')).toHaveTextContent('Showing 3 of 3 turn records')
+    await user.selectOptions(impactFilter, 'neutral')
+    expect(impactSection.querySelector('.analysis-highlight-filter-count')).toHaveTextContent('Showing 1 of 3 turn records')
+    expect(impactSection.querySelectorAll('.analysis-turn-impact-item')).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Clear turn impact filter' }))
+    expect(impactSection.querySelector('.analysis-highlight-filter-count')).toHaveTextContent('Showing 3 of 3 turn records')
+
+    const findingsSection = document.querySelector('[aria-labelledby="analysis-priority-findings-title"]')
+    const severityFilter = screen.getByLabelText('Priority finding severity')
+    const categoryFilter = screen.getByLabelText('Priority finding category')
+    expect(screen.getByRole('option', { name: 'Critical (1)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Unmatched tool hook pairs (1)' })).toBeInTheDocument()
+    expect(findingsSection.querySelector('.analysis-highlight-filter-count')).toHaveTextContent('Showing 2 of 2 priority findings')
+    await user.selectOptions(severityFilter, 'warning')
+    expect(findingsSection.querySelector('.analysis-highlight-filter-count')).toHaveTextContent('Showing 1 of 2 priority findings')
+    await user.selectOptions(categoryFilter, 'missing_trace_context')
+    expect(findingsSection.querySelector('.analysis-highlight-filter-count')).toHaveTextContent('Showing 0 of 2 priority findings')
+    expect(findingsSection.querySelectorAll('.analysis-priority-findings-list > li')).toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: 'Clear priority finding filters' }))
+    expect(findingsSection.querySelector('.analysis-highlight-filter-count')).toHaveTextContent('Showing 2 of 2 priority findings')
+    expect(findingsSection.querySelectorAll('.analysis-priority-findings-list > li')).toHaveLength(2)
   })
 
   it('separates saved rows from v2 coverage and shows each neutral rationale or marks it unclear', async () => {
@@ -436,7 +604,7 @@ describe('InsightCards', () => {
 
     expect(screen.getAllByText('The response restated the request without adding a useful next step.').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('The repeated check did not change the outcome.').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Rationale unclear — no explanation was saved with this label.').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('No rationale recorded.').length).toBeGreaterThanOrEqual(1)
     await user.click(screen.getByText('Evidence details'))
     expect(screen.getAllByText('3 saved records').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('Coverage: 3 labeled / 4 captured agent turns')).toBeInTheDocument()
@@ -464,7 +632,7 @@ describe('InsightCards', () => {
     await user.click(screen.getByText('Evidence details'))
 
     expect(screen.getAllByText('Rationale: Unclear')).toHaveLength(9)
-    expect(screen.getAllByText(/This rationale is repeated across 3 neutral turns and does not distinguish this turn/)).toHaveLength(9)
+    expect(screen.getAllByText(/This saved rationale is repeated across 3 neutral turns and may not distinguish this turn/)).toHaveLength(9)
     expect(screen.getAllByText((_, element) => element.tagName === 'P' && element.textContent.includes(`Saved rationale: “${sharedRationale}”`))).toHaveLength(9)
     const agentTurnsCategory = Array.from(document.querySelectorAll('.analysis-category-card')).find((category) => category.textContent.includes('Agent turns'))
     expect(agentTurnsCategory.querySelector('.analysis-evidence-list')).toHaveTextContent('Rationale: Unclear')
@@ -495,7 +663,7 @@ describe('InsightCards', () => {
       },
     }} />)
 
-    expect(screen.getByText('Not recorded in this saved occurrence: occurrence time, event summary, impact.')).toBeInTheDocument()
+    expect(screen.getAllByText('Not recorded in this saved occurrence: occurrence time, tool name, command or input, message, event summary, impact.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('The invocation has no captured completion hook.').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('The authenticated browser flow was not recorded.')).toBeInTheDocument()
     const category = screen.getByLabelText('Signal category')

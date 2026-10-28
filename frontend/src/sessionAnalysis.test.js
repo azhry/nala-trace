@@ -71,6 +71,8 @@ describe('session analysis view model', () => {
     const validUnicode = 'café — 東京 — 🙂'
     expect(repairCapturedText(validUnicode)).toBe(validUnicode)
     expect(repairCapturedText('café, FranÃ§ais, itâ€™s ä¸­ and ðŸ˜Š')).toBe('café, Français, it’s 中 and 😊')
+    expect(repairCapturedText('FranÃƒÂ§ais — 東京 🙂')).toBe('Français — 東京 🙂')
+    expect(repairCapturedText('Ångström — naïve — ¿Qué?')).toBe('Ångström — naïve — ¿Qué?')
 
     const model = normalizeSessionAnalysis({
       annotation: {
@@ -123,6 +125,61 @@ describe('session analysis view model', () => {
     })
   })
 
+  it('keeps turn-specific trace references and occurrence input in the saved review model', () => {
+    const model = normalizeSessionAnalysis({
+      annotation: {
+        schema_version: '2',
+        turns: [{
+          event_id: 'assistant-event-unique',
+          turn_id: 'turn-unique',
+          performance: 'improved',
+          follows_instructions: 'yes',
+          scope_adherence: 'within_scope',
+          groundedness: 'supported',
+          verification: 'verified',
+          response_summary: 'The requested result was verified.',
+        }],
+      },
+      evaluation: {
+        schema_version: '2',
+        verdict: 'pass',
+        review_signals: [{
+          name: 'unmatched_tool_hook_pairs',
+          count: 1,
+          severity: 'warning',
+          detail: 'A tool result is missing.',
+          occurrences: [{
+            event_id: 'tool-event-unique',
+            event_kind: 'PreToolUse',
+            occurred_at: '2026-10-24T10:00:00Z',
+            tool_name: 'Bash',
+            input_summary: 'npm run lint',
+            summary: 'The command started without a completion event.',
+            impact: 'The result cannot be confirmed.',
+          }],
+        }],
+      },
+    })
+
+    expect(model.annotation.performanceSummary.find(({ value }) => value === 'improved').turns[0]).toMatchObject({
+      id: 'turn-unique',
+      eventId: 'assistant-event-unique',
+      turnId: 'turn-unique',
+      followsInstructions: 'yes',
+      scopeAdherence: 'within_scope',
+      groundedness: 'supported',
+      verification: 'verified',
+      preview: 'The requested result was verified.',
+    })
+    expect(model.evaluation.reviewSignals[0].occurrences[0]).toMatchObject({
+      eventId: 'tool-event-unique',
+      toolName: 'Bash',
+      commandOrInput: 'npm run lint',
+      summary: 'The command started without a completion event.',
+      occurredAt: '2026-10-24T10:00:00Z',
+    })
+  })
+
   it('normalizes the API contract and calculates evidence coverage without inventing verdicts', () => {
     const model = normalizeSessionAnalysis(analysis, trace)
 
@@ -140,7 +197,7 @@ describe('session analysis view model', () => {
       expect.objectContaining({ key: 'files', recorded: false, coverageValue: 'Not included' }),
     ]))
     expect(model.annotation.performanceSummary).toEqual([
-      { value: 'improved', count: 1, turnIds: ['turn-1'], turns: [{ id: 'turn-1', role: 'assistant', preview: 'The assistant completed the requested inspection.', rationale: 'The recorded response followed the requested workflow.' }] },
+      { value: 'improved', count: 1, turnIds: ['turn-1'], turns: [{ id: 'turn-1', eventId: 'stop-1', turnId: 'turn-1', role: 'assistant', preview: 'The assistant completed the requested inspection.', rationale: 'The recorded response followed the requested workflow.', followsInstructions: 'yes', scopeAdherence: null, groundedness: null, verification: null, relatedEventIds: [] }] },
       { value: 'neutral', count: 0, turnIds: [], turns: [] },
       { value: 'worsened', count: 0, turnIds: [], turns: [] },
       { value: 'unclear', count: 0, turnIds: [], turns: [] },

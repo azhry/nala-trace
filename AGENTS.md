@@ -22,6 +22,10 @@
 - Use project-documented run commands and environment names unchanged in manual verification unless the task explicitly changes them. Verify the actual running URL and port from authoritative project knowledge or the process before writing a command; do not guess or silently substitute ports.
 - Do not change an existing PR from ready for review back to draft. Use draft only when creating a new PR or when the user explicitly requests draft.
 
+## Local service operations
+
+For requests about a service in `nala.yml`—configuration, running state, run/stop, logs, or branch—read and follow the [Nala Ctrl service-operations skill](.agents/skills/nala-ctrl-service-operations/SKILL.md). Use Nala Ctrl's loopback-only headless HTTP API through `nala-ctrl api serve`; its endpoints require no token or authentication header. Do not open the desktop UI or manage processes directly. The API reports running state only for services started by its own process. Follow the documented skill API contract exactly: loopback requests need no token; do not add auth/token setup, speculative fallbacks, or compatibility wrappers unless a documented API requirement calls for them.
+
 ## Branches and publication
 
 - Start new work from `main` on a `task/<topic>` branch.

@@ -134,56 +134,73 @@ func TestNormalizeTraceOriginRejectsMalformedValues(t *testing.T) {
 	}
 }
 
-func TestDecodeUserAcceptsNalaLabsEntitlementObject(t *testing.T) {
-	user, err := decodeUser([]byte(`{
-		"authenticated": true,
-		"user": {
-			"id": "nala-admin-test",
-			"name": "nala-admin-test",
-			"email": "nala-admin-test@example.com",
-			"tier": "admin",
-			"entitlements": {
-				"maxDeployments": null,
-				"maxDatabases": null,
-				"expires": false,
-				"policy": "Full platform access"
-			}
+func TestIAMClientValidatesBearerAndPreservesNalaLabsSession(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.URL.Path != "/api/auth/session" {
+			t.Fatalf("request = %s %s, want GET /api/auth/session", request.Method, request.URL.Path)
 		}
-	}`), true)
+		if got := request.Header.Get("Authorization"); got != "Bearer session-token" {
+			t.Fatalf("Authorization = %q, want bearer token", got)
+		}
+		_, _ = io.WriteString(writer, `{"authenticated":true,"user":{"id":"admin-123","name":"Admin User","email":"admin@example.test","tier":"admin","entitlements":{"expires":false,"policy":"Full access"}}}`)
+	}))
+	defer server.Close()
+
+	client := NewIAMClient(config.AuthConfig{NalaLabsAuthURL: server.URL, Timeout: time.Second})
+	user, err := client.ValidateBearer(context.Background(), "session-token")
 	if err != nil {
-		t.Fatalf("decodeUser returned error: %v", err)
+		t.Fatalf("ValidateBearer returned error: %v", err)
 	}
-	if user.ID != "nala-admin-test" || user.Tier != TierAdmin {
-		t.Fatalf("unexpected decoded user: %#v", user)
+	if user.ID != "admin-123" || user.Name != "Admin User" || user.Email != "admin@example.test" || user.Tier != TierAdmin {
+		t.Fatalf("unexpected user: %#v", user)
 	}
 	if len(user.Entitlements) != 0 {
 		t.Fatalf("object entitlements should not be converted into invented list values: %#v", user.Entitlements)
 	}
 }
 
-func TestDecodeUserPreservesEntitlementList(t *testing.T) {
-	user, err := decodeUser([]byte(`{
-		"authenticated": true,
-		"user": {
-			"id": "developer",
-			"roles": ["developer"],
-			"entitlements": ["trace:read", "trace:write"]
-		}
-	}`), true)
+func TestIAMClientPreservesLegacyEntitlementList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(writer, `{"authenticated":true,"user":{"id":"developer-123","roles":["developer"],"entitlements":["trace:read","trace:write"]}}`)
+	}))
+	defer server.Close()
+
+	client := NewIAMClient(config.AuthConfig{NalaLabsAuthURL: server.URL, Timeout: time.Second})
+	user, err := client.ValidateBearer(context.Background(), "session-token")
 	if err != nil {
-		t.Fatalf("decodeUser returned error: %v", err)
+		t.Fatalf("ValidateBearer returned error: %v", err)
+	}
+	if user.ID != "developer-123" || user.Tier != TierDeveloper {
+		t.Fatalf("unexpected user: %#v", user)
 	}
 	if got, want := user.Entitlements, []string{"trace:read", "trace:write"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("entitlements = %#v, want %#v", got, want)
 	}
 }
 
-func TestDecodeUserRejectsInvalidEntitlementShape(t *testing.T) {
-	_, err := decodeUser([]byte(`{
-		"authenticated": true,
-		"user": {"id": "invalid", "entitlements": "not-an-object"}
-	}`), true)
-	if !errors.Is(err, ErrMalformedProviderData) {
-		t.Fatalf("error = %v, want ErrMalformedProviderData", err)
+func TestIAMClientMapsSharedSessionErrors(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status int
+		body   string
+		want   error
+	}{
+		{name: "unauthorized", status: http.StatusUnauthorized, body: `{}`, want: ErrUnauthenticated},
+		{name: "provider failure", status: http.StatusBadGateway, body: `{}`, want: ErrProviderUnavailable},
+		{name: "malformed response", status: http.StatusOK, body: `{"authenticated":true,"user":{"id":"invalid","entitlements":"bad"}}`, want: ErrMalformedProviderData},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.WriteHeader(test.status)
+				_, _ = io.WriteString(writer, test.body)
+			}))
+			defer server.Close()
+
+			client := NewIAMClient(config.AuthConfig{NalaLabsAuthURL: server.URL, Timeout: time.Second})
+			_, err := client.ValidateBearer(context.Background(), "session-token")
+			if !errors.Is(err, test.want) {
+				t.Fatalf("error = %v, want %v", err, test.want)
+			}
+		})
 	}
 }

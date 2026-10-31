@@ -7,6 +7,7 @@ import SessionList from './components/SessionList'
 import SessionMetadata from './components/SessionMetadata'
 import ScrollToTopButton from './components/ScrollToTopButton'
 import TraceView, { TraceLoadingPanel } from './components/TraceView'
+import ThemeToggle from './ThemeToggle'
 import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries'
 
 function parseRoute(hash = window.location.hash) {
@@ -150,6 +151,7 @@ function AuthBoundary({ handoffState, onRetry }) {
 
   return (
     <main className="auth-boundary" aria-labelledby="auth-boundary-title">
+      <div className="auth-appearance"><ThemeToggle /></div>
       <section className="auth-boundary-panel" role="alert" aria-live="polite">
         <p className="eyebrow">Nala Trace access</p>
         <h1 id="auth-boundary-title">Sign in through Nala Labs</h1>
@@ -164,7 +166,7 @@ function AuthBoundary({ handoffState, onRetry }) {
 function Topbar({ route, session, apiState, onSignOut }) {
   const source = dataSourceCopy(apiState)
   const pageLabel = route.view === 'evaluation' ? 'Session evaluation' : route.view === 'detail' ? 'Session detail' : 'Sessions'
-  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{pageLabel}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{(route.view === 'detail' || route.view === 'evaluation') && <span className="topbar-session">{session?.id}</span>}<button type="button" className="sign-out-button" onClick={() => onSignOut()}>Sign out</button></div></header>
+  return <header className="topbar"><div className="breadcrumb"><span className="trace-product-name">Nala Trace</span><span aria-hidden="true">/</span><strong>{pageLabel}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{(route.view === 'detail' || route.view === 'evaluation') && <span className="topbar-session">{session?.id}</span>}<ThemeToggle /><button type="button" className="sign-out-button" onClick={() => onSignOut()}>Sign out</button></div></header>
 }
 
 function SessionStats({ sessions }) {
@@ -402,7 +404,7 @@ export default function App() {
   }
 
   if (apiState === 'unauthorized') return <AuthBoundary handoffState={handoffState} onRetry={loadSessions} />
-  if (apiState === 'error') return <div className="app-shell"><main className="main-content"><section className="page-section" aria-label="Session loading error"><SessionStatePanel state="error" onRetry={loadSessions} /></section></main></div>
+  if (apiState === 'error') return <div className="app-shell"><main className="main-content"><Topbar route={route} apiState={apiState} onSignOut={signOutFromTrace} /><section className="page-section" aria-label="Session loading error"><SessionStatePanel state="error" onRetry={loadSessions} /></section></main></div>
 
   const showDetail = route.view === 'detail' && detailSession
   const showEvaluation = route.view === 'evaluation' && apiState === 'connected' && detailSession

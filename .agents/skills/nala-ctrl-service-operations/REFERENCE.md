@@ -2,13 +2,27 @@
 
 ## Start the API
 
-The headless server is part of Nala Ctrl's Go command and starts without Wails or the desktop window. Run this in a long-lived terminal:
+The headless server is part of Nala Ctrl's Go command and starts without Wails or the desktop window. If health already returns 200, reuse that server. If the connection is refused, start the API in a long-lived terminal and keep it running through service operations and status confirmation; shutting it down stops services managed by that API process:
 
 ~~~bash
 nala-ctrl api serve --listen 127.0.0.1:47653
 ~~~
 
-If the CLI is not on PATH, do not guess its install path. Report that the Nala Ctrl console command must be installed or made available. When the server prints a different loopback address, use that observed address instead of the default below.
+If the CLI is not on PATH, check for a sibling Nala Ctrl source checkout at ../nala-ctrl relative to this project root. In a task worktree or different layout, use the known Nala Ctrl root from workspace context; do not guess an install path or search arbitrary directories. Confirm go.mod and agent_api.go exist, then start from the Nala Ctrl root with:
+
+~~~bash
+cd ../nala-ctrl
+go run . api serve --listen 127.0.0.1:47653
+~~~
+
+A fresh checkout may lack the embedded frontend/dist assets. If that directory is absent, build it from the Nala Ctrl root before running go run:
+
+~~~bash
+npm --prefix frontend ci
+npm --prefix frontend run build
+~~~
+
+If neither the installed CLI nor the known source checkout can start the server, report the exact command failure. When the server prints a different loopback address, use that observed address instead of the default below.
 
 Verify health from another terminal:
 

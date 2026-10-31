@@ -8,13 +8,16 @@ import SessionMetadata from './components/SessionMetadata'
 import ScrollToTopButton from './components/ScrollToTopButton'
 import TraceView, { TraceLoadingPanel } from './components/TraceView'
 import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries'
+import { normalizeCapturedEventId } from './eventIds'
 
 function parseRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '') || 'sessions'
-  const evaluationMatch = path.match(/^sessions\/([^/]+)\/evaluation$/)
+  const [routePath, query = ''] = path.split('?', 2)
+  const evidenceEventId = normalizeCapturedEventId(new URLSearchParams(query).get('event'))
+  const evaluationMatch = routePath.match(/^sessions\/([^/]+)\/evaluation$/)
   if (evaluationMatch) return { view: 'evaluation', sessionId: decodeURIComponent(evaluationMatch[1]) }
-  const match = path.match(/^sessions\/([^/]+)$/)
-  return match ? { view: 'detail', sessionId: decodeURIComponent(match[1]) } : { view: 'sessions', sessionId: null }
+  const match = routePath.match(/^sessions\/([^/]+)$/)
+  return match ? { view: 'detail', sessionId: decodeURIComponent(match[1]), evidenceEventId } : { view: 'sessions', sessionId: null }
 }
 
 function navigateTo(path) {
@@ -195,12 +198,12 @@ function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, fi
   return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} />{apiState === 'loading' ? <TraceLoadingPanel title="Loading sessions…" detail="Resolving your application session before reading Trace records." /> : apiState === 'connected' ? <><SessionStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} sortBy={sortBy} onSortChange={onSortChange} /></> : <SessionStatePanel state={apiState} onRetry={onRetry} />}</section>
 }
 
-function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry, onLoadMore, isLoadingMore, loadMoreError }) {
+function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry, onLoadMore, isLoadingMore, loadMoreError, focusEventId }) {
   const source = dataSourceCopy(apiState)
   const isLoading = traceState === 'loading'
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
   const evaluationHref = `#/sessions/${encodeURIComponent(session.id)}/evaluation`
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><a className="detail-analysis-link" href={evaluationHref}>View annotation and evaluation</a><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span></div></div><DataSourceNotice apiState={apiState} />{isLoading ? <TraceLoadingPanel /> : <><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} onLoadMore={onLoadMore} isLoadingMore={isLoadingMore} loadMoreError={loadMoreError} /><InsightCards analysis={session.analysis ?? null} trace={session} insights={session.insights} compact sessionId={session.id} /></div></>}</section>
+  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><a className="detail-analysis-link" href={evaluationHref}>View annotation and evaluation</a><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span></div></div><DataSourceNotice apiState={apiState} />{isLoading ? <TraceLoadingPanel /> : <><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} onLoadMore={onLoadMore} isLoadingMore={isLoadingMore} loadMoreError={loadMoreError} focusEventId={focusEventId} /><InsightCards analysis={session.analysis ?? null} trace={session} insights={session.insights} compact sessionId={session.id} /></div></>}</section>
 }
 
 export default function App() {
@@ -406,5 +409,5 @@ export default function App() {
 
   const showDetail = route.view === 'detail' && detailSession
   const showEvaluation = route.view === 'evaluation' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={detailSession || selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} analysis={analysisSessionId === route.sessionId ? analysisPayload : null} analysisState={analysisSessionId === route.sessionId ? analysisState : 'loading'} analysisError={analysisError} onAnalysisRetry={() => loadAnalysis(route.sessionId)} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={apiState === 'loading' ? 'loading' : detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onLoadMore={() => loadMoreTrace(route.sessionId)} isLoadingMore={tracePageState === 'loading'} loadMoreError={Boolean(tracePageError)} onBack={() => navigateTo('sessions')} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={detailSession || selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} analysis={analysisSessionId === route.sessionId ? analysisPayload : null} analysisState={analysisSessionId === route.sessionId ? analysisState : 'loading'} analysisError={analysisError} onAnalysisRetry={() => loadAnalysis(route.sessionId)} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={apiState === 'loading' ? 'loading' : detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onLoadMore={() => loadMoreTrace(route.sessionId)} isLoadingMore={tracePageState === 'loading'} loadMoreError={Boolean(tracePageError)} onBack={() => navigateTo('sessions')} focusEventId={route.evidenceEventId} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
 }

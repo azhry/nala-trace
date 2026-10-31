@@ -1,4 +1,5 @@
 import { EMPTY_TOKEN_USAGE, hasRecordedTokenUsage, normalizeTokenUsage } from './tokenUsage'
+import { normalizeCapturedEventId } from './eventIds'
 
 const EMPTY_LIST = []
 const LIFECYCLE_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse'])
@@ -152,7 +153,7 @@ function normalizeSkillInvocation(item = {}) {
   const record = rawRecord(item)
   return {
     name: firstString([record], ['name', 'skill_name', 'skillName']),
-    eventId: firstString([record], ['event_id', 'eventId']),
+    eventId: normalizeCapturedEventId(record.event_id ?? record.eventId),
     toolUseId: firstString([record], ['tool_use_id', 'toolUseId']) || null,
     toolName: firstString([record], ['tool_name', 'toolName']) || null,
     confidence: firstString([record], ['confidence']) || null,
@@ -166,7 +167,7 @@ function normalizeFileOperation(item = {}) {
   return {
     path: firstString([record], ['path', 'file_path', 'filePath']),
     operation: firstString([record], ['operation', 'action']).toLowerCase() || 'ambiguous',
-    eventId: firstString([record], ['event_id', 'eventId']),
+    eventId: normalizeCapturedEventId(record.event_id ?? record.eventId),
     toolUseId: firstString([record], ['tool_use_id', 'toolUseId']) || null,
     toolName: firstString([record], ['tool_name', 'toolName']) || null,
     confidence: firstString([record], ['confidence']) || null,
@@ -286,7 +287,7 @@ function normalizeConversationItem(item = {}, index) {
   const role = normalizeRole(item.role)
   const raw = rawRecord(item.raw)
   const provenance = normalizeProvenance(item, raw)
-  const eventId = cleanString(item.event_id ?? item.eventId)
+  const eventId = normalizeCapturedEventId(item.event_id ?? item.eventId)
   const isAgentEvidence = Boolean(provenance.agentId || provenance.agentType)
   const isRootUserPrompt = provenance.eventName === 'UserPromptSubmit' && role === 'user' && !isAgentEvidence
   const isLifecycleEvidence = LIFECYCLE_EVENTS.has(provenance.eventName) && !isRootUserPrompt
@@ -386,7 +387,7 @@ function normalizeTimelineEvent(event = {}, index) {
       ? event.toolCallIndex
       : null
   return {
-    id: cleanString(event.id) || `timeline-${index}`,
+    id: normalizeCapturedEventId(event.id) || `timeline-${index}`,
     type: 'system',
     label,
     body: cleanString(event.partial_reason ?? event.partialReason) || 'Recorded trace event',

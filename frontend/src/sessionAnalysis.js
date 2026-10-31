@@ -1,4 +1,5 @@
 import { getToolInputPreview } from './traceViewModel'
+import { normalizeCapturedEventId } from './eventIds'
 
 const EMPTY_LIST = []
 const TURN_PREVIEW_LIMIT = 240
@@ -94,7 +95,16 @@ const MOJIBAKE_SEQUENCE = new RegExp(`[\\u00c2-\\u00f4][${escapeCharacterClass(W
 
 function repairMojibakeSequences(value) {
   if (!UTF8_DECODER) return value
-  return value.replace(MOJIBAKE_SEQUENCE, (sequence) => {
+  return value.replace(MOJIBAKE_SEQUENCE, (sequence, offset, source) => {
+    const first = sequence.codePointAt(0)
+    const knownLead = [0x00c2, 0x00c3, 0x00e2, 0x00ef, 0x00f0].includes(first)
+    const hasLatin1Continuation = Array.from(sequence.slice(1)).some((character) => {
+      const codePoint = character.codePointAt(0)
+      return codePoint >= 0x80 && codePoint <= 0xbf
+    })
+    const nearbyMarker = /[\u00c2\u00c3\u00e2\u00ef\u00f0]/u.test(source.slice(Math.max(0, offset - 4), offset)) ||
+      /[\u00c2\u00c3\u00e2\u00ef\u00f0]/u.test(source.slice(offset + sequence.length, offset + sequence.length + 4))
+    if (!knownLead && !(sequence.length >= 3 && hasLatin1Continuation) && !nearbyMarker) return sequence
     const bytes = Array.from(sequence, windows1252Byte)
     if (bytes.some((byte) => byte === null)) return sequence
 
@@ -111,7 +121,7 @@ export function repairCapturedText(value) {
   if (typeof value !== 'string' || !value) return value
 
   let repaired = value
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     const candidate = repairMojibakeSequences(repaired)
     if (candidate === repaired) break
     repaired = candidate
@@ -232,7 +242,7 @@ function clipTurnPreview(value) {
 }
 
 function stringList(value) {
-  return safeArray(value).map(cleanString).filter(Boolean)
+  return safeArray(value).map(normalizeCapturedEventId).filter(Boolean)
 }
 
 function normalizedValue(value) {
@@ -252,6 +262,7 @@ function humanizeSignalName(value) {
 }
 
 function numberOrNull(value) {
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) return null
   const number = Number(value)
   return Number.isFinite(number) && number >= 0 ? number : null
 }
@@ -264,51 +275,62 @@ function countDistinctTurnEvidence(trace, role) {
     return itemRole === role
   })
   const turnIds = new Set(conversation.map((item) => cleanString(item?.turn_id ?? item?.turnId)).filter(Boolean))
-  return turnIds.size || conversation.length
+  if (turnIds.size) return turnIds.size
+  return conversation.length ? null : 0
 }
 
-function capturedCount(trace, collectionKey, summaryKeys, fallback) {
-  if (Array.isArray(trace?.[collectionKey])) return trace[collectionKey].length
+function capturedCount(trace, collectionKey, summaryKeys) {
+  if (Array.isArray(trace?.[collectionKey])) return { value: trace[collectionKey].length, source: 'Current trace records' }
 
   for (const key of summaryKeys) {
     const count = numberOrNull(trace?.summary?.[key])
-    if (count !== null) return count
+    if (count !== null) return { value: count, source: 'Current trace summary' }
   }
 
-  return fallback
+  return { value: null, source: 'Unavailable in this response' }
 }
 
 function capturedSummaryCount(trace, summaryKeys) {
   for (const key of summaryKeys) {
     const count = numberOrNull(trace?.summary?.[key])
-    if (count !== null) return count
+    if (count !== null) return { value: count, source: 'Current trace summary' }
   }
-  return null
+  return { value: null, source: 'Unavailable in this response' }
 }
 
 function capturedEvidenceCounts(trace = {}, annotation = {}) {
   const explicit = annotation.captured_counts ?? annotation.capturedCounts ?? annotation.capture_counts ?? annotation.captureCounts ?? {}
-  const read = (key, collection, summaryKeys, fallback) => numberOrNull(explicit[key]) ?? capturedCount(trace, collection, summaryKeys, fallback)
+  const explicitOr = (key, fallback) => {
+    const value = numberOrNull(explicit[key])
+    return value === null ? fallback : { value, source: 'Saved annotation captured_counts' }
+  }
+  const conversationTurns = (role, explicitKey, summaryKeys) => {
+    const explicitValue = numberOrNull(explicit[explicitKey])
+    if (explicitValue !== null) return { value: explicitValue, source: 'Saved annotation captured_counts' }
+    const traceCount = countDistinctTurnEvidence(trace, role)
+    if (traceCount !== null) return { value: traceCount, source: 'Current trace conversation' }
+    return capturedSummaryCount(trace, summaryKeys)
+  }
   return {
-    user_turns: numberOrNull(explicit.user_turns) ?? countDistinctTurnEvidence(trace, 'user') ?? capturedSummaryCount(trace, ['user_turn_count', 'userTurnCount']),
-    turns: numberOrNull(explicit.turns) ?? countDistinctTurnEvidence(trace, 'assistant') ?? capturedSummaryCount(trace, ['assistant_turn_count', 'assistantTurnCount']),
-    tools: read('tools', 'tool_calls', ['tool_call_count', 'toolCallCount'], null),
-    skills: read('skills', 'skill_invocations', ['skill_invocation_count', 'skillInvocationCount'], null),
-    files: read('files', 'files', ['file_operation_count', 'fileOperationCount'], null),
+    user_turns: conversationTurns('user', 'user_turns', ['user_turn_count', 'userTurnCount']),
+    turns: conversationTurns('assistant', 'turns', ['assistant_turn_count', 'assistantTurnCount']),
+    tools: explicitOr('tools', capturedCount(trace, 'tool_calls', ['tool_call_count', 'toolCallCount'])),
+    skills: explicitOr('skills', capturedCount(trace, 'skill_invocations', ['skill_invocation_count', 'skillInvocationCount'])),
+    files: explicitOr('files', capturedCount(trace, 'files', ['file_operation_count', 'fileOperationCount'])),
   }
 }
 
 function linkedConversationItem(trace, record) {
   const conversation = safeArray(trace?.conversation)
-  const eventId = cleanString(record.event_id ?? record.eventId)
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId)
   if (eventId) {
-    const byEventId = conversation.find((item) => cleanString(item?.event_id ?? item?.eventId) === eventId)
+    const byEventId = conversation.find((item) => normalizeCapturedEventId(item?.event_id ?? item?.eventId) === eventId)
     if (byEventId) return byEventId
   }
 
   let turnId = cleanString(record.turn_id ?? record.turnId)
   if (!turnId && eventId) {
-    const timelineEvent = safeArray(trace?.timeline).find((event) => cleanString(event?.id) === eventId)
+    const timelineEvent = safeArray(trace?.timeline).find((event) => normalizeCapturedEventId(event?.id) === eventId)
     turnId = cleanString(timelineEvent?.turn_id ?? timelineEvent?.turnId)
   }
   if (!turnId) return null
@@ -322,10 +344,11 @@ function linkedConversationItem(trace, record) {
 
 function normalizeTurn(record = {}, trace = {}) {
   const conversationItem = linkedConversationItem(trace, record)
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId) || normalizeCapturedEventId(conversationItem?.event_id ?? conversationItem?.eventId) || 'Event ID not recorded'
   const turnId = cleanString(record.turn_id ?? record.turnId) || cleanString(conversationItem?.turn_id ?? conversationItem?.turnId) || null
   const responseSummary = clipTurnPreview(record.response_summary ?? record.responseSummary ?? conversationItem?.content) || null
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
+    eventId,
     turnId,
     turnRole: cleanString(record.role ?? record.speaker ?? conversationItem?.role).toLowerCase() || 'assistant',
     turnPreview: responseSummary,
@@ -343,7 +366,7 @@ function normalizeTurn(record = {}, trace = {}) {
 function normalizeUserTurn(record = {}) {
   const signalType = normalizedEnum(record.signal_type ?? record.signalType ?? record.type, USER_SIGNAL_TYPES, { scope_clarification: 'clarification' })
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
+    eventId: normalizeCapturedEventId(record.event_id ?? record.eventId) || 'Event ID not recorded',
     turnId: cleanString(record.turn_id ?? record.turnId) || null,
     signalType: humanizeValue(signalType) || 'Other',
     summary: clipTurnPreview(record.summary ?? record.user_summary ?? record.userSummary ?? record.content) || null,
@@ -360,21 +383,21 @@ function linkedToolCall(trace, record) {
     if (byToolUseId) return byToolUseId
   }
 
-  const eventId = cleanString(record.event_id ?? record.eventId)
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId)
   if (!eventId) return null
   const timeline = safeArray(trace?.timeline)
-  const timelineEvent = timeline.find((event) => cleanString(event?.id) === eventId)
+  const timelineEvent = timeline.find((event) => normalizeCapturedEventId(event?.id) === eventId)
   const toolCallIndex = timelineEvent?.tool_call_index ?? timelineEvent?.toolCallIndex
   if (Number.isInteger(toolCallIndex) && toolCalls[toolCallIndex]) return toolCalls[toolCallIndex]
 
-  return toolCalls.find((call) => cleanString(call?.event_id ?? call?.eventId) === eventId) || null
+  return toolCalls.find((call) => normalizeCapturedEventId(call?.event_id ?? call?.eventId) === eventId) || null
 }
 
 function linkedSkillInvocation(trace, record) {
   const invocations = safeArray(trace?.skill_invocations)
-  const eventId = cleanString(record.event_id ?? record.eventId)
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId)
   if (eventId) {
-    const byEventId = invocations.find((invocation) => cleanString(invocation?.event_id ?? invocation?.eventId) === eventId)
+    const byEventId = invocations.find((invocation) => normalizeCapturedEventId(invocation?.event_id ?? invocation?.eventId) === eventId)
     if (byEventId) return byEventId
   }
 
@@ -403,7 +426,7 @@ function normalizeTool(record = {}, trace = {}) {
     ? completionDetails[completionStatus] || `Captured completion status: ${humanizeValue(completionStatus)}.`
     : 'Completion status not recorded.'
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
+    eventId: normalizeCapturedEventId(record.event_id ?? record.eventId) || 'Event ID not recorded',
     toolUseId,
     toolName,
     inputPreview: inputSummary,
@@ -418,7 +441,7 @@ function normalizeTool(record = {}, trace = {}) {
 
 function normalizeSkill(record = {}, trace = {}) {
   const invocation = linkedSkillInvocation(trace, record)
-  const eventId = cleanString(record.event_id ?? record.eventId) || cleanString(invocation?.event_id ?? invocation?.eventId) || 'Event ID not recorded'
+  const eventId = normalizeCapturedEventId(record.event_id ?? record.eventId) || normalizeCapturedEventId(invocation?.event_id ?? invocation?.eventId) || 'Event ID not recorded'
   const rawSkillName = cleanString(record.skill_name ?? record.skillName) || cleanString(invocation?.name ?? invocation?.skill_name ?? invocation?.skillName) || 'Skill name not recorded'
   const skillName = repairCapturedText(rawSkillName)
   const toolName = repairCapturedText(cleanString(invocation?.tool_name ?? invocation?.toolName)) || null
@@ -447,7 +470,7 @@ function normalizeSkill(record = {}, trace = {}) {
 
 function normalizeFile(record = {}) {
   return {
-    eventId: cleanString(record.event_id ?? record.eventId) || 'Event ID not recorded',
+    eventId: normalizeCapturedEventId(record.event_id ?? record.eventId) || 'Event ID not recorded',
     path: cleanString(record.path ?? record.file_path ?? record.filePath) || 'File path not recorded',
     operation: humanizeValue(record.operation) || 'Operation not recorded',
     summary: clipTurnPreview(record.summary ?? record.file_summary ?? record.fileSummary) || null,
@@ -485,31 +508,52 @@ function countVerdicts(records, key, values) {
   }))
 }
 
-function coverageCopy(annotatedCount, capturedCountValue, isRecorded) {
-  const annotated = annotatedCount.toLocaleString()
+function markSharedNeutralRationales(turns) {
+  const rationaleCounts = new Map()
+  turns.forEach((turn) => {
+    if (turn.performance !== 'neutral' || !turn.rationale) return
+    const key = turn.rationale.trim().replace(/\s+/g, ' ').toLowerCase()
+    rationaleCounts.set(key, (rationaleCounts.get(key) || 0) + 1)
+  })
+
+  return turns.map((turn) => {
+    if (turn.performance !== 'neutral' || !turn.rationale) return turn
+    const key = turn.rationale.trim().replace(/\s+/g, ' ').toLowerCase()
+    const rationaleRepeatCount = rationaleCounts.get(key) || 0
+    return rationaleRepeatCount > 1 ? { ...turn, rationaleRepeatCount } : turn
+  })
+}
+
+function coverageCopy(labeledCount, capturedCountValue, unit, isRecorded) {
   if (!isRecorded) return { value: 'Not included', detail: 'This category was not stored in this analysis version' }
-  if (capturedCountValue === null) return { value: `${annotated} labeled`, detail: 'Captured total is not included in this response' }
-  if (capturedCountValue === 0) return { value: `${annotated} labeled / 0 captured`, detail: 'No captured records in this category' }
-  const percentage = Math.round((annotatedCount / capturedCountValue) * 100)
+  if (labeledCount === null && capturedCountValue === null) return { value: 'Coverage unavailable', detail: 'No saved labeled total or captured total is available' }
+  if (labeledCount === null) return { value: `${capturedCountValue.toLocaleString()} captured ${capturedCountValue === 1 ? unit : `${unit}s`}`, detail: 'This analysis version does not store a separate labeled total' }
+  if (capturedCountValue === null) return { value: `${labeledCount.toLocaleString()} labeled · captured total unavailable`, detail: 'The captured total is not available in this response' }
   return {
-    value: `${annotated} labeled / ${capturedCountValue.toLocaleString()} captured`,
-    detail: `${percentage}% of captured records labeled`,
+    value: `${labeledCount.toLocaleString()} labeled / ${capturedCountValue.toLocaleString()} captured ${capturedCountValue === 1 ? unit : `${unit}s`}`,
+    detail: capturedCountValue === 0 ? 'No captured items in this category' : 'Coverage is separate from the saved annotation record count',
   }
 }
 
-function normalizeCategory(key, label, records, capturedCountValue, fields, isRecorded = true, unavailableDetail = null, savedCoverage = null) {
-  const annotatedCount = numberOrNull(savedCoverage?.labeled) ?? records.length
-  const capturedCount = numberOrNull(savedCoverage?.captured) ?? capturedCountValue
+function normalizeCategory(key, label, records, captureCoverage, fields, isRecorded = true, unavailableDetail = null, savedCoverage = null, coverageUnit) {
+  const labeledCount = numberOrNull(savedCoverage?.labeled)
+  const capturedCount = numberOrNull(savedCoverage?.captured) ?? captureCoverage.value
   const unclearCount = numberOrNull(savedCoverage?.unclear) ?? unclearRecordCount(records)
-  const coverage = coverageCopy(annotatedCount, capturedCount, isRecorded)
+  const coverageSource = !isRecorded
+    ? 'Not included in this analysis version'
+    : captureCoverage.source
+  const coverage = coverageCopy(labeledCount, capturedCount, coverageUnit, isRecorded)
   return {
     key,
     label,
     records,
+    recordCount: records.length,
     recorded: isRecorded,
     unavailableDetail,
-    annotatedCount,
+    labeledCount,
     capturedCount,
+    coverageUnit,
+    coverageSource,
     unclearCount,
     coverageValue: coverage.value,
     coverageDetail: coverage.detail,
@@ -532,7 +576,7 @@ function normalizeAnnotation(annotation, trace) {
   const skillsRecorded = Array.isArray(annotation?.skills)
   const filesRecorded = Array.isArray(annotation?.files)
   const userTurns = safeArray(annotation?.user_turns ?? annotation?.userTurns).map(normalizeUserTurn)
-  const turns = safeArray(annotation?.turns).map((record) => normalizeTurn(record, trace))
+  const turns = markSharedNeutralRationales(safeArray(annotation?.turns).map((record) => normalizeTurn(record, trace)))
   const tools = safeArray(annotation?.tools).map((record) => normalizeTool(record, trace))
   const skills = safeArray(annotation?.skills).map((record) => normalizeSkill(record, trace))
   const files = safeArray(annotation?.files).map(normalizeFile)
@@ -540,11 +584,11 @@ function normalizeAnnotation(annotation, trace) {
   const savedCoverage = isObject(annotation?.coverage) ? annotation.coverage : {}
   const captured = version2
     ? {
-        user_turns: numberOrNull(savedCoverage.user_turns?.captured) ?? userTurns.length,
-        turns: numberOrNull(savedCoverage.agent_turns?.captured) ?? turns.length,
-        tools: numberOrNull(savedCoverage.tool_calls?.captured) ?? tools.length,
-        skills: numberOrNull(savedCoverage.skill_invocations?.captured) ?? skills.length,
-        files: numberOrNull(savedCoverage.file_operations?.captured) ?? files.length,
+        user_turns: { value: numberOrNull(savedCoverage.user_turns?.captured), source: numberOrNull(savedCoverage.user_turns?.captured) === null ? 'Captured total missing from saved schema v2 coverage' : 'Saved schema v2 coverage' },
+        turns: { value: numberOrNull(savedCoverage.agent_turns?.captured), source: numberOrNull(savedCoverage.agent_turns?.captured) === null ? 'Captured total missing from saved schema v2 coverage' : 'Saved schema v2 coverage' },
+        tools: { value: numberOrNull(savedCoverage.tool_calls?.captured), source: numberOrNull(savedCoverage.tool_calls?.captured) === null ? 'Captured total missing from saved schema v2 coverage' : 'Saved schema v2 coverage' },
+        skills: { value: numberOrNull(savedCoverage.skill_invocations?.captured), source: numberOrNull(savedCoverage.skill_invocations?.captured) === null ? 'Captured total missing from saved schema v2 coverage' : 'Saved schema v2 coverage' },
+        files: { value: numberOrNull(savedCoverage.file_operations?.captured), source: numberOrNull(savedCoverage.file_operations?.captured) === null ? 'Captured total missing from saved schema v2 coverage' : 'Saved schema v2 coverage' },
       }
     : capturedEvidenceCounts(trace, annotation || {})
   const performanceSummary = countVerdicts(turns, 'performance', ['improved', 'neutral', 'worsened', 'unclear']).map((item) => ({
@@ -552,8 +596,17 @@ function normalizeAnnotation(annotation, trace) {
     turnIds: turns.filter((turn) => turn.performance === item.value).map((turn) => turn.turnId || turn.eventId),
     turns: turns.filter((turn) => turn.performance === item.value).map((turn) => ({
       id: turn.turnId || turn.eventId,
+      eventId: turn.eventId,
+      turnId: turn.turnId,
       role: turn.turnRole,
       preview: turn.turnPreview,
+      rationale: turn.rationale,
+      followsInstructions: turn.followsInstructions,
+      scopeAdherence: turn.scopeAdherence,
+      groundedness: turn.groundedness,
+      verification: turn.verification,
+      relatedEventIds: turn.relatedEventIds,
+      ...(turn.rationaleRepeatCount > 1 ? { rationaleRepeatCount: turn.rationaleRepeatCount } : {}),
     })),
   }))
 
@@ -566,23 +619,23 @@ function normalizeAnnotation(annotation, trace) {
     performanceSummary,
     performanceLabeledCount: performanceSummary.reduce((total, item) => total + item.count, 0),
     categories: [
-      normalizeCategory('user_turns', 'User turns', userTurns, captured.user_turns, [], userTurnsRecorded, version === '1' ? 'User intent and feedback were not represented by schema v1.' : 'User-turn records were not included.', version2 ? savedCoverage.user_turns : null),
+      normalizeCategory('user_turns', 'User turns', userTurns, captured.user_turns, [], userTurnsRecorded, version === '1' ? 'User intent and feedback were not represented by schema v1.' : 'User-turn records were not included.', version2 ? savedCoverage.user_turns : null, 'user turn'),
       normalizeCategory('turns', 'Agent turns', turns, captured.turns, [
         { label: 'Follows instructions', key: 'followsInstructions', values: ['yes', 'no', 'unclear'] },
         { label: 'Scope adherence', key: 'scopeAdherence', values: ['within_scope', 'deviation', 'unclear'] },
         { label: 'Grounding', key: 'groundedness', values: ['supported', 'unsupported', 'unclear'] },
         { label: 'Verification', key: 'verification', values: ['verified', 'not_verified', 'not_applicable', 'unclear'] },
         { label: 'Performance', key: 'performance', values: ['improved', 'neutral', 'worsened', 'unclear'] },
-      ], turnsRecorded, version === '1' ? null : 'Agent-turn records were not included.', version2 ? savedCoverage.agent_turns : null),
+      ], turnsRecorded, version === '1' ? null : 'Agent-turn records were not included.', version2 ? savedCoverage.agent_turns : null, 'agent turn'),
       normalizeCategory('tools', 'Tool calls', tools, captured.tools, [
         { label: 'Necessary', key: 'necessary', values: ['yes', 'no', 'unclear'] },
-      ], toolsRecorded, version === '1' ? null : 'Tool records were not included.', version2 ? savedCoverage.tool_calls : null),
+      ], toolsRecorded, version === '1' ? null : 'Tool records were not included.', version2 ? savedCoverage.tool_calls : null, 'tool call'),
       normalizeCategory('skills', 'Skill invocations', skills, captured.skills, [
         { label: 'Necessary', key: 'necessary', values: ['yes', 'no', 'unclear'] },
-      ], skillsRecorded, version === '1' ? null : 'Skill records were not included.', version2 ? savedCoverage.skill_invocations : null),
+      ], skillsRecorded, version === '1' ? null : 'Skill records were not included.', version2 ? savedCoverage.skill_invocations : null, 'skill invocation'),
       normalizeCategory('files', 'File operations', files, captured.files, [
         { label: 'Needed for task', key: 'necessary', values: ['yes', 'no', 'unclear'] },
-      ], filesRecorded, version === '1' ? 'File decisions were not represented by schema v1.' : 'File records were not included.', version2 ? savedCoverage.file_operations : null),
+      ], filesRecorded, version === '1' ? 'File decisions were not represented by schema v1.' : 'File records were not included.', version2 ? savedCoverage.file_operations : null, 'file operation'),
     ],
   }
 }
@@ -594,21 +647,24 @@ function displayVerdict(value) {
   return 'Not recorded'
 }
 
-function normalizeReviewSignal(record = {}) {
+function normalizeReviewSignal(record = {}, sourceIndex = 0) {
   const severity = validEnum(record.severity, new Set(['info', 'warning', 'critical', 'unknown'])) || 'unknown'
   const detail = cleanText(record.detail) || 'Signal detail not recorded'
   const signalName = cleanString(record.name)
   const occurrences = safeArray(record.occurrences).map((occurrence = {}) => ({
-    eventId: cleanString(occurrence.event_id ?? occurrence.eventId) || 'Event ID not recorded',
+    eventId: normalizeCapturedEventId(occurrence.event_id ?? occurrence.eventId) || 'Event ID not recorded',
     eventKind: humanizeValue(occurrence.event_kind ?? occurrence.eventKind) || null,
+    toolName: cleanText(occurrence.tool_name ?? occurrence.toolName) || null,
+    commandOrInput: clipTurnPreview(occurrence.command ?? occurrence.command_summary ?? occurrence.commandSummary ?? occurrence.input_summary ?? occurrence.inputSummary ?? occurrence.input ?? occurrence.tool_input ?? occurrence.toolInput) || null,
+    messageSummary: clipTurnPreview(occurrence.message ?? occurrence.content ?? occurrence.prompt) || null,
     summary: clipTurnPreview(occurrence.summary) || null,
     impact: clipTurnPreview(occurrence.impact) || null,
     occurredAt: cleanString(occurrence.occurred_at ?? occurrence.occurredAt) || null,
   }))
   const count = numberOrNull(record.count) ?? (Array.isArray(record.occurrences) ? occurrences.length : null)
   return {
-    signalKey: signalName || null,
-    name: repairCapturedText(humanizeSignalName(signalName)),
+    signalKey: signalName || `review-signal-${sourceIndex + 1}`,
+    name: repairCapturedText(humanizeSignalName(signalName) || `Review finding ${sourceIndex + 1}`),
     count,
     severity,
     severityMeaning: SIGNAL_SEVERITY_MEANINGS[severity],
@@ -632,13 +688,17 @@ function normalizeFollowUp(signal) {
 
 function normalizeAlignment(alignment) {
   const value = isObject(alignment) ? alignment : {}
-  const status = validEnum(value.status, ALIGNMENT_STATUSES) || 'not_recorded'
+  const humanLabel = cleanText(value.human_label ?? value.humanLabel) || null
+  const evaluatorLabel = cleanText(value.evaluator_label ?? value.evaluatorLabel) || null
+  const hasBothLabels = Boolean(humanLabel && evaluatorLabel)
+  const storedStatus = validEnum(value.status, ALIGNMENT_STATUSES) || 'not_recorded'
+  const status = hasBothLabels ? storedStatus : 'not_recorded'
   return {
     status,
     label: status === 'aligned' ? 'Aligned' : status === 'not_aligned' ? 'Not aligned' : 'Not recorded',
-    humanLabel: cleanText(value.human_label ?? value.humanLabel) || null,
-    evaluatorLabel: cleanText(value.evaluator_label ?? value.evaluatorLabel) || null,
-    agreement: typeof value.agreement === 'boolean' ? value.agreement : null,
+    humanLabel,
+    evaluatorLabel,
+    agreement: hasBothLabels && typeof value.agreement === 'boolean' ? value.agreement : null,
     dataset: cleanString(value.dataset) || null,
   }
 }
@@ -671,7 +731,7 @@ function normalizeLedger(ledger) {
 function normalizeEvaluation(evaluation) {
   const recorded = isObject(evaluation)
   const verdict = validEnum(evaluation?.verdict, EVALUATION_VERDICTS)
-  const reviewSignals = safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map(normalizeReviewSignal)
+  const reviewSignals = safeArray(evaluation?.review_signals ?? evaluation?.reviewSignals).map((record, index) => normalizeReviewSignal(record, index))
   return {
     recorded,
     schemaVersion: schemaVersion(evaluation?.schema_version ?? evaluation?.schemaVersion),

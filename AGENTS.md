@@ -24,7 +24,7 @@
 
 ## Local service operations
 
-For requests about a service in `nala.yml`—configuration, running state, run/stop, logs, or branch—read and follow the [Nala Ctrl service-operations skill](.agents/skills/nala-ctrl-service-operations/SKILL.md). Use Nala Ctrl's loopback-only headless HTTP API through `nala-ctrl api serve`; its endpoints require no token or authentication header. Do not open the desktop UI or manage processes directly. The API reports running state only for services started by its own process. Follow the documented skill API contract exactly: loopback requests need no token; do not add auth/token setup, speculative fallbacks, or compatibility wrappers unless a documented API requirement calls for them.
+For requests about a service in `nala.yml`—configuration, running state, run/stop, logs, or branch—read and follow the [Nala Ctrl service-operations skill](.agents/skills/nala-ctrl-service-operations/SKILL.md). Use Nala Ctrl's loopback-only headless HTTP API through `nala-ctrl api serve`; its endpoints require no token or authentication header. Do not open the desktop UI or manage processes directly. The API reports running state only for services started by its own process. Follow the documented skill API contract exactly: loopback requests need no token; do not add auth/token setup, speculative fallbacks, or compatibility wrappers unless a documented API requirement calls for them. If /v1/health is unavailable, follow the skill startup recovery steps before reporting a blocker; keep the API process alive through service operations and status confirmation.
 
 ## Branches and publication
 

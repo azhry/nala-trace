@@ -1,0 +1,110 @@
+:root {
+  color-scheme: light;
+  --nala-canvas: #f5f6f8;
+  --nala-surface: #ffffff;
+  --nala-surface-muted: #eef1f5;
+  --nala-surface-hover: #e6ebf2;
+  --nala-text: #192433;
+  --nala-text-muted: #526174;
+  --nala-text-subtle: #617085;
+  --nala-border: #dbe1e9;
+  --nala-control-border: #8996a8;
+  --nala-accent: #185cda;
+  --nala-accent-hover: #124ab3;
+  --nala-accent-soft: #e8efff;
+  --nala-accent-rgb: 24, 92, 218;
+  --nala-success: #176947;
+  --nala-success-soft: #e5f4ec;
+  --nala-success-rgb: 23, 105, 71;
+  --nala-warning: #865000;
+  --nala-warning-soft: #fff2d9;
+  --nala-warning-rgb: 134, 80, 0;
+  --nala-danger: #b3293a;
+  --nala-danger-soft: #ffebee;
+  --nala-text-muted-rgb: 82, 97, 116;
+  --nala-code: #edf0f5;
+  --nala-on-accent: #ffffff;
+  --nala-radius-control: 6px;
+  --nala-radius-card: 10px;
+  --nala-radius-panel: 14px;
+  --nala-shadow-card: 0 1px 2px rgb(25 36 51 / 5%);
+  --nala-shadow-menu: 0 8px 28px rgb(25 36 51 / 12%);
+  --nala-font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --nala-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --nala-space-1: 4px;
+  --nala-space-2: 8px;
+  --nala-space-3: 12px;
+  --nala-space-4: 16px;
+  --nala-space-6: 24px;
+  --nala-space-8: 32px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --nala-canvas: #141a23;
+  --nala-surface: #1d2633;
+  --nala-surface-muted: #252f3e;
+  --nala-surface-hover: #303d50;
+  --nala-text: #edf2fa;
+  --nala-text-muted: #b7c3d4;
+  --nala-text-subtle: #a4b3c8;
+  --nala-border: #39475b;
+  --nala-control-border: #71829a;
+  --nala-accent: #92b8ff;
+  --nala-accent-hover: #b6ceff;
+  --nala-accent-soft: #263f65;
+  --nala-accent-rgb: 146, 184, 255;
+  --nala-success: #84dfb4;
+  --nala-success-soft: #1c3c32;
+  --nala-success-rgb: 132, 223, 180;
+  --nala-warning: #f1c477;
+  --nala-warning-soft: #41351f;
+  --nala-warning-rgb: 241, 196, 119;
+  --nala-danger: #ffabb6;
+  --nala-danger-soft: #492b37;
+  --nala-text-muted-rgb: 183, 195, 212;
+  --nala-code: #151d28;
+  --nala-on-accent: #11223c;
+  --nala-shadow-card: 0 1px 2px rgb(0 0 0 / 12%);
+  --nala-shadow-menu: 0 8px 28px rgb(0 0 0 / 28%);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--nala-control-border);
+  border-radius: var(--nala-radius-control);
+  background: var(--nala-surface);
+  color: var(--nala-text-muted);
+  font: 500 13px/1.2 var(--nala-font);
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--nala-surface-hover); color: var(--nala-text); }
+.theme-toggle:active { transform: translateY(1px); }
+.theme-toggle svg { width: 17px; height: 17px; }
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--nala-accent);
+  outline-offset: 3px;
+}
+:where(button, a, select, summary, input[type="checkbox"], input[type="radio"]) { cursor: pointer; }
+:where(button, input, select):disabled { cursor: not-allowed; }
+.nala-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 12px 16px;
+  border-radius: var(--nala-radius-control);
+  background: var(--nala-accent);
+  color: var(--nala-on-accent);
+  transform: translateY(-150%);
+}
+.nala-skip-link:focus { transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

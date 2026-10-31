@@ -480,11 +480,6 @@ button.skill-inventory-item[aria-pressed="true"], button.instruction-source-item
 }
 
 /* Human-scale console defaults. Keep primary evidence comfortable to read; reserve the mono face for supporting data. */
-:root {
-  --muted: #c2cbd7;
-  --faint: #9aa6b6;
-}
-
 body { font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
 .sidebar { max-height: 100vh; overflow-y: auto; scrollbar-gutter: stable; }

@@ -1,108 +1,53 @@
-# Nala Ctrl headless API reference
+# Nala Ctrl desktop agent API
 
-## Start the API
+## What it is
 
-The headless server is part of Nala Ctrl's Go command and starts without Wails or the desktop window. If health already returns 200, reuse that server. If the connection is refused, start the API in a long-lived terminal and keep it running through service operations and status confirmation; shutting it down stops services managed by that API process:
+The Nala Ctrl desktop app starts this API automatically at http://127.0.0.1:47654. The API and Wails UI use the same Manager, so workspace, service state, run, stop, and logs refer to the desktop app's configured projects and managed processes. Requests require no token or Authorization header and are accepted only from loopback clients. Browser-origin requests are rejected.
 
-~~~bash
-nala-ctrl api serve --listen 127.0.0.1:47653
-~~~
-
-If the CLI is not on PATH, check for a sibling Nala Ctrl source checkout at ../nala-ctrl relative to this project root. In a task worktree or different layout, use the known Nala Ctrl root from workspace context; do not guess an install path or search arbitrary directories. Confirm go.mod and agent_api.go exist, then start from the Nala Ctrl root with:
+Health must return `{"ok":true,"mode":"desktop"}`. The separate command `nala-ctrl api serve --listen 127.0.0.1:47653` reports `mode=headless` and owns a different Manager. Do not launch it for these service operations. If health is unavailable, returns the wrong mode, or omits mode, ask the user to start or restart the desktop app. If the desktop endpoint returns mode=headless, ask the user to close that incorrect instance; do not identify or terminate its process.
 
 ~~~bash
-cd ../nala-ctrl
-go run . api serve --listen 127.0.0.1:47653
-~~~
-
-A fresh checkout may lack the embedded frontend/dist assets. If that directory is absent, build it from the Nala Ctrl root before running go run:
-
-~~~bash
-npm --prefix frontend ci
-npm --prefix frontend run build
-~~~
-
-If neither the installed CLI nor the known source checkout can start the server, report the exact command failure. When the server prints a different loopback address, use that observed address instead of the default below.
-
-Verify health from another terminal:
-
-~~~bash
-api="http://127.0.0.1:47653"
+api="http://127.0.0.1:47654"
 curl --silent --show-error --fail "$api/v1/health"
 ~~~
 
-The API is unauthenticated and accepts requests only from loopback clients. Browser-origin requests are rejected.
+## Workspace and services
 
-## Configuration and registration
+Nala Ctrl reads the repository-root nala.yml. Each entry under projects is a service with cwd and run; port and log are optional. Do not expose run commands or environment values.
 
-Nala Ctrl reads a repository-root nala.yml. Each item under projects is a service with required cwd and run fields; port and log are optional. Do not expose run values or environment values in reports.
+GET /v1/workspace lists projects loaded in the Manager serving the API and their configured services. Match the project by its normalized absolute folder path, then use the exact service ID returned for service routes. The response omits configured run commands, environment values, and log lines.
 
-Configuration on disk and registration in the API process are separate. GET /v1/workspace lists only folders loaded by this API manager and services parsed from their nala.yml files. Match project IDs by normalized absolute folder path. Service IDs are stable opaque IDs; use the exact ID from the workspace response for service routes.
+For desktop operations in this skill, do not use POST /v1/projects/load. If this repository is absent from the desktop workspace, ask the user to add it through the Nala Ctrl UI.
 
-POST /v1/projects/load accepts one JSON object with a folder field containing the absolute project folder. It validates and registers that folder and may persist it in the user's saved project list. Use it only for an explicit Run request when the project is not registered. A read-only status, logs, or branch request must not silently mutate the saved list.
+## API routes
 
-## Endpoints
-
-These examples assume the default address and that api is set as above. Requests do not require authentication.
-
-| Request | Response and meaning |
+| Request | Capability and response |
 | --- | --- |
-| GET /v1/health | 200 with {"ok":true} when the server is ready. |
-| GET /v1/workspace | Workspace folder, needsConfig, hasWarnings, project IDs/folders/names, and service IDs/names/cwd/port/logPath. No run command or log lines are returned. hasWarnings flags persistence or restore problems without returning private diagnostic text. |
-| POST /v1/projects/load | Send Content-Type: application/json and {"folder":"absolute-project-folder"}. Returns the safe workspace after loading. |
-| GET /v1/services/{serviceID} | Returns project/service identity, cwd, port, logPath, configured, running, optional pid, and optional portInUse. |
-| GET /v1/services/{serviceID}/logs?limit=N | Returns lines, sizeBytes, and limit. Default limit is 100; values above 250 are clamped to 250. The read is also capped at 512 KiB. |
-| POST /v1/services/{serviceID}/run | 200 with started and pid when the API starts the service; 409 when it is already running or its configured port is occupied. A conflict response does not identify or stop the port owner. |
-| POST /v1/services/{serviceID}/stop | Stops only a process started by this API manager. Returns stopped:true on success or alreadyStopped:true when this manager does not have it running. |
-| GET /v1/projects/git-branch?projectId=<url-encoded-absolute-project-folder> | Returns available, repositoryRoot, currentBranch, and local branch names for the registered project's Git root. |
+| GET /v1/health | Confirms the listener is ready and identifies its mode. Desktop mode returns `{"ok":true,"mode":"desktop"}`. |
+| GET /v1/workspace | Lists loaded project folders, project IDs/names, and service IDs/names/cwd/port/logPath. It exposes only a hasWarnings flag for registry problems. |
+| POST /v1/projects/load | Registers a folder containing nala.yml and may persist it. This route exists, but the service-operations skill must use the desktop UI to add projects. |
+| GET /v1/services/{serviceID} | Reads project/service identity, cwd, port, logPath, configured, running, optional pid, and optional portInUse. |
+| GET /v1/services/{serviceID}/logs?limit=N | Reads a bounded log tail. Default is 100 lines, maximum is 250, with a 512 KiB file read cap. Logs may contain secrets. |
+| POST /v1/services/{serviceID}/run | Starts that configured service through the shared Manager. Returns started and pid on success; HTTP 409 when already running or its configured port is occupied. A conflict does not identify or stop the port owner. |
+| POST /v1/services/{serviceID}/stop | Stops that service through the shared Manager. Returns stopped=true or alreadyStopped=true when this Manager does not have it running. |
+| GET /v1/projects/git-branch?projectId=<url-encoded-absolute-folder> | Reports branch state for the registered project's Git root. The projectId query value is the absolute folder path from the workspace, not the opaque project ID. |
 
-Example health request:
-
-~~~bash
-curl --silent --show-error --fail "$api/v1/health"
-~~~
-
-
-Example explicit project registration request when the user asked to run a valid but unregistered project. Run it from the repository root; the Python one-liner JSON-encodes the native absolute path:
+Use the exact service ID from the workspace response for service routes. Examples:
 
 ~~~bash
-folder_json="$(python -c 'import json, os; print(json.dumps({"folder": os.getcwd()}))')"
-curl --silent --show-error --header 'Content-Type: application/json' --data-binary "$folder_json" "$api/v1/projects/load"
-~~~
-
-Example service status request, after selecting the service ID from the workspace response:
-~~~bash
+curl --silent --show-error --fail "$api/v1/workspace"
 curl --silent --show-error --fail "$api/v1/services/$service_id"
-~~~
-
-Example run request:
-
-~~~bash
-curl --silent --show-error --write-out '\nHTTP %{http_code}\n' --request POST "$api/v1/services/$service_id/run"
-~~~
-
-Example stop request:
-
-~~~bash
-curl --silent --show-error --write-out '\nHTTP %{http_code}\n' --request POST "$api/v1/services/$service_id/stop"
-~~~
-
-Example bounded log request for a failure diagnosis:
-
-~~~bash
+curl --silent --show-error --write-out 'HTTP %{http_code}' --request POST "$api/v1/services/$service_id/run"
+curl --silent --show-error --write-out 'HTTP %{http_code}' --request POST "$api/v1/services/$service_id/stop"
 curl --silent --show-error --fail "$api/v1/services/$service_id/logs?limit=100"
+curl --silent --show-error --fail --get --data-urlencode "projectId=$project_folder" "$api/v1/projects/git-branch"
 ~~~
 
-Example project-root branch request. project_id is the absolute folder ID selected from the workspace response:
-
-~~~bash
-curl --silent --show-error --fail --get --data-urlencode "projectId=$project_id" "$api/v1/projects/git-branch"
-~~~
+Set service_id to the exact ID returned by workspace and project_folder to that project's absolute folder path before using the examples. The branch route reports the current project-root branch; it cannot switch branches, inspect another worktree, or report a process-start branch.
 
 ## State and safety limits
 
-- The API has a Manager instance separate from the desktop app. running and pid describe only services started by this API process. They do not prove whether another manager or an independently started process is running the service.
-- portInUse is only a boolean for the configured port. A false running value with portInUse true means the API does not manage the process holding that port; do not call the service stopped and do not terminate the owner.
-- The service branch cannot be inferred from the project-root branch response. The API reports the current Git branch of the registered project folder's repository root, not the branch checked out when a process started. It does not inspect a separate Git worktree configured as cwd.
-- Logs can contain tokens or other sensitive output. Read them only for diagnosis and redact secrets before quoting or saving them.
-- No API endpoint switches branches, discovers arbitrary processes, or terminates a port owner. Stopping the API with Ctrl-C stops processes that this API instance started.
+- In desktop mode, running and pid refer to child processes managed by the same Manager as the UI. In headless mode they refer only to that separate process; do not use headless mode for desktop work.
+- portInUse is only a boolean. If running is false and portInUse is true, Nala Ctrl does not own the process using the configured port. Do not report that service as stopped or terminate the owner.
+- The API has no route for arbitrary process discovery, branch switching, or port-owner termination.
+- Workspace and service responses omit configured run commands and environment values. Read logs only for diagnosis and redact sensitive output before reporting.

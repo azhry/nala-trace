@@ -94,6 +94,29 @@ svg { display: block; flex: 0 0 auto; }
 }
 :where(button, a, select, summary, input[type="checkbox"], input[type="radio"]) { cursor: pointer; }
 :where(button, input, select):disabled { cursor: not-allowed; }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--nala-control-border);
+  border-radius: var(--nala-radius-control);
+  background: var(--nala-surface-raised);
+  color: var(--nala-text-muted);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--nala-surface-hover); color: var(--nala-text); }
+.theme-toggle[data-pressed] {
+  border-color: var(--nala-accent);
+  background: var(--nala-accent-soft);
+  color: var(--nala-accent);
+}
+.theme-toggle svg { width: 17px; height: 17px; }
 .nala-skip-link {
   position: fixed;
   z-index: 100;

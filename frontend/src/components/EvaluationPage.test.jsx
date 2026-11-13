@@ -41,7 +41,7 @@ describe('EvaluationPage', () => {
     const onBack = vi.fn()
     render(<EvaluationPage session={session} analysis={session.analysis} onBack={onBack} />)
 
-    expect(screen.getByRole('heading', { name: 'Session evaluation', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Evaluation review', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Review details' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'What to improve' })).toBeInTheDocument()
     expect(screen.getByText('The evaluator recorded a complete review.')).toBeInTheDocument()
@@ -60,10 +60,11 @@ describe('EvaluationPage', () => {
     expect(screen.getByText('What to improve')).toBeInTheDocument()
     expect(screen.getByText('“No outcome change recorded” means the evaluator saw no change to the result; it does not mean the turn was good or bad.')).toBeInTheDocument()
 
-    const evidenceDetails = screen.getByText('Evidence details').closest('details')
-    expect(evidenceDetails).not.toHaveAttribute('open')
-    fireEvent.click(screen.getByText('Evidence details'))
-    expect(evidenceDetails).toHaveAttribute('open')
+    const evidenceTrigger = screen.getByRole('button', { name: /Evidence details/ })
+    const evidenceDetails = evidenceTrigger.closest('.analysis-evidence-disclosure')
+    expect(evidenceDetails).toHaveAttribute('data-closed')
+    fireEvent.click(evidenceTrigger)
+    expect(evidenceDetails).toHaveAttribute('data-open')
   })
 
   it('places result impact, priority findings, agent changes, and evidence gaps before the audit trail', () => {
@@ -98,7 +99,7 @@ describe('EvaluationPage', () => {
       screen.getByRole('heading', { name: 'Priority findings' }),
       screen.getByRole('heading', { name: 'What to improve' }),
       screen.getByRole('heading', { name: 'Evidence gaps' }),
-      screen.getByText('Evidence details').closest('summary'),
+      screen.getByRole('button', { name: /Evidence details/ }),
     ]
     for (let index = 0; index < orderedContent.length - 1; index += 1) {
       expect(orderedContent[index].compareDocumentPosition(orderedContent[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)

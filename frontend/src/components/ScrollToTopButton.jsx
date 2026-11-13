@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Button } from '@ui-sdk/react/button'
 
 export const SCROLL_TO_TOP_THRESHOLD = 240
 
@@ -24,5 +25,5 @@ export default function ScrollToTopButton() {
 
   if (!isVisible) return null
 
-  return <button type="button" className="scroll-to-top-button" aria-label="Scroll to top" title="Scroll to top" onClick={scrollToTop}><span aria-hidden="true">↑</span></button>
+  return <Button className="scroll-to-top-button" aria-label="Scroll to top" title="Scroll to top" onClick={scrollToTop}><span aria-hidden="true">↑</span></Button>
 }

@@ -1,35 +1,36 @@
 :root {
   color-scheme: light;
-  --nala-canvas: #f5f6f8;
-  --nala-surface: #ffffff;
-  --nala-surface-muted: #eef1f5;
-  --nala-surface-hover: #e6ebf2;
-  --nala-text: #192433;
-  --nala-text-muted: #526174;
-  --nala-text-subtle: #617085;
-  --nala-border: #dbe1e9;
-  --nala-control-border: #8996a8;
-  --nala-accent: #185cda;
-  --nala-accent-hover: #124ab3;
-  --nala-accent-soft: #e8efff;
-  --nala-accent-rgb: 24, 92, 218;
-  --nala-success: #176947;
-  --nala-success-soft: #e5f4ec;
-  --nala-success-rgb: 23, 105, 71;
-  --nala-warning: #865000;
-  --nala-warning-soft: #fff2d9;
-  --nala-warning-rgb: 134, 80, 0;
-  --nala-danger: #b3293a;
-  --nala-danger-soft: #ffebee;
-  --nala-text-muted-rgb: 82, 97, 116;
-  --nala-code: #edf0f5;
-  --nala-on-accent: #ffffff;
+  --nala-canvas: #edf2ef;
+  --nala-surface: #f8faf8;
+  --nala-surface-raised: #fff;
+  --nala-surface-muted: #e3ebe6;
+  --nala-surface-hover: #e8f0eb;
+  --nala-text: #172721;
+  --nala-text-muted: #435b50;
+  --nala-text-subtle: #62766c;
+  --nala-border: #c8d5cd;
+  --nala-control-border: #758a7e;
+  --nala-accent: #086b5c;
+  --nala-accent-hover: #07564b;
+  --nala-accent-soft: #d9ece5;
+  --nala-accent-rgb: 8, 107, 92;
+  --nala-success: #176143;
+  --nala-success-soft: #dcefe5;
+  --nala-success-rgb: 23, 97, 67;
+  --nala-warning: #754800;
+  --nala-warning-soft: #f5ead5;
+  --nala-warning-rgb: 117, 72, 0;
+  --nala-danger: #963c35;
+  --nala-danger-soft: #f4e2df;
+  --nala-text-muted-rgb: 67, 91, 80;
+  --nala-code: #e8eeeb;
+  --nala-on-accent: #fff;
   --nala-radius-control: 6px;
   --nala-radius-card: 10px;
   --nala-radius-panel: 14px;
-  --nala-shadow-card: 0 1px 2px rgb(25 36 51 / 5%);
-  --nala-shadow-menu: 0 8px 28px rgb(25 36 51 / 12%);
-  --nala-font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --nala-shadow-card: 0 1px 2px rgb(18 39 32 / 5%);
+  --nala-shadow-menu: 0 14px 36px rgb(18 39 32 / 14%);
+  --nala-font: "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
   --nala-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --nala-space-1: 4px;
   --nala-space-2: 8px;
@@ -41,52 +42,52 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --nala-canvas: #141a23;
-  --nala-surface: #1d2633;
-  --nala-surface-muted: #252f3e;
-  --nala-surface-hover: #303d50;
-  --nala-text: #edf2fa;
-  --nala-text-muted: #b7c3d4;
-  --nala-text-subtle: #a4b3c8;
-  --nala-border: #39475b;
-  --nala-control-border: #71829a;
-  --nala-accent: #92b8ff;
-  --nala-accent-hover: #b6ceff;
-  --nala-accent-soft: #263f65;
-  --nala-accent-rgb: 146, 184, 255;
-  --nala-success: #84dfb4;
-  --nala-success-soft: #1c3c32;
-  --nala-success-rgb: 132, 223, 180;
-  --nala-warning: #f1c477;
-  --nala-warning-soft: #41351f;
-  --nala-warning-rgb: 241, 196, 119;
-  --nala-danger: #ffabb6;
-  --nala-danger-soft: #492b37;
-  --nala-text-muted-rgb: 183, 195, 212;
-  --nala-code: #151d28;
-  --nala-on-accent: #11223c;
+  --nala-canvas: #101816;
+  --nala-surface: #151f1c;
+  --nala-surface-raised: #1b2823;
+  --nala-surface-muted: #202e28;
+  --nala-surface-hover: #26372f;
+  --nala-text: #f0f5f2;
+  --nala-text-muted: #c2d1ca;
+  --nala-text-subtle: #adbbb4;
+  --nala-border: #354840;
+  --nala-control-border: #82978d;
+  --nala-accent: #70d7c5;
+  --nala-accent-hover: #9be6d8;
+  --nala-accent-soft: #1b3f38;
+  --nala-accent-rgb: 112, 215, 197;
+  --nala-success: #83d7a9;
+  --nala-success-soft: #1c392b;
+  --nala-success-rgb: 131, 215, 169;
+  --nala-warning: #f0c277;
+  --nala-warning-soft: #3c3120;
+  --nala-warning-rgb: 240, 194, 119;
+  --nala-danger: #ffaaa0;
+  --nala-danger-soft: #422c2a;
+  --nala-text-muted-rgb: 194, 209, 202;
+  --nala-code: #101816;
+  --nala-on-accent: #0c2520;
   --nala-shadow-card: 0 1px 2px rgb(0 0 0 / 12%);
-  --nala-shadow-menu: 0 8px 28px rgb(0 0 0 / 28%);
+  --nala-shadow-menu: 0 18px 44px rgb(0 0 0 / 38%);
 }
 
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--nala-control-border);
-  border-radius: var(--nala-radius-control);
-  background: var(--nala-surface);
-  color: var(--nala-text-muted);
-  font: 500 13px/1.2 var(--nala-font);
-  cursor: pointer;
+* { box-sizing: border-box; }
+html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--nala-canvas);
+  color: var(--nala-text);
+  font-family: var(--nala-font);
+  font-size: 15px;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
-.theme-toggle:hover { background: var(--nala-surface-hover); color: var(--nala-text); }
-.theme-toggle:active { transform: translateY(1px); }
-.theme-toggle svg { width: 17px; height: 17px; }
+button, input, select, textarea { font: inherit; }
+button { color: inherit; }
+a { color: inherit; }
+svg { display: block; flex: 0 0 auto; }
+::selection { background: var(--nala-accent-soft); color: var(--nala-text); }
 :where(button, a, input, select, textarea, summary):focus-visible {
   outline: 3px solid var(--nala-accent);
   outline-offset: 3px;
@@ -95,14 +96,14 @@
 :where(button, input, select):disabled { cursor: not-allowed; }
 .nala-skip-link {
   position: fixed;
+  z-index: 100;
   top: 8px;
   left: 8px;
-  z-index: 100;
-  padding: 12px 16px;
+  padding: 10px 14px;
+  transform: translateY(-150%);
   border-radius: var(--nala-radius-control);
   background: var(--nala-accent);
   color: var(--nala-on-accent);
-  transform: translateY(-150%);
 }
 .nala-skip-link:focus { transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) {

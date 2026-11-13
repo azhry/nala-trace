@@ -11,6 +11,9 @@
 
 ## Execution discipline
 
+- For UI work in this repository, use antislop `during` as the default explicit session mode and do not ask the user to select a mode. Honor a different mode only when the user explicitly chooses one in the current conversation.
+- For Linear issue readiness, verify saved issue content through Linear APIs only; do not open the issue page in a browser for visual checks. Re-read the description and agent comment through the tracker API and validate their structure/content. Product UI browser visual checks remain required.
+- For UI SDK work, read `.agents/skills/ui-sdk/SKILL.md` first, then from `frontend/` read `node_modules/@ui-sdk/react/docs/llms.txt` and only the relevant component pages. Use matching SDK components/behaviors instead of hand-rolling them; retain Nala-owned styles.
 - Treat the user's requested outcome and scope as the contract. Complete required workflow gates, but do not add unrelated review, refactoring, cleanup, generated artifacts, or product changes. When the user has approved the full task, proceed end-to-end without repeating optional questions; ask only when a missing decision would materially change scope or a safety boundary requires it.
 - Keep updates outcome-first, concise, and plain-language. Report only task-relevant progress, blockers, decisions, and evidence; avoid jargon and long narration.
 - Write manual verification directly in the issue or PR description as short, independently pasteable Bash steps. For HTTP behavior, use one simple request per step and a concise expected response. Keep setup separate, do not create or hand off a PowerShell/Bash verification script, helper script, or bulk runner, and never present an unrun response as observed. Use `.agents/skills/manual-test-verification/SKILL.md` and its linked reference for the full context-first, sanitization, immediate-status, and classification contract.

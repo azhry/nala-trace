@@ -21,5 +21,14 @@ export default defineConfig(({ mode }) => {
         '/ingest': apiProxy,
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('/node_modules/@ui-sdk/')) return 'ui-sdk'
+          },
+        },
+      },
+    },
   }
 })

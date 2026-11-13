@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import SessionList from './SessionList'
 import { normalizeSessionSummaries } from '../sessionSummaries'
@@ -33,24 +35,19 @@ const sessions = normalizeSessionSummaries({
   ],
 })
 
+function SessionListHarness({ sessions: sessionRows = sessions, selectedId = 'session-a', initialQuery = '', onSelect = vi.fn(), onQueryChange = vi.fn(), onFilterChange = vi.fn(), onSortChange = vi.fn(), onRetry }) {
+  const [query, setQuery] = useState(initialQuery)
+  const [filter, setFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('recent')
+  return <SessionList sessions={sessionRows} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={(value) => { onQueryChange(value); setQuery(value) }} filter={filter} onFilterChange={(value) => { onFilterChange(value); setFilter(value) }} sortBy={sortBy} onSortChange={(value) => { onSortChange(value); setSortBy(value) }} onRetry={onRetry} />
+}
+
 function renderList(overrides = {}) {
-  const props = {
-    sessions,
-    selectedId: 'session-a',
-    onSelect: vi.fn(),
-    query: '',
-    onQueryChange: vi.fn(),
-    filter: 'all',
-    onFilterChange: vi.fn(),
-    sortBy: 'recent',
-    onSortChange: vi.fn(),
-    ...overrides,
-  }
-  return render(<SessionList {...props} />)
+  return render(<SessionListHarness {...overrides} />)
 }
 
 function recordIds() {
-  return [...document.querySelectorAll('.session-record-main strong')].map((node) => node.textContent)
+  return [...document.querySelectorAll('.session-record__title strong')].map((node) => node.textContent)
 }
 
 describe('SessionList', () => {
@@ -65,30 +62,34 @@ describe('SessionList', () => {
     expect(screen.getByLabelText('3 MCP calls')).toBeInTheDocument()
     expect(screen.getByLabelText('5 files')).toBeInTheDocument()
     expect(screen.getByLabelText('1 skills')).toBeInTheDocument()
-    expect(screen.getByText('MCP servers: github · linear')).toBeInTheDocument()
-    expect(screen.getByText('MCP servers: none recorded')).toBeInTheDocument()
+    expect(screen.getByText('github · linear')).toBeInTheDocument()
+    expect(screen.getByText('No MCP servers recorded')).toBeInTheDocument()
   })
 
-  it('renders stable recency and metric ordering controls', () => {
+  it('renders stable recency and metric ordering controls', async () => {
+    const user = userEvent.setup()
     const onSortChange = vi.fn()
     renderList({ onSortChange })
 
     expect(recordIds()).toEqual(['Investigate the flagged session', 'Review the session title'])
-    fireEvent.change(screen.getByRole('combobox', { name: 'Sort sessions' }), { target: { value: 'tools' } })
+    await user.click(screen.getByRole('combobox', { name: 'Sort by' }))
+    await user.click(screen.getByRole('option', { name: 'Most tool calls' }))
     expect(onSortChange).toHaveBeenCalledWith('tools')
   })
 
-  it('preserves selection while filters change and reports no matches', () => {
+  it('preserves selection while filters change and reports no matches', async () => {
+    const user = userEvent.setup()
     const onQueryChange = vi.fn()
     const { rerender } = renderList({ onQueryChange })
-    const search = screen.getByRole('textbox', { name: 'Search sessions' })
+    const search = screen.getByRole('searchbox', { name: 'Search sessions' })
 
-    fireEvent.change(search, { target: { value: 'files 5' } })
+    await user.type(search, 'files 5')
     expect(onQueryChange).toHaveBeenCalledWith('files 5')
-    rerender(<SessionList sessions={sessions} selectedId="session-b" onSelect={vi.fn()} query="files 5" onQueryChange={onQueryChange} filter="all" onFilterChange={vi.fn()} sortBy="recent" onSortChange={vi.fn()} />)
+    rerender(<SessionListHarness selectedId="session-b" onQueryChange={onQueryChange} />)
     expect(screen.getByRole('button', { name: 'Open session Investigate the flagged session (session-b)' })).toHaveAttribute('aria-pressed', 'true')
 
-    rerender(<SessionList sessions={sessions} selectedId="session-b" onSelect={vi.fn()} query="missing" onQueryChange={onQueryChange} filter="all" onFilterChange={vi.fn()} sortBy="recent" onSortChange={vi.fn()} />)
+    await user.clear(screen.getByRole('searchbox', { name: 'Search sessions' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search sessions' }), 'missing')
     expect(screen.getByText('No sessions match your filters.')).toBeInTheDocument()
   })
 

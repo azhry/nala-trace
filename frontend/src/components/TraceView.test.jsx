@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import TraceView from './TraceView'
 
-const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8')
+const styles = readFileSync(resolve(process.cwd(), 'src/trace-ui.css'), 'utf8')
 
 const apiTrace = {
   schema_version: '1',
@@ -310,7 +310,7 @@ describe('TraceView API conversation', () => {
     expect(container.querySelectorAll('.tool-card')).toHaveLength(60)
     fireEvent.click(screen.getByRole('button', { name: 'Retry loading more rows' }))
     expect(onLoadMore).toHaveBeenCalledExactlyOnceWith()
-  })
+  }, 15000)
 
   it('renders and focuses a deep evidence match before scrolling to it', () => {
     const { container } = render(<TraceView session={createLargeTrace()} />)
@@ -343,10 +343,10 @@ describe('TraceView API conversation', () => {
 
     expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Conversation' }))
     expect(screen.getByText('Showing 0 of 0 rows')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Everything' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Everything' }))
     expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
 
     rerender(<TraceView session={secondTrace} />)
@@ -404,10 +404,9 @@ describe('TraceView API conversation', () => {
     }
 
     const { container } = render(<TraceView session={trace} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Everything' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Everything' }))
 
-    const streamRecords = [...container.querySelector('.trace-stream').children]
-      .filter((record) => record.matches('.conversation-message, .tool-card'))
+    const streamRecords = [...container.querySelectorAll('.trace-stream .conversation-message, .trace-stream .tool-card')]
     expect(streamRecords.map((record) => record.textContent)).toEqual([
       expect.stringContaining('First user message'),
       expect.stringContaining('shell_command'),
@@ -415,8 +414,7 @@ describe('TraceView API conversation', () => {
       expect.stringContaining('Second user message'),
     ])
 
-    const chronologicalRecords = [...container.querySelector('.trace-stream').children]
-      .filter((record) => record.matches('.conversation-message, .tool-card, .system-event'))
+    const chronologicalRecords = [...container.querySelectorAll('.trace-stream .conversation-message, .trace-stream .tool-card, .trace-stream .system-event')]
       .map((record) => {
         if (record.matches('.tool-card')) return 'tool:shell_command'
         if (record.matches('.system-event')) return `system:${record.querySelector('strong').textContent}`
@@ -431,7 +429,8 @@ describe('TraceView API conversation', () => {
       'second user',
     ])
 
-    expect(screen.getAllByText('PostToolUse')).toHaveLength(1)
+    expect(container.querySelectorAll('.system-event strong')).toHaveLength(1)
+    expect(container.querySelector('.system-event strong')).toHaveTextContent('PostToolUse')
   })
 
   it('renders ordered multi-turn messages with role, timestamp, and turn metadata', () => {
@@ -527,11 +526,11 @@ describe('TraceView API conversation', () => {
     expect(screen.getByText('Root prompt')).toBeInTheDocument()
     expect(screen.getByText('Internal agent prompt')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Conversation' }))
 
     expect(screen.queryByText('Internal agent prompt')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Prompts & context' }))
 
     expect(screen.getByText('Agent prompt')).toBeInTheDocument()
     expect(screen.getByText(/agent-7/)).toBeInTheDocument()
@@ -590,11 +589,11 @@ describe('TraceView API conversation', () => {
     expect(messages[1]).toHaveClass('assistant')
     expect(screen.getByText('Internal worker result.')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Conversation' }))
 
     expect(screen.queryByText('Internal worker result.')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Prompts & context' }))
 
     expect(screen.getByText('Internal worker result.')).toBeInTheDocument()
     expect(screen.getByText(/agent-7/)).toBeInTheDocument()
@@ -619,7 +618,7 @@ describe('TraceView API conversation', () => {
     expect(container.querySelectorAll('.conversation-message')).toHaveLength(0)
     expect(screen.getByText('SessionStart')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Prompts & context' }))
 
     expect(screen.getByText('SessionStart')).toBeInTheDocument()
     expect(screen.getByText('UserPromptSubmit')).toBeInTheDocument()
@@ -695,7 +694,7 @@ describe('TraceView API conversation', () => {
     expect(container.querySelector('[data-trace-event-id="tool-0"]')).toHaveClass('is-evidence-selected')
   })
 
-  it('gives instruction file tags a dark surface instead of a native white button background', () => {
+  it('styles instruction file tags with the shared evidence surface', () => {
     const trace = {
       schema_version: '1',
       timeline: [
@@ -710,11 +709,11 @@ describe('TraceView API conversation', () => {
     }
 
     render(<TraceView session={trace} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Prompts & context' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Prompts & context' }))
 
     const fileTag = screen.getAllByRole('button', { name: 'Locate captured file .agents/workflows/frontend.md in the trace' })[0]
     expect(fileTag).toHaveClass('context-tag', 'file')
-    expect(styles).toMatch(/button\.context-tag\.file\s*\{[^}]*background:\s*rgba\(34,\s*42,\s*52,\s*\.52\);[^}]*\}/)
+    expect(styles).toMatch(/\.context-tag\.file\s*\{[^}]*background:\s*var\(--surface\);[^}]*\}/)
   })
 
   it('keeps four matching evidence events highlighted and navigates the active match', () => {

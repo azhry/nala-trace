@@ -145,9 +145,9 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    await screen.findByRole('button', { name: 'Sign in through Nala Labs' })
+    await screen.findByRole('button', { name: /Continue to Nala Labs/ })
     await waitFor(() => expect(redirectToNalaLabs).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in through Nala Labs' }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue to Nala Labs/ }))
     expect(redirectToNalaLabs).toHaveBeenCalledTimes(2)
   })
 
@@ -234,7 +234,7 @@ describe('authenticated sessions flow', () => {
 
     expect(screen.getByRole('banner')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /All sessions/ })).toBeInTheDocument()
-    expect(screen.getByText('Session detail', { selector: 'p' })).toBeInTheDocument()
+    expect(document.querySelector('.trace-topbar__title strong')).toHaveTextContent('Session detail')
     const loadingStatus = document.querySelector('.trace-loading-panel')
     expect(loadingStatus).toBeInTheDocument()
     expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
@@ -273,7 +273,7 @@ describe('authenticated sessions flow', () => {
 
     expect(screen.getByText('MCP calls')).toBeInTheDocument()
     expect(screen.getByText('2 unique servers')).toBeInTheDocument()
-    expect(screen.getByText('MCP: github · linear')).toBeInTheDocument()
+    expect(screen.getByText('github · linear')).toBeInTheDocument()
   })
 
   it('keeps row selection addressable through the hash route', async () => {
@@ -435,7 +435,8 @@ describe('authenticated sessions flow', () => {
     const evaluationLink = await screen.findByRole('link', { name: 'View annotation and evaluation' })
 
     expect(evaluationLink).toBeVisible()
-    expect(title.parentElement).toContainElement(evaluationLink)
+    expect(document.querySelector('.trace-detail-heading')).toContainElement(title)
+    expect(document.querySelector('.trace-detail-heading')).toContainElement(evaluationLink)
     expect(evaluationLink).toHaveAttribute('href', '#/sessions/authenticated-session/evaluation')
   })
 
@@ -465,7 +466,7 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Session evaluation', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Evaluation review', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Review details' })).toBeInTheDocument()
     expect(await screen.findByText('The evaluator recorded a review concern.')).toBeInTheDocument()
     expect(screen.getAllByText('review required').length).toBeGreaterThanOrEqual(1)

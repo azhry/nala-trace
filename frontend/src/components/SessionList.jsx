@@ -1,3 +1,9 @@
+import { useRef } from 'react'
+import { Button } from '@ui-sdk/react/button'
+import { Field, FieldLabel } from '@ui-sdk/react/field'
+import { Input } from '@ui-sdk/react/input'
+import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@ui-sdk/react/select'
 import { filterSessionSummaries, sortSessionSummaries } from '../sessionSummaries'
 
 const filters = [
@@ -6,115 +12,9 @@ const filters = [
   { id: 'passed', label: 'Passed' },
 ]
 
-function CountBadge({ value, label, accessibleLabel = label }) {
-  return <span className="count-badge" aria-label={`${value} ${accessibleLabel}`}><strong>{value}</strong><span>{label}</span></span>
-}
-
 function StatusBadge({ status }) {
   const label = status === 'attention' ? 'Needs review' : status === 'passed' ? 'Passed' : 'Captured'
-  return <span className={`status-badge ${status}`}><span className="status-dot" />{label}</span>
-}
-
-export default function SessionList({
-  sessions,
-  selectedId,
-  onSelect,
-  query,
-  onQueryChange,
-  filter,
-  onFilterChange,
-  sortBy,
-  onSortChange,
-}) {
-  const filteredSessions = filterSessionSummaries(sessions, query, filter)
-  const visibleSessions = sortSessionSummaries(filteredSessions, sortBy)
-  const hasFilters = Boolean(query.trim()) || filter !== 'all'
-
-  return (
-    <section className="panel session-list-panel" aria-labelledby="session-list-title">
-      <div className="panel-header session-list-header">
-        <div>
-          <p className="section-label">Records</p>
-          <h2 id="session-list-title">Session records</h2>
-          <p className="panel-description">Every row is a captured session. Select one to open the complete detail view.</p>
-        </div>
-        <span className="record-count">{visibleSessions.length} of {sessions.length}</span>
-      </div>
-
-      <div className="session-controls">
-        <label className="search-box">
-          <span className="search-icon" aria-hidden="true">⌕</span>
-          <span className="sr-only">Search sessions</span>
-          <input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search titles, IDs, dates, counts, or status"
-          />
-          {query && <button type="button" className="clear-search" onClick={() => onQueryChange('')} aria-label="Clear search">×</button>}
-        </label>
-        <div className="session-control-actions">
-          <div className="filter-tabs" role="group" aria-label="Filter sessions">
-            {filters.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={filter === option.id ? 'is-active' : ''}
-                aria-pressed={filter === option.id}
-                onClick={() => onFilterChange(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <label className="sort-control">
-            <span>Sort</span>
-            <select value={sortBy} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort sessions">
-              <option value="recent">Most recent</option>
-              <option value="tools">Most tool calls</option>
-              <option value="events">Most events</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div className="records-table" role="list" aria-label="Trace sessions">
-        <div className="records-table-head" aria-hidden="true">
-          <span>Session</span><span>Signal</span><span>Last event</span><span>Captured</span>
-        </div>
-        {visibleSessions.length ? visibleSessions.map((session) => (
-          <button
-            key={session.id}
-            type="button"
-            aria-label={sessionAccessibleLabel(session)}
-            className={`session-record ${selectedId === session.id ? 'is-selected' : ''}`}
-            aria-pressed={selectedId === session.id}
-            onClick={() => onSelect(session.id)}
-          >
-            <span className="session-record-main">
-              <span className="session-record-title"><strong>{sessionTitle(session)}</strong><StatusBadge status={session.status} /></span>
-              <span className="session-record-id">{session.id}</span>
-            </span>
-            <span className="session-counts" aria-label={`${session.toolCallCount} tool calls, ${session.mcpCallCount} MCP calls, ${session.skillInvocationCount} skills, ${session.fileOperationCount} files`}>
-              <CountBadge value={session.toolCallCount} label="tools" />
-              <CountBadge value={session.mcpCallCount} label="MCP" accessibleLabel="MCP calls" />
-              <CountBadge value={session.skillInvocationCount} label="skills" />
-              <CountBadge value={session.fileOperationCount} label="files" />
-              <span className="session-mcp-servers" aria-label={`MCP servers used: ${formatMcpServers(session)}`} title={`MCP servers used: ${formatMcpServers(session)}`}>
-                MCP servers: {formatMcpServers(session)}
-              </span>
-            </span>
-            <span className="session-last-event"><strong>{session.eventCount.toLocaleString()} events</strong><span>{formatDate(session.lastEventAt)}</span></span>
-            <span className="session-captured">{formatDate(session.firstEventAt)}<span className="row-arrow" aria-hidden="true">↗</span></span>
-          </button>
-        )) : (
-          <div className="empty-records" role="status">
-            <strong>{hasFilters ? 'No sessions match your filters.' : 'No sessions captured yet.'}</strong>
-            <span>{hasFilters ? 'Try a different search or show all sessions.' : 'New authenticated traces will appear here.'}</span>
-          </div>
-        )}
-      </div>
-    </section>
-  )
+  return <span className={'record-status record-status--' + status}><span />{label}</span>
 }
 
 function formatDate(value) {
@@ -129,10 +29,110 @@ function sessionTitle(session) {
 
 function sessionAccessibleLabel(session) {
   const title = sessionTitle(session)
-  return title === session.id ? `Open session ${title}` : `Open session ${title} (${session.id})`
+  return title === session.id ? 'Open session ' + title : 'Open session ' + title + ' (' + session.id + ')'
 }
 
 function formatMcpServers(session) {
   const servers = Array.isArray(session.mcpServers) ? session.mcpServers.filter((server) => typeof server === 'string' && server.trim()) : []
   return servers.length ? servers.join(' · ') : 'none recorded'
+}
+
+function SessionRecord({ session, selected, onSelect }) {
+  return <li className="session-record-item">
+    <Button
+      className={'session-record' + (selected ? ' is-selected' : '')}
+      aria-label={sessionAccessibleLabel(session)}
+      aria-pressed={selected}
+      onClick={() => onSelect(session.id)}
+    >
+      <span className="session-record__identity">
+        <span className="session-record__title"><strong>{sessionTitle(session)}</strong><StatusBadge status={session.status} /></span>
+        <code>{session.id}</code>
+      </span>
+      <span className="session-record__evidence" role="group" aria-label="Recorded evidence counts">
+        <span aria-label={session.toolCallCount + ' tools'}><strong>{session.toolCallCount.toLocaleString()}</strong><small>tools</small></span>
+        <span aria-label={session.mcpCallCount + ' MCP calls'}><strong>{session.mcpCallCount.toLocaleString()}</strong><small>MCP</small></span>
+        <span aria-label={session.skillInvocationCount + ' skills'}><strong>{session.skillInvocationCount.toLocaleString()}</strong><small>skills</small></span>
+        <span aria-label={session.fileOperationCount + ' files'}><strong>{session.fileOperationCount.toLocaleString()}</strong><small>files</small></span>
+        <small className="session-record__servers" title={'MCP servers: ' + formatMcpServers(session)}>{session.mcpServers?.length ? session.mcpServers.join(' · ') : 'No MCP servers recorded'}</small>
+      </span>
+      <span className="session-record__event"><strong>{session.eventCount.toLocaleString()} events</strong><small>{formatDate(session.lastEventAt)}</small></span>
+      <span className="session-record__captured"><small>FIRST CAPTURE</small><strong>{formatDate(session.firstEventAt)}</strong></span>
+      <span className="session-record__arrow" aria-hidden="true">↗</span>
+    </Button>
+  </li>
+}
+
+export default function SessionList({
+  sessions,
+  selectedId,
+  onSelect,
+  query,
+  onQueryChange,
+  filter,
+  onFilterChange,
+  sortBy,
+  onSortChange,
+  onRetry,
+}) {
+  const searchInputRef = useRef(null)
+  const filteredSessions = filterSessionSummaries(sessions, query, filter)
+  const visibleSessions = sortSessionSummaries(filteredSessions, sortBy)
+  const hasFilters = Boolean(query.trim()) || filter !== 'all'
+  const resetFilters = () => {
+    onQueryChange('')
+    onFilterChange('all')
+  }
+
+  return <section className="trace-records-panel" aria-labelledby="session-list-title">
+    <div className="trace-records-heading">
+      <div><p className="eyebrow">RECORDED ACTIVITY</p><h2 id="session-list-title">Session records</h2><p>Each entry opens the captured conversation, tools, and review signal.</p></div>
+      <div className="trace-records-count"><strong>{visibleSessions.length.toLocaleString()}</strong><span>of {sessions.length.toLocaleString()} records</span></div>
+    </div>
+    <div className="trace-record-controls">
+      <Field className="trace-search-field">
+        <FieldLabel>Search sessions</FieldLabel>
+        <div className="trace-search-group">
+          <Input
+            type="search"
+            className="trace-search-input"
+            ref={searchInputRef}
+            value={query}
+            onValueChange={onQueryChange}
+            placeholder="Title, ID, event count, status"
+          />
+          {query && <Button className="trace-search-clear" aria-label="Clear search" onClick={() => { onQueryChange(''); searchInputRef.current?.focus() }}>×</Button>}
+        </div>
+      </Field>
+      <Field className="trace-filter-field">
+        <FieldLabel>Filter sessions</FieldLabel>
+        <SegmentedControl className="trace-filter-control" aria-label="Filter sessions" value={filter} onValueChange={onFilterChange}>
+          <SegmentedControlIndicator />
+          {filters.map((option) => <SegmentedControlItem value={option.id} key={option.id}>{option.label}</SegmentedControlItem>)}
+        </SegmentedControl>
+      </Field>
+      <Field className="trace-sort-field">
+        <FieldLabel>Sort by</FieldLabel>
+        <Select value={sortBy} onValueChange={onSortChange}>
+          <SelectTrigger className="trace-sort-trigger"><SelectValue /></SelectTrigger>
+          <SelectContent className="trace-sort-options">
+            <SelectItem value="recent">Most recent</SelectItem>
+            <SelectItem value="tools">Most tool calls</SelectItem>
+            <SelectItem value="events">Most events</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+    </div>
+    {visibleSessions.length ? <ul className="session-record-list" aria-label="Trace sessions">
+      {visibleSessions.map((session) => <SessionRecord key={session.id} session={session} selected={selectedId === session.id} onSelect={onSelect} />)}
+    </ul> : <div className="session-empty-state" role="status">
+      <span className="session-empty-state__mark" aria-hidden="true">∅</span>
+      <div><p className="eyebrow">{hasFilters ? 'FILTER RESULT' : 'SESSION STORE'}</p>
+        <h3>{hasFilters ? 'No sessions match your filters.' : 'No sessions captured yet.'}</h3>
+        <p>{hasFilters ? 'Adjust the search or status filter to see other records.' : 'New authenticated traces will appear here after session events are sent to Nala Trace.'}</p>
+        {hasFilters ? <Button className="button--quiet" onClick={resetFilters}>Clear filters</Button> : <Button className="button--quiet" onClick={onRetry}>Refresh records</Button>}
+      </div>
+    </div>}
+    <div className="trace-records-foot"><span>Only summaries returned for this account are listed.</span><span>{visibleSessions.length.toLocaleString()} shown</span></div>
+  </section>
 }

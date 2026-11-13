@@ -5,6 +5,10 @@ description: Nala Ctrl's desktop-shared loopback API lets agents inspect local n
 
 # Nala Ctrl service operations
 
+## Worktree configuration
+
+Never create, copy, or otherwise add `nala.yml` in a Git worktree. Use the primary checkout project listed in `/v1/workspace`; never register the worktree as a separate project.
+
 ## What this skill controls
 
 Nala Ctrl is the local Wails desktop app for managing projects explicitly loaded from folders containing nala.yml. The app serves an HTTP API at http://127.0.0.1:47654 through the same Manager used by its UI. API requests need no token or Authorization header.

@@ -42,14 +42,14 @@ describe('InsightCards', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders explicit not-recorded state for null API analysis', () => {
+  it('shows a concise empty evaluation state when no analysis is saved', () => {
     render(<InsightCards analysis={null} trace={trace} />)
 
-    const panel = screen.getByRole('complementary', { name: 'Review details' })
-    expect(screen.getByRole('heading', { name: 'Review details' })).toBeInTheDocument()
-    expect(panel).toHaveClass('analysis-full-page')
-    expect(screen.getByText('No analysis saved')).toBeInTheDocument()
-    expect(screen.getAllByText('Not recorded')).toHaveLength(3)
+    expect(screen.getByRole('status')).toHaveTextContent('No saved evaluation for this session.')
+    expect(screen.getByRole('heading', { name: 'No saved evaluation for this session.' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Review details' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/analysis endpoint/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
     expect(screen.queryByText('Pass')).not.toBeInTheDocument()
   })
 

@@ -48,6 +48,6 @@ it('exposes named session controls to the ui-sdk agent and applies their values'
   })
 
   expect(result.ok, result.error?.message).toBe(true)
-  expect(screen.getByText('No sessions match your filters.')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+  expect(screen.getByText('No sessions match your search.')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Clear search and filters' })).toBeInTheDocument()
 })

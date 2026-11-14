@@ -801,7 +801,7 @@ function EvaluationPanel({ evaluation, eventContextLookup }) {
 }
 
 function NoAnalysisState() {
-  return <div className="analysis-empty-state" role="status"><strong>No analysis saved</strong><p>The analysis endpoint returned no annotation or evaluation for this session.</p><div className="analysis-not-recorded-grid"><div><span>Annotation</span><strong>Not recorded</strong></div><div><span>Evaluation</span><strong>Not recorded</strong></div></div></div>
+  return <section className="analysis-empty-state" role="status" aria-labelledby="analysis-empty-state-title"><h2 id="analysis-empty-state-title">No saved evaluation for this session.</h2></section>
 }
 
 function sessionEvaluationPath(sessionId) {
@@ -823,18 +823,16 @@ function CompactAnalysisSummary({ analysis, sessionId }) {
 
 function AnalysisCards({ analysis, trace, compact = false, sessionId }) {
   if (compact) return <CompactAnalysisSummary analysis={analysis} sessionId={sessionId} />
+  if (!analysis.recorded) return <NoAnalysisState />
   const eventContextLookup = createEventContextLookup(analysis.annotation, analysis.evaluation, trace)
 
-  return <aside className={'insights-section analysis-insights analysis-full-page' + (analysis.recorded ? '' : ' is-unrecorded')} aria-labelledby="analysis-details-title">
+  return <aside className="insights-section analysis-insights analysis-full-page" aria-labelledby="analysis-details-title">
     <div className="section-heading-row analysis-heading">
       <div>
-        <p className="section-label">Evaluation review</p>
         <h2 id="analysis-details-title">Review details</h2>
-        <p className="section-description">Outcome, turn impact, priorities, actions, and evidence gaps appear before the detailed audit trail.</p>
       </div>
-      <StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Recorded' : 'Not recorded'}</StatusPill>
     </div>
-    {analysis.recorded ? <div className="analysis-content">
+    <div className="analysis-content">
       {analysis.evaluation.recorded && <EvaluationOverview analysis={analysis} />}
       {analysis.evaluation.recorded && <EvaluationHighlights annotation={analysis.annotation} evaluation={analysis.evaluation} />}
       {analysis.evaluation.recorded && <ImprovementActions ledger={analysis.evaluation.evaluationLedger} followUps={analysis.evaluation.followUps} eventContextLookup={eventContextLookup} />}
@@ -843,7 +841,7 @@ function AnalysisCards({ analysis, trace, compact = false, sessionId }) {
       {analysis.evaluation.recorded
         ? <EvidenceDisclosure annotation={analysis.annotation} evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} />
         : <><AnnotationPanel annotation={analysis.annotation} eventContextLookup={eventContextLookup} /><EvaluationPanel evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} /></>}
-    </div> : <NoAnalysisState />}
+    </div>
   </aside>
 }
 

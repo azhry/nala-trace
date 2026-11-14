@@ -27,53 +27,46 @@ function BrandMark() {
 }
 
 function sourceCopy(apiState) {
-  if (apiState === 'connected') return { label: 'Go API data', status: 'Go API connected', detail: 'Using live session records from the protected Go API' }
-  if (apiState === 'unauthorized') return { label: 'Sign-in required', status: 'Authentication required', detail: 'Resolve an authenticated application session to view records' }
-  if (apiState === 'error') return { label: 'API unavailable', status: 'API unavailable', detail: 'The session service did not return a usable response' }
-  return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
+  if (apiState === 'connected') return { label: 'Live session data', status: 'Live session data', detail: '' }
+  if (apiState === 'unauthorized') return { label: 'Sign-in required', status: 'Sign-in required', detail: 'Sign in through Nala Labs to view sessions.' }
+  if (apiState === 'error') return { label: 'Sessions unavailable', status: 'Sessions unavailable', detail: 'Nala Trace could not load sessions. Try again.' }
+  return { label: 'Checking sign-in', status: 'Checking sign-in', detail: 'Checking your Nala Labs session.' }
 }
 
-function NavigationDialog() {
+function NavigationDialog({ onSignOut }) {
   return <Dialog>
     <DialogTrigger className="trace-mobile-menu" aria-label="Open Trace navigation"><Icon name="menu" size={19} /><span>Menu</span></DialogTrigger>
     <DialogBackdrop className="trace-mobile-backdrop" />
     <DialogContent className="trace-mobile-dialog">
-      <div className="trace-mobile-dialog__head"><DialogTitle>Trace navigation</DialogTitle><DialogClose className="trace-icon-button" aria-label="Close navigation"><Icon name="close" /></DialogClose></div>
+      <div className="trace-mobile-dialog__head"><DialogTitle>Trace menu</DialogTitle><DialogClose className="trace-icon-button" aria-label="Close navigation"><Icon name="close" /></DialogClose></div>
       <nav className="trace-mobile-links" aria-label="Trace navigation">
-        <DialogClose className="trace-mobile-link trace-mobile-link--active" render={<a href="#/sessions" />}>Session records</DialogClose>
+        <DialogClose className="trace-mobile-link trace-mobile-link--active" render={<a href="#/sessions" />}>Sessions</DialogClose>
       </nav>
-      <p>Captured session data is shown with its source and provenance.</p>
+      <DialogClose className="trace-mobile-signout" onClick={() => onSignOut()}>Sign out</DialogClose>
     </DialogContent>
   </Dialog>
 }
 
-function TraceRail({ route, apiState }) {
-  const source = sourceCopy(apiState)
+function TraceRail({ route }) {
   return <aside className="trace-rail" aria-label="Primary navigation">
-    <a className="trace-brand" href="#/sessions" aria-label="Nala Trace session records">
+    <a className="trace-brand" href="#/sessions" aria-label="Nala Trace sessions">
       <BrandMark />
       <span><strong>Nala Trace</strong><small>SESSION EVIDENCE</small></span>
     </a>
     <span className="trace-rail__label">WORKSPACE</span>
     <nav className="trace-rail__nav" aria-label="Trace navigation">
       <a href="#/sessions" className={route.view === 'sessions' ? 'is-active' : ''} aria-current={route.view === 'sessions' ? 'page' : undefined}>
-        <Icon name="grid" /><span>Session records</span><small>01</small>
+        <Icon name="grid" /><span>Sessions</span>
       </a>
     </nav>
-    <div className="trace-rail__footer">
-      <span className="trace-rail__label">DATA SOURCE</span>
-      <strong className={'trace-connection trace-connection--' + apiState}><span />{source.status}</strong>
-      <p>{apiState === 'connected' ? 'Protected API records' : source.detail}</p>
-    </div>
   </aside>
 }
 
 function TraceTopbar({ route, session, apiState, onSignOut }) {
   const source = sourceCopy(apiState)
-  const pageLabel = route.view === 'evaluation' ? 'Evaluation review' : route.view === 'detail' ? 'Session detail' : 'Session records'
   return <header className="trace-topbar">
-    <NavigationDialog />
-    <div className="trace-topbar__title"><span>NALA TRACE</span><span aria-hidden="true">/</span><strong>{pageLabel}</strong></div>
+    <NavigationDialog onSignOut={onSignOut} />
+    <div className="trace-topbar__title"><span>NALA TRACE</span></div>
     <span className={'trace-source-chip trace-source-chip--' + apiState}><span />{source.label}</span>
     {(route.view === 'detail' || route.view === 'evaluation') && <span className="trace-topbar__session" title={session?.id}>{session?.id}</span>}
     <ThemeToggle />
@@ -84,7 +77,7 @@ function TraceTopbar({ route, session, apiState, onSignOut }) {
 export function TraceShell({ route, session, apiState, onSignOut, children }) {
   return <div className="trace-app-shell">
     <a className="nala-skip-link" href="#trace-main">Skip to Trace content</a>
-    <TraceRail route={route} apiState={apiState} />
+    <TraceRail route={route} />
     <div className="trace-workspace">
       <TraceTopbar route={route} session={session} apiState={apiState} onSignOut={onSignOut} />
       <main id="trace-main" className="trace-main">{children}</main>
@@ -128,7 +121,7 @@ function DataSourceNotice({ apiState }) {
   if (apiState === 'connected') return null
   return <div className={'trace-source-notice trace-source-notice--' + apiState} role="status">
     <span className="trace-source-notice__mark" />
-    <div><strong>{source.status}</strong><p>{source.detail}. Only captured records from this source are shown.</p></div>
+    <div><strong>{source.status}</strong><p>{source.detail}</p></div>
   </div>
 }
 
@@ -137,15 +130,11 @@ function SessionStats({ sessions }) {
   const mcpCalls = sessions.reduce((total, session) => total + session.mcpCallCount, 0)
   const mcpServers = [...new Set(sessions.flatMap((session) => Array.isArray(session.mcpServers) ? session.mcpServers : []))]
   const attention = sessions.filter((session) => session.status === 'attention').length
-  const latest = sessions.reduce((current, session) => {
-    if (!current || (session.lastEventTime || 0) > (current.lastEventTime || 0)) return session
-    return current
-  }, null)
   return <section className="trace-summary-strip" aria-label="Session summary">
-    <div><span>Sessions</span><strong>{sessions.length.toLocaleString()}</strong><small>available to this account</small></div>
-    <div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div>
-    <div><span>MCP calls</span><strong>{mcpCalls.toLocaleString()}</strong><small>{mcpServers.length ? mcpServers.length + ' unique servers' : 'No servers recorded'}</small></div>
-    <div><span>Needs review</span><strong>{attention.toLocaleString()}</strong><small>{latest ? 'Latest ' + formatSessionDate(latest.lastEventAt) : 'No latest event'}</small></div>
+    <div><span>Sessions</span><strong>{sessions.length.toLocaleString()}</strong><small>Visible to this account</small></div>
+    <div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>Across sessions</small></div>
+    <div><span>Model Context Protocol (MCP)</span><strong>{mcpCalls.toLocaleString()}</strong><small>{mcpServers.length ? mcpServers.length + ' unique servers' : 'No servers recorded'}</small></div>
+    <div><span>Needs review</span><strong>{attention.toLocaleString()}</strong><small>From saved evaluations</small></div>
   </section>
 }
 
@@ -155,21 +144,19 @@ export function SessionStatePanel({ state, onRetry }) {
     <span className="trace-state-code">{unauthorized ? 'AUTH' : 'READ'}</span>
     <div><p className="eyebrow">{unauthorized ? 'SESSION REQUIRED' : 'REQUEST FAILED'}</p>
       <h2 id="session-state-title">{unauthorized ? 'Sign in to view sessions.' : 'Sessions could not be loaded.'}</h2>
-      <p>{unauthorized ? 'Your application session could not be resolved. Sign in through Nala Labs, then try again.' : 'The Trace API returned an error while reading session summaries. Your existing session access has not changed.'}</p>
-      <Button className="button--primary" onClick={onRetry}>{unauthorized ? 'Retry session check' : 'Retry request'}<Icon name="arrow" /></Button>
+      <p>{unauthorized ? 'Sign in through Nala Labs, then try again.' : 'Nala Trace could not load your sessions. Try again in a moment.'}</p>
+      <Button className="button--primary" onClick={onRetry}>{unauthorized ? 'Try again' : 'Retry'}<Icon name="arrow" /></Button>
     </div>
   </section>
 }
 
 export function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, sortBy, onSortChange, apiState, onRetry }) {
-  const source = sourceCopy(apiState)
   return <section className="trace-page trace-sessions-page" aria-labelledby="sessions-title">
     <div className="trace-page-heading">
-      <div><p className="eyebrow">SESSION LEDGER / 01</p><h1 id="sessions-title">All captured sessions</h1><p>Inspect recorded conversations, tool calls, trace events, and review evidence.</p></div>
-      <div className="trace-page-heading__source"><span>RECORD SOURCE</span><strong>{source.label}</strong></div>
+      <div><p className="eyebrow">WORKSPACE</p><h1 id="sessions-title">Sessions</h1></div>
     </div>
     <DataSourceNotice apiState={apiState} />
-    {apiState === 'loading' ? <TraceLoadingPanel title="Loading sessions…" detail="Resolving your application session before reading Trace records." />
+    {apiState === 'loading' ? <TraceLoadingPanel title="Loading sessions…" detail="Checking your Nala Labs session." />
       : apiState === 'connected' ? <>
         <SessionStats sessions={sessions} />
         <SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} sortBy={sortBy} onSortChange={onSortChange} onRetry={onRetry} />
@@ -179,15 +166,17 @@ export function SessionsPage({ sessions, selectedId, onSelect, query, onQueryCha
 
 export function DetailPage({ session, apiState, traceState, traceError, onTraceRetry, onLoadMore, isLoadingMore, loadMoreError, onBack }) {
   const isLoading = traceState === 'loading'
+  const title = typeof session.title === 'string' && session.title.trim() ? session.title.trim() : session.id
+  const hasDistinctTitle = title !== session.id
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
   const evaluationHref = '#/sessions/' + encodeURIComponent(session.id) + '/evaluation'
   return <section className="trace-page trace-detail-page" aria-labelledby="detail-title">
-    <Button className="trace-back-link" onClick={onBack}>← <span>All sessions</span></Button>
+    <Button className="trace-back-link" onClick={onBack}>← <span>Sessions</span></Button>
     <div className="trace-detail-heading">
-      <div><p className="eyebrow">SESSION DETAIL / {session.id}</p><h1 id="detail-title">{session.title || session.id}</h1>
-        <p>{session.id} <span>·</span> captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p>
+      <div><p className="eyebrow">SESSION</p><h1 id="detail-title">{title}</h1>
+        <p>{hasDistinctTitle && <>{session.id} <span>·</span> </>}captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p>
       </div>
-      <div className="trace-detail-heading__aside"><span className={'trace-record-status trace-record-status--' + session.status}><span />{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span><a className="trace-review-link" href={evaluationHref}>View annotation and evaluation<Icon name="arrow" size={15} /></a></div>
+      <div className="trace-detail-heading__aside"><span className={'trace-record-status trace-record-status--' + session.status}><span />{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span><a className="trace-review-link" href={evaluationHref}>Review evaluation<Icon name="arrow" size={15} /></a></div>
     </div>
     <DataSourceNotice apiState={apiState} />
     {isLoading ? <TraceLoadingPanel /> : <>

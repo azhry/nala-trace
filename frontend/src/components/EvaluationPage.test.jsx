@@ -37,11 +37,19 @@ describe('EvaluationPage', () => {
     expect(screen.getByText('Français — 東京 · session-Ã©')).toBeInTheDocument()
   })
 
+  it('shows an ID-only session name once on the evaluation page', () => {
+    render(<EvaluationPage session={{ id: 'session-id-only' }} analysisState="missing" onAnalysisRetry={vi.fn()} onBack={vi.fn()} />)
+
+    expect(screen.getByRole('heading', { name: 'Evaluation', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('session-id-only', { exact: true })).toBeInTheDocument()
+  })
+
   it('shows the full review without the detail-page guide', () => {
     const onBack = vi.fn()
     render(<EvaluationPage session={session} analysis={session.analysis} onBack={onBack} />)
 
-    expect(screen.getByRole('heading', { name: 'Evaluation review', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Evaluation', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Saved')
     expect(screen.getByRole('heading', { name: 'Review details' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'What to improve' })).toBeInTheDocument()
     expect(screen.getByText('The evaluator recorded a complete review.')).toBeInTheDocument()
@@ -117,13 +125,22 @@ describe('EvaluationPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Loading saved evaluation')
 
     rerender(<EvaluationPage session={session} analysisState="missing" onAnalysisRetry={retry} onBack={vi.fn()} />)
-    expect(screen.getByRole('alert')).toHaveTextContent('Session analysis was not found')
+    expect(screen.getByRole('alert')).toHaveTextContent('No saved evaluation found')
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
 
     rerender(<EvaluationPage session={session} analysisState="error" analysisError={{ status: 500 }} onAnalysisRetry={retry} onBack={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Retry analysis request' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(retry).toHaveBeenCalledOnce()
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
 
     rerender(<EvaluationPage session={session} analysisState="ready" analysis={null} onBack={vi.fn()} />)
-    expect(screen.getByRole('status')).toHaveTextContent('No analysis saved')
+    expect(screen.getByRole('status')).toHaveTextContent('No saved evaluation for this session.')
+    expect(screen.queryByRole('heading', { name: 'Review details' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+
+    rerender(<EvaluationPage session={session} analysisState="ready" analysis={{ session_id: session.id }} onBack={vi.fn()} />)
+    expect(screen.getByRole('status')).toHaveTextContent('No saved evaluation for this session.')
+    expect(screen.queryByRole('heading', { name: 'Review details' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
   })
 })

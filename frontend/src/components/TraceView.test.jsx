@@ -86,7 +86,7 @@ describe('TraceView API conversation', () => {
     expect(tiles.map((tile) => tile.querySelector('span')?.textContent)).toEqual([
       'Skill invocations',
       'Tools',
-      'MCP',
+      'Model Context Protocol calls',
       'Capture',
     ])
     expect(within(tiles[0]).getByText('2')).toBeInTheDocument()
@@ -94,18 +94,18 @@ describe('TraceView API conversation', () => {
     expect(within(tiles[0]).queryByText('session-api-shaped')).not.toBeInTheDocument()
   })
 
-  it('renders MCP usage and an explicit empty state from the API summary', () => {
+  it('renders Model Context Protocol usage and an explicit empty state from the API summary', () => {
     const { rerender } = render(<TraceView session={{ ...apiTrace, summary: { ...apiTrace.summary, mcp_call_count: 4, mcp_servers: ['github', 'linear'] } }} />)
 
-    expect(screen.getByText('4 calls')).toBeInTheDocument()
+    expect(screen.getByText(/4 calls/)).toBeInTheDocument()
     expect(screen.getByText('2 distinct servers')).toBeInTheDocument()
     expect(screen.getByText('github')).toBeInTheDocument()
     expect(screen.getByText('linear')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'MCP usage summary' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Model Context Protocol usage summary' })).toBeInTheDocument()
 
     rerender(<TraceView session={{ ...apiTrace, summary: { ...apiTrace.summary, mcp_call_count: 0, mcp_servers: [] } }} />)
 
-    expect(screen.getByText('No MCP calls or MCP servers were recorded.')).toBeInTheDocument()
+    expect(screen.getByText('No Model Context Protocol calls or servers were recorded.')).toBeInTheDocument()
   })
 
   it('renders session token usage and per-event usage from the API detail response', () => {
@@ -267,7 +267,7 @@ describe('TraceView API conversation', () => {
     const { container } = render(<TraceView session={createLargeTrace(61)} />)
 
     expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
-    expect(screen.getByText('Showing 61 of 61 rows')).toBeInTheDocument()
+    expect(screen.getByText('61 of 61 events shown')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Load more rows' })).not.toBeInTheDocument()
   })
 
@@ -281,7 +281,7 @@ describe('TraceView API conversation', () => {
     const { container } = render(<TraceView session={trace} onLoadMore={onLoadMore} />)
 
     expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
-    expect(screen.getByText('Loaded 61 of 125 captured events · 61 rows shown.')).toBeInTheDocument()
+    expect(screen.getByText('61 of 125 captured events loaded · 61 shown.')).toBeInTheDocument()
     expect(container.querySelector('.trace-summary > div:first-child strong')).toHaveTextContent('25')
     expect(screen.getByRole('button', { name: 'Load more rows' })).toBeInTheDocument()
 
@@ -329,7 +329,7 @@ describe('TraceView API conversation', () => {
       expect(deepEvent).toHaveAttribute('data-trace-event-active', 'true')
       expect(document.activeElement).toBe(deepEvent)
       expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
-      expect(screen.getByText('Showing 125 of 125 rows')).toBeInTheDocument()
+      expect(screen.getByText('125 of 125 events shown')).toBeInTheDocument()
     } finally {
       if (originalScrollIntoView) HTMLElement.prototype.scrollIntoView = originalScrollIntoView
       else delete HTMLElement.prototype.scrollIntoView
@@ -344,7 +344,7 @@ describe('TraceView API conversation', () => {
     expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
 
     fireEvent.click(screen.getByRole('radio', { name: 'Conversation' }))
-    expect(screen.getByText('Showing 0 of 0 rows')).toBeInTheDocument()
+    expect(screen.getByText('0 of 0 events shown')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('radio', { name: 'Everything' }))
     expect(container.querySelectorAll('.tool-card')).toHaveLength(61)
@@ -524,6 +524,10 @@ describe('TraceView API conversation', () => {
 
     expect(container.querySelectorAll('.conversation-message')).toHaveLength(1)
     expect(screen.getByText('Root prompt')).toBeInTheDocument()
+    const promptDisclosure = screen.getByRole('button', { name: 'Show recorded prompt' })
+    expect(promptDisclosure).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(promptDisclosure)
+    expect(promptDisclosure).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Internal agent prompt')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('radio', { name: 'Conversation' }))
@@ -587,6 +591,10 @@ describe('TraceView API conversation', () => {
     expect(messages[0]).toHaveClass('user')
     expect(messages[1]).toHaveTextContent('Root assistant reply from the session.')
     expect(messages[1]).toHaveClass('assistant')
+    const replyDisclosure = screen.getByRole('button', { name: 'Show recorded reply' })
+    expect(replyDisclosure).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(replyDisclosure)
+    expect(replyDisclosure).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Internal worker result.')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('radio', { name: 'Conversation' }))
@@ -595,6 +603,10 @@ describe('TraceView API conversation', () => {
 
     fireEvent.click(screen.getByRole('radio', { name: 'Prompts & context' }))
 
+    const contextualReplyDisclosure = screen.getByRole('button', { name: 'Show recorded reply' })
+    expect(contextualReplyDisclosure).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(contextualReplyDisclosure)
+    expect(contextualReplyDisclosure).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Internal worker result.')).toBeInTheDocument()
     expect(screen.getByText(/agent-7/)).toBeInTheDocument()
     expect(container.querySelectorAll('.conversation-message')).toHaveLength(0)

@@ -127,7 +127,6 @@ function FileTag({ file, onSelect }) {
 }
 
 function ContextRow({ event, inline = false, selected = false, active = false, onFileSelect }) {
-  const isPrompt = event.contextType !== 'instruction-read'
   const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'agent-reply' ? 'Agent reply' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
   const agentLabel = [event.provenance?.agentType, event.provenance?.agentId].filter(Boolean).join(' · ')
   const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'agent-prompt' || event.contextType === 'agent-reply' ? `Agent${agentLabel ? ` · ${agentLabel}` : ''}` : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label || event.provenance?.eventName || 'Lifecycle event' : event.tool || 'Captured context'
@@ -138,7 +137,7 @@ function ContextRow({ event, inline = false, selected = false, active = false, o
       <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} inferred tags</span>
     </div>
     <div className="context-row-tags">{(event.files || []).map((file) => <FileTag file={file} key={`file-${file}`} onSelect={onFileSelect} />)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
-    <Collapsible className="context-disclosure" defaultOpen={isPrompt}>
+    <Collapsible className="context-disclosure" defaultOpen={false}>
       <CollapsibleTrigger className="context-disclosure__trigger">{event.contextType === 'instruction-read' ? 'Show command and content read' : event.contextType === 'agent-reply' ? 'Show recorded reply' : 'Show recorded prompt'}</CollapsibleTrigger>
       <CollapsiblePanel className="context-disclosure__panel" hiddenUntilFound>
       {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : event.contextType === 'agent-reply' ? 'reply' : 'context'}</span><pre>{event.body}</pre></div>}
@@ -246,12 +245,12 @@ function McpInventory({ callCount = 0, servers = EMPTY_EVENTS }) {
   const safeServers = Array.isArray(servers) ? servers.filter((server) => typeof server === 'string' && server.trim()) : EMPTY_EVENTS
   const serverSummary = safeServers.length ? safeServers.join(', ') : ''
   const emptyMessage = safeCallCount === 0 && safeServers.length === 0
-    ? 'No MCP calls or MCP servers were recorded.'
-    : 'MCP server names were not recorded for these calls.'
+    ? 'No Model Context Protocol calls or servers were recorded.'
+    : 'Server names were not recorded for these calls.'
 
-  return <div className="mcp-inventory" role="region" aria-label="MCP usage summary">
-    <div className="mcp-inventory-heading"><div><span className="section-label">MCP usage</span><strong>Recorded MCP calls and servers</strong><small>{safeCallCount.toLocaleString()} MCP calls · {safeServers.length.toLocaleString()} distinct server{safeServers.length === 1 ? '' : 's'}</small></div><span className="record-count">from session summary</span></div>
-    {safeServers.length ? <div className="mcp-server-list" aria-label={`MCP servers used: ${serverSummary}`}>{safeServers.map((server) => <span className="mcp-server-chip" key={server}>{server}</span>)}</div> : <p className="mcp-inventory-empty">{emptyMessage}</p>}
+  return <div className="mcp-inventory" role="region" aria-label="Model Context Protocol usage summary">
+    <div className="mcp-inventory-heading"><div><span className="section-label">MODEL CONTEXT PROTOCOL</span><strong>Calls and servers</strong><small>{safeCallCount.toLocaleString()} calls · {safeServers.length.toLocaleString()} distinct server{safeServers.length === 1 ? '' : 's'}</small></div><span className="record-count">Session summary</span></div>
+    {safeServers.length ? <div className="mcp-server-list" aria-label={`Model Context Protocol servers used: ${serverSummary}`}>{safeServers.map((server) => <span className="mcp-server-chip" key={server}>{server}</span>)}</div> : <p className="mcp-inventory-empty">{emptyMessage}</p>}
   </div>
 }
 
@@ -281,7 +280,7 @@ function EvidenceSelectionNotice({ selection, onClear, onPrevious, onNext }) {
   </>
 }
 
-export function TraceLoadingPanel({ title = 'Loading trace conversation…', detail = 'Reading the selected session from the protected Go API.' } = {}) {
+export function TraceLoadingPanel({ title = 'Loading trace conversation…', detail = 'Loading the captured session details.' } = {}) {
   return <div className="trace-state-panel trace-loading-panel" role="status" aria-live="polite" aria-busy="true"><div className="trace-loader-mark" aria-hidden="true"><span /><span /><span /></div><div className="trace-loading-content"><strong>{title}</strong><span>{detail}</span></div><div className="trace-loading-skeletons" aria-hidden="true"><span /><span /><span /></div></div>
 }
 
@@ -343,7 +342,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   }, [contextRows, events, filter])
   const renderedEvents = visibleEvents
   const hasMoreEvents = hasMoreServerPages
-  const semanticRecords = String(viewModel.semanticRecords ?? 0)
+  const capturedRecordCount = String(viewModel.semanticRecords ?? 0)
   const isApiTrace = viewModel.source === 'api'
   const emptyConversation = isApiTrace && viewModel.conversation.length === 0
   const contextCounts = contextRows.reduce((counts, event) => ({ ...counts, [event.contextType]: (counts[event.contextType] || 0) + 1 }), {})
@@ -397,19 +396,19 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
     <div className="panel-header trace-panel-header">
       <div>
-        <p className="section-label">Conversation and trace</p>
-        <h2 id="trace-view-title">Session detail</h2>
-        <p className="panel-description">Rows below include only pages loaded so far; request another page to continue. Session summary counts cover the whole capture. Private model reasoning is not part of the hook data.</p>
+        <p className="section-label">SESSION EVIDENCE</p>
+        <h2 id="trace-view-title">Conversation and events</h2>
+        <p className="panel-description">Private model reasoning isn’t included.</p>
       </div>
-      <span className="record-count">{semanticRecords} records</span>
+      <span className="record-count">{capturedRecordCount} captured records</span>
     </div>
     <div className="trace-summary">
       <div><span>Skill invocations</span><strong>{totalSkillInvocationCount.toLocaleString()}</strong><small>captured invocation records</small></div>
       <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
-      <div><span>MCP</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()} calls</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
-      <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
+      <div><span>Model Context Protocol calls</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()}</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
+      <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{capturedRecordCount} captured records</small></div>
     </div>
-    {hasServerPagination && <p className="trace-page-note">Summary counts cover the full session. Event details below include only loaded pages.</p>}
+    {hasServerPagination && <p className="trace-page-note">Session totals cover the full capture; load more events below to see the rest.</p>}
     <TokenUsageSummary usage={viewModel.tokenUsage} />
     <SkillInventory events={events} fileRecords={inventoryFiles} capturedSkillEvidenceCount={totalSkillInvocationCount} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <McpInventory callCount={viewModel.mcpCallCount} servers={viewModel.mcpServers} />
@@ -425,7 +424,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
         <SegmentedControlIndicator />
         {filters.map(([id, label]) => <SegmentedControlItem key={id} value={id}>{label}</SegmentedControlItem>)}
       </SegmentedControl>
-      <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} rows · {semanticRecords} semantic records</span>
+      <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} events shown</span>
     </div>
     <div className="trace-stream" aria-busy={isLoadingMore}>
       {traceState !== 'ready' ? <TraceStatePanel state={traceState} onRetry={onRetry} /> : <>
@@ -454,8 +453,8 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
         })}</Timeline>}
         <div className="trace-stream-pagination">
           <span role="status" aria-live="polite">{hasServerPagination
-            ? `Loaded ${loadedEventCount.toLocaleString()} of ${totalEventCount.toLocaleString()} captured events · ${visibleEvents.length.toLocaleString()} rows shown.`
-            : `Showing ${renderedEvents.length.toLocaleString()} of ${visibleEvents.length.toLocaleString()} rows`}</span>
+            ? `${loadedEventCount.toLocaleString()} of ${totalEventCount.toLocaleString()} captured events loaded · ${visibleEvents.length.toLocaleString()} shown.`
+            : `${renderedEvents.length.toLocaleString()} of ${visibleEvents.length.toLocaleString()} events shown`}</span>
           {loadMoreError && <p className="trace-page-error" role="alert">The next page could not be loaded. Loaded events are still available. Retry to continue.</p>}
           {isLoadingMore && <span className="trace-page-loading" role="status" aria-live="polite">Loading the next page of events. Loaded rows remain on screen.</span>}
           {hasMoreEvents && <Button type="button" className="load-more-events" disabled={isLoadingMore} onClick={loadMoreEvents}>{isLoadingMore ? 'Loading next page…' : loadMoreError && hasMoreServerPages ? 'Retry loading more rows' : hasMoreServerPages ? 'Load more rows' : 'Show more loaded rows'}</Button>}

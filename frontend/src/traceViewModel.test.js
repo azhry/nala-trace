@@ -51,6 +51,19 @@ describe('normalizeTraceViewModel', () => {
     expect(model.messageCount).toBe(3)
   })
 
+  it('treats a trailing newline as prose and keeps real multi-line content as code', () => {
+    const model = normalizeTraceViewModel({
+      ...apiTrace,
+      conversation: [
+        { role: 'user', content: 'do task AZH-554\n', occurred_at: '2026-08-19T08:00:00Z', turn_id: 'turn-1', raw: {} },
+        { role: 'user', content: 'first line\nsecond line', occurred_at: '2026-08-19T08:00:01Z', turn_id: 'turn-1', raw: {} },
+        { role: 'user', content: 'const safe = true', occurred_at: '2026-08-19T08:00:02Z', turn_id: 'turn-1', raw: {} },
+      ],
+    })
+
+    expect(model.conversation.map((event) => event.contentIsCode)).toEqual([false, true, true])
+  })
+
   it('retains session and timeline token usage from the API contract', () => {
     const model = normalizeTraceViewModel({
       schema_version: '1',

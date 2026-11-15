@@ -216,9 +216,10 @@ function normalizeProvenance(item, raw) {
 }
 
 function isCodeShaped(value, text) {
+  const trimmed = text.replace(/\s+$/, '')
   return typeof value !== 'string'
-    || text.includes('\n')
-    || /```|[{}[\];<>]|\b(const|function|return|import|export)\b/.test(text)
+    || trimmed.includes('\n')
+    || /```|[{}[\];<>]|\b(const|function|return|import|export)\b/.test(trimmed)
 }
 
 const USAGE_CONTAINER_KEYS = new Set(['usage', 'token_usage', 'tokenUsage'])

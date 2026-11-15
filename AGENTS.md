@@ -27,9 +27,11 @@
 
 ## Local service operations
 
-For requests about a service in `nala.yml`—configuration, running state, run/stop, logs, or branch—read and follow the [Nala Ctrl service-operations skill](.agents/skills/nala-ctrl-service-operations/SKILL.md). Use the unauthenticated loopback API at `http://127.0.0.1:47654` only after `GET /v1/health` confirms `mode=desktop`; it is served by the user's Nala Ctrl desktop app and shares its Manager. Do not start `nala-ctrl api serve`, `go run . api serve`, or another checkout as a fallback, and do not open the desktop UI or manage processes directly. If health is unavailable, mode is missing, or the response is `mode=headless`, stop and ask the user to start/restart the desktop app or close the incorrect API instance. Use only projects already loaded in the app; if the target is missing, ask the user to add it through the UI rather than calling `/v1/projects/load`.
+For service requests about `nala.yml`—configuration, running state, run/stop, logs, or branch—read and follow the [Nala Ctrl service-operations skill](.agents/skills/nala-ctrl-service-operations/SKILL.md). Use the unauthenticated loopback API at `http://127.0.0.1:47654` only after `GET /v1/health` confirms `mode=desktop`; it is served by the user's Nala Ctrl desktop app and shares its Manager. Do not start `nala-ctrl api serve`, `go run . api serve`, another checkout, or the desktop UI as a fallback. Use only projects already loaded for API operations; never call `/v1/projects/load` or register a worktree as a project.
 
-For Nala Ctrl service operations, never create, copy, or otherwise add `nala.yml` in a Git worktree or register the worktree as a separate project. Use the primary checkout project.
+If the API is unavailable, reports a mode other than `desktop`, or the project is not loaded, use the skill's Local run fallback for an explicit Run request or when task acceptance requires a run. For status, logs, or branch requests, use a documented project-native source if available; otherwise report that Nala Ctrl cannot provide the requested information. During fallback, start only the requested service in an agent-owned terminal session. Do not scan arbitrary processes or terminate a process the agent did not start, including a port owner.
+
+Never create, copy, or otherwise add `nala.yml` in a Git worktree.
 
 ## Branches and publication
 

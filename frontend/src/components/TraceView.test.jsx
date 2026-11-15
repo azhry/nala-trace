@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import TraceView from './TraceView'
 
 const styles = readFileSync(resolve(process.cwd(), 'src/trace-ui.css'), 'utf8')
+const layoutStyles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8')
 
 const apiTrace = {
   schema_version: '1',
@@ -748,6 +749,11 @@ describe('TraceView API conversation', () => {
     const fileTag = screen.getAllByRole('button', { name: 'Locate captured file .agents/workflows/frontend.md in the trace' })[0]
     expect(fileTag).toHaveClass('context-tag', 'file')
     expect(styles).toMatch(/\.context-tag\.file\s*\{[^}]*background:\s*var\(--surface\);[^}]*\}/)
+  })
+
+  it('uses the active theme surface for skill and MCP summary panels', () => {
+    expect(layoutStyles).toMatch(/\.skill-inventory\s*\{[^}]*background:\s*var\(--surface\);[^}]*\}/)
+    expect(layoutStyles).toMatch(/\.mcp-inventory\s*\{[^}]*background:\s*var\(--surface\);[^}]*\}/)
   })
 
   it('keeps four matching evidence events highlighted and navigates the active match', () => {

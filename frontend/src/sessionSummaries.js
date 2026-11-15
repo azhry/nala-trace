@@ -1,4 +1,4 @@
-import { normalizeTokenUsage } from './tokenUsage'
+import { hasRecordedTokenUsage, normalizeTokenUsage } from './tokenUsage'
 
 const EMPTY_DATE = Number.POSITIVE_INFINITY
 
@@ -46,9 +46,19 @@ export function formatSessionDate(value) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
+export function displaySessionTitle(summary = {}) {
+  return cleanString(summary.safe_title ?? summary.safeTitle) || 'Untitled session'
+}
+
+export function shortenSessionId(value = '') {
+  const id = cleanString(value)
+  if (id.length <= 18) return id
+  return `${id.slice(0, 8)}…${id.slice(-5)}`
+}
+
 export function normalizeSessionSummary(summary = {}) {
   const id = cleanString(summary.session_id) || cleanString(summary.id)
-  const title = cleanString(summary.title) || id || 'Untitled session'
+  const safeTitle = cleanString(summary.safe_title ?? summary.safeTitle)
   const firstEventAt = cleanString(summary.first_event_at || summary.firstEventAt)
   const lastEventAt = cleanString(summary.last_event_at || summary.lastEventAt)
   const evaluationStatus = statusValue(summary)
@@ -57,7 +67,8 @@ export function normalizeSessionSummary(summary = {}) {
 
   return {
     id,
-    title,
+    safeTitle,
+    searchTitle: cleanString(summary.title),
     firstEventAt,
     lastEventAt,
     firstEventTime: Number.isNaN(firstDate.getTime()) ? null : firstDate.getTime(),
@@ -72,6 +83,7 @@ export function normalizeSessionSummary(summary = {}) {
       ['skill_invocations', 'skillInvocations', 'skills'],
     ),
     fileOperationCount: numberOrZero(summary.file_operation_count ?? summary.fileOperationCount),
+    fileReadCount: numberOrZero(summary.file_read_count ?? summary.fileReadCount),
     tokenUsage: normalizeTokenUsage(summary.token_usage ?? summary.tokenUsage),
     evaluationStatus,
     status: evaluationStatus || 'captured',
@@ -114,7 +126,8 @@ export function sortSessionSummaries(summaries, sortBy = 'recent') {
 
 function searchableMetadata(summary) {
   return [
-    summary.title,
+    summary.safeTitle,
+    summary.searchTitle,
     summary.id,
     summary.firstEventAt,
     summary.lastEventAt,
@@ -127,6 +140,8 @@ function searchableMetadata(summary) {
     `mcp servers ${summary.mcpServers.join(' ')}`,
     `skills ${summary.skillInvocationCount}`,
     `files ${summary.fileOperationCount}`,
+    `reads ${summary.fileReadCount}`,
+    `tokens ${hasRecordedTokenUsage(summary.tokenUsage) ? summary.tokenUsage.totalTokens : 'not recorded'}`,
     `status ${summary.evaluationStatus}`,
   ].join(' ').toLowerCase()
 }

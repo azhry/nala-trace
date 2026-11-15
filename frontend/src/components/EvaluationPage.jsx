@@ -1,6 +1,7 @@
 import { Button } from '@ui-sdk/react/button'
 import InsightCards from './InsightCards'
-import { normalizeSessionAnalysis, repairCapturedText } from '../sessionAnalysis'
+import { normalizeSessionAnalysis } from '../sessionAnalysis'
+import { displaySessionTitle, shortenSessionId } from '../sessionSummaries'
 
 function sessionIdFor(session) {
   return session.id || session.session_id || ''
@@ -8,9 +9,7 @@ function sessionIdFor(session) {
 
 export default function EvaluationPage({ session, analysis, analysisState = 'ready', analysisError, onAnalysisRetry, onBack }) {
   const sessionId = sessionIdFor(session)
-  const sessionTitle = typeof session.title === 'string'
-    ? repairCapturedText(session.title).trim() || sessionId || 'Untitled session'
-    : sessionId || 'Untitled session'
+  const sessionTitle = displaySessionTitle(session)
   const hasSavedAnalysis = analysisState === 'ready' && normalizeSessionAnalysis(analysis).recorded
 
   return <section className="trace-page evaluation-page" aria-labelledby="evaluation-page-title">
@@ -18,7 +17,7 @@ export default function EvaluationPage({ session, analysis, analysisState = 'rea
     <div className="evaluation-heading">
       <div>
         <h1 id="evaluation-page-title">Evaluation</h1>
-        <p>{sessionTitle === sessionId ? sessionId : `${sessionTitle} · ${sessionId}`}</p>
+        <p>{sessionTitle} · <code title={sessionId}>{shortenSessionId(sessionId)}</code></p>
       </div>
       {hasSavedAnalysis && <span className="source-note" role="status">Saved</span>}
     </div>

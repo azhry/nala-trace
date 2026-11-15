@@ -4,13 +4,18 @@ import { Field, FieldLabel } from '@ui-sdk/react/field'
 import { Input } from '@ui-sdk/react/input'
 import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@ui-sdk/react/select'
-import { filterSessionSummaries, sortSessionSummaries } from '../sessionSummaries'
+import { displaySessionTitle, filterSessionSummaries, shortenSessionId, sortSessionSummaries } from '../sessionSummaries'
+import { hasRecordedTokenUsage } from '../tokenUsage'
 
 const filters = [
   { id: 'all', label: 'All sessions' },
   { id: 'attention', label: 'Needs review' },
   { id: 'passed', label: 'Passed' },
 ]
+
+function countLabel(value, singular, plural = `${singular}s`) {
+  return `${value.toLocaleString()} ${value === 1 ? singular : plural}`
+}
 
 function StatusBadge({ status }) {
   return <span className={'record-status record-status--' + status}><span />{statusLabel(status)}</span>
@@ -22,23 +27,48 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-function sessionTitle(session) {
-  return typeof session.title === 'string' && session.title.trim() ? session.title.trim() : session.id || 'Untitled session'
-}
-
 function statusLabel(status) {
   return status === 'attention' ? 'Needs review' : status === 'passed' ? 'Passed' : 'Captured'
 }
 
+function sessionSummaryText(session) {
+  const tokens = hasRecordedTokenUsage(session.tokenUsage)
+    ? `${session.tokenUsage.totalTokens.toLocaleString()} tokens`
+    : 'tokens not recorded'
+  const servers = session.mcpServers.length ? `MCP servers ${session.mcpServers.join(', ')}` : 'no MCP servers recorded'
+  return [
+    countLabel(session.eventCount, 'event'),
+    countLabel(session.toolCallCount, 'tool call'),
+    countLabel(session.mcpCallCount, 'MCP call'),
+    servers,
+    countLabel(session.skillInvocationCount, 'skill invocation'),
+    countLabel(session.fileOperationCount, 'file operation'),
+    countLabel(session.fileReadCount, 'file read'),
+    tokens,
+  ].join(', ')
+}
+
 function sessionAccessibleLabel(session) {
-  const title = sessionTitle(session)
-  const identity = title === session.id ? title : title + ' (' + session.id + ')'
-  return `Open session ${identity}. ${statusLabel(session.status)}. Last activity ${formatDate(session.lastEventAt)}.`
+  const title = displaySessionTitle(session)
+  return `Open session ${title} (${session.id}). ${statusLabel(session.status)}. ${sessionSummaryText(session)}. Last activity ${formatDate(session.lastEventAt)}.`
 }
 
 function SessionRecord({ session, selected, onSelect }) {
-  const title = sessionTitle(session)
-  const hasDistinctTitle = title !== session.id
+  const title = displaySessionTitle(session)
+  const tokenCount = hasRecordedTokenUsage(session.tokenUsage)
+    ? session.tokenUsage.totalTokens.toLocaleString()
+    : 'Not recorded'
+  const tokensRecorded = hasRecordedTokenUsage(session.tokenUsage)
+  const metrics = [
+    [session.eventCount.toLocaleString(), session.eventCount === 1 ? 'event' : 'events'],
+    [session.toolCallCount.toLocaleString(), session.toolCallCount === 1 ? 'tool' : 'tools'],
+    [session.mcpCallCount.toLocaleString(), session.mcpCallCount === 1 ? 'MCP call' : 'MCP calls'],
+    [session.mcpServers.length.toLocaleString(), session.mcpServers.length === 1 ? 'server' : 'servers'],
+    [session.skillInvocationCount.toLocaleString(), session.skillInvocationCount === 1 ? 'skill' : 'skills'],
+    [session.fileOperationCount.toLocaleString(), session.fileOperationCount === 1 ? 'file op' : 'file ops'],
+    [session.fileReadCount.toLocaleString(), session.fileReadCount === 1 ? 'read' : 'reads'],
+    [tokenCount, tokensRecorded ? (session.tokenUsage.totalTokens === 1 ? 'token' : 'tokens') : 'token usage'],
+  ]
   return <li className="session-record-item">
     <Button
       className={'session-record' + (selected ? ' is-selected' : '')}
@@ -48,9 +78,13 @@ function SessionRecord({ session, selected, onSelect }) {
     >
       <span className="session-record__identity">
         <span className="session-record__title"><strong>{title}</strong><StatusBadge status={session.status} /></span>
-        {hasDistinctTitle && <code>{session.id}</code>}
+        <code title={session.id}>{shortenSessionId(session.id)}</code>
+        <span className="session-record__metadata">
+          {metrics.map(([value, label]) => <span className="session-record__metric" key={label}><strong>{value}</strong> {label}</span>)}
+          {session.mcpServers.length > 0 && <span className="session-record__servers">MCP servers: {session.mcpServers.join(', ')}</span>}
+        </span>
       </span>
-      <span className="session-record__event"><small>Last activity</small><time dateTime={session.lastEventAt || undefined}>{formatDate(session.lastEventAt)}</time></span>
+      <span className="session-record__event"><time aria-label={`Last activity ${formatDate(session.lastEventAt)}`} dateTime={session.lastEventAt || undefined}>{formatDate(session.lastEventAt)}</time></span>
       <span className="session-record__arrow" aria-hidden="true">↗</span>
     </Button>
   </li>
@@ -106,7 +140,7 @@ export default function SessionList({
           <SegmentedControlIndicator />
           {filters.map((option) => <SegmentedControlItem value={option.id} key={option.id}>{option.label}</SegmentedControlItem>)}
         </SegmentedControl>
-        <small id="needs-review-filter-help" className="trace-filter-help">Needs review includes saved evaluations marked for attention, failure, or error.</small>
+        <small id="needs-review-filter-help" className="trace-filter-help">Includes saved evaluations marked for attention, failure, or error.</small>
       </Field>
       <Field className="trace-sort-field">
         <FieldLabel>Sort by</FieldLabel>
@@ -142,6 +176,5 @@ export default function SessionList({
               : null}
       </div>
     </div>}
-    <div className="trace-records-foot"><span>Only sessions available to this account are shown.</span></div>
   </section>
 }

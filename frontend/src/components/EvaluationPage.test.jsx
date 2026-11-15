@@ -31,10 +31,17 @@ const session = {
 }
 
 describe('EvaluationPage', () => {
-  it('repairs a mojibaked session title without changing the session identifier', () => {
-    render(<EvaluationPage session={{ ...session, id: 'session-Ã©', title: 'FranÃ§ais — 東京' }} analysis={session.analysis} onBack={vi.fn()} />)
+  it('does not expose an API title that may contain captured prompt text', () => {
+    render(<EvaluationPage session={{ ...session, id: 'session-evaluation', title: 'Ask the agent to review the session' }} analysis={session.analysis} onBack={vi.fn()} />)
 
-    expect(screen.getByText('Français — 東京 · session-Ã©')).toBeInTheDocument()
+    expect(document.querySelector('.evaluation-heading p')).toHaveTextContent('Untitled session · session-evaluation')
+    expect(screen.queryByText('Ask the agent to review the session')).not.toBeInTheDocument()
+  })
+
+  it('shows an explicitly safe session title', () => {
+    render(<EvaluationPage session={{ ...session, safe_title: 'Workspace review' }} analysis={session.analysis} onBack={vi.fn()} />)
+
+    expect(document.querySelector('.evaluation-heading p')).toHaveTextContent('Workspace review · session-…-page')
   })
 
   it('shows an ID-only session name once on the evaluation page', () => {

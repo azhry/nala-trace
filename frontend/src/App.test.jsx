@@ -158,7 +158,7 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: /Open session authenticated-session/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Open session .*authenticated-session/ })).toBeInTheDocument()
     expect(redeemNalaLabsAuthCode.mock.invocationCallOrder[0]).toBeLessThan(resolveSession.mock.invocationCallOrder[0])
     expect(getSessions).toHaveBeenCalledExactlyOnceWith()
   })
@@ -184,10 +184,10 @@ describe('authenticated sessions flow', () => {
     const loadingStatus = document.querySelector('.trace-loading-panel')
     expect(loadingStatus).toBeInTheDocument()
     expect(loadingStatus).toHaveTextContent('Loading sessions…')
-    expect(loadingStatus).toHaveTextContent('Checking your Nala Labs session.')
+    expect(screen.getAllByText('Checking sign-in')).toHaveLength(1)
+    expect(screen.queryByText('Checking your Nala Labs session.')).not.toBeInTheDocument()
     expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
     expect(loadingStatus).toHaveClass('trace-loading-panel')
-    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
     expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
     expect(document.querySelector('.auth-boundary')).not.toBeInTheDocument()
@@ -195,7 +195,7 @@ describe('authenticated sessions flow', () => {
     await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
     resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
 
-    expect(await screen.findByRole('button', { name: /Open session authenticated-session/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Open session .*authenticated-session/ })).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
   })
 
@@ -210,7 +210,6 @@ describe('authenticated sessions flow', () => {
 
     const loadingStatus = document.querySelector('.trace-loading-panel')
     expect(loadingStatus).toHaveClass('trace-loading-panel')
-    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
     expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument()
@@ -219,7 +218,7 @@ describe('authenticated sessions flow', () => {
 
     await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
     resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
-    expect(await screen.findByRole('button', { name: /Open session authenticated-session/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Open session .*authenticated-session/ })).toBeInTheDocument()
   })
 
   it('keeps the full detail shell while initial authentication is unresolved', async () => {
@@ -234,10 +233,9 @@ describe('authenticated sessions flow', () => {
 
     expect(screen.getByRole('banner')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Sessions/ })).toBeInTheDocument()
-    expect(document.querySelector('.trace-topbar__title')).toHaveTextContent('NALA TRACE')
+    expect(document.querySelector('.trace-topbar__title')).toHaveTextContent('Nala Trace')
     const loadingStatus = document.querySelector('.trace-loading-panel')
     expect(loadingStatus).toBeInTheDocument()
-    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
     expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Recorded execution settings' })).not.toBeInTheDocument()
@@ -262,14 +260,14 @@ describe('authenticated sessions flow', () => {
   it('resolves the application session before requesting GET /sessions', async () => {
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: /Open session authenticated-session/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Open session .*authenticated-session/ })).toBeInTheDocument()
     expect(resolveSession.mock.invocationCallOrder[0]).toBeLessThan(getSessions.mock.invocationCallOrder[0])
   })
 
   it('shows aggregate Model Context Protocol calls and unique servers in workspace stats', async () => {
     render(<App />)
 
-    await screen.findByRole('button', { name: /Open session authenticated-session/ })
+    await screen.findByRole('button', { name: /Open session .*authenticated-session/ })
 
     expect(screen.getByText('Model Context Protocol (MCP)')).toBeInTheDocument()
     expect(screen.getByText('2 unique servers')).toBeInTheDocument()
@@ -280,7 +278,7 @@ describe('authenticated sessions flow', () => {
   it('keeps row selection addressable through the hash route', async () => {
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Open session authenticated-session/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Open session .*authenticated-session/ }))
     await waitFor(() => expect(window.location.hash).toBe('#/sessions/authenticated-session'))
   })
 
@@ -441,9 +439,9 @@ describe('authenticated sessions flow', () => {
     expect(evaluationLink).toBeVisible()
     expect(document.querySelector('.trace-detail-heading')).toContainElement(title)
     expect(document.querySelector('.trace-detail-heading')).toContainElement(evaluationLink)
-    expect(title).toHaveTextContent('authenticated-session')
+    expect(title).toHaveTextContent('Untitled session')
     expect(subtitle).toHaveTextContent('captured')
-    expect(subtitle).not.toHaveTextContent('authenticated-session')
+    expect(subtitle).toHaveTextContent('authenti…ssion')
     expect(evaluationLink).toHaveAttribute('href', '#/sessions/authenticated-session/evaluation')
   })
 
@@ -516,7 +514,7 @@ describe('authenticated sessions flow', () => {
     const loadingStatus = screen.getByRole('status')
     expect(loadingStatus).toHaveTextContent('Loading trace conversation…')
     expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
-    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+    expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
 
     resolveTrace(apiTracePayload)
     expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()

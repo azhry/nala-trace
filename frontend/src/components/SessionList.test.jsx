@@ -10,6 +10,7 @@ const sessions = normalizeSessionSummaries({
     {
       session_id: 'session-a',
       title: 'Review the session title',
+      safe_title: 'Workspace review',
       first_event_at: '2026-08-18T08:00:00Z',
       last_event_at: '2026-08-18T08:05:00Z',
       event_count: 10,
@@ -18,6 +19,8 @@ const sessions = normalizeSessionSummaries({
       mcp_servers: ['github', 'linear'],
       skill_invocation_count: 1,
       file_operation_count: 2,
+      file_read_count: 3,
+      token_usage: { input_tokens: 100, output_tokens: 40, total_tokens: 140 },
     },
     {
       session_id: 'session-b',
@@ -55,34 +58,45 @@ function renderList(overrides = {}) {
 }
 
 function recordIds() {
-  return [...document.querySelectorAll('.session-record__title strong')].map((node) => node.textContent)
+  return [...document.querySelectorAll('.session-record__identity code')].map((node) => node.textContent)
 }
 
 describe('SessionList', () => {
-  it('prioritizes the title, review status, and last activity', () => {
+  it('shows a safe title and keeps the returned session summary metadata visible', () => {
     renderList()
 
-    expect(screen.getByText('Review the session title')).toBeInTheDocument()
+    expect(screen.getByText('Workspace review')).toBeInTheDocument()
+    expect(screen.queryByText('Review the session title')).not.toBeInTheDocument()
     expect(screen.getByText('session-a')).toBeInTheDocument()
-    const selectedRow = screen.getByRole('button', { name: /Open session Review the session title \(session-a\).*Last activity/ })
+    const selectedRow = screen.getByRole('button', { name: /Open session Workspace review \(session-a\).*10 events.*2 tool calls.*3 MCP calls.*github, linear.*Last activity/ })
     expect(selectedRow).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
     expect(selectedRow.querySelector('time')).toHaveAttribute('datetime', '2026-08-18T08:05:00Z')
-    expect(screen.queryByLabelText('8 tools')).not.toBeInTheDocument()
-    expect(screen.queryByText('github · linear')).not.toBeInTheDocument()
+    expect(selectedRow).toHaveTextContent('10 events')
+    expect(selectedRow).toHaveTextContent('2 tools')
+    expect(selectedRow).toHaveTextContent('3 MCP calls')
+    expect(selectedRow).toHaveTextContent('2 servers')
+    expect(selectedRow).toHaveTextContent('1 skill')
+    expect(selectedRow).toHaveTextContent('2 file ops')
+    expect(selectedRow).toHaveTextContent('3 reads')
+    expect(selectedRow).toHaveTextContent('140 tokens')
+    expect(selectedRow).toHaveTextContent('MCP servers: github, linear')
   })
 
-  it('keeps the full long title available to screen readers when the card clamps it visually', () => {
-    const longTitle = 'A long session title that should stay readable while the card limits the visible text to two lines on a phone-sized screen'
+  it('uses an untitled label and shortened ID when the API title is captured content', () => {
+    const capturedPrompt = 'Can you update the deployment after reviewing the captured context?'
     const longTitleSessions = normalizeSessionSummaries({
-      sessions: [{ session_id: 'long-session', title: longTitle, last_event_at: '2026-08-20T08:05:00Z' }],
+      sessions: [{ session_id: '01a19ee9-7c38-7191-8b38-cea2a8f10103', title: capturedPrompt, last_event_at: '2026-08-20T08:05:00Z' }],
     })
 
     renderList({ sessions: longTitleSessions, selectedId: null })
 
-    const row = screen.getByRole('button', { name: /Open session A long session title/ })
-    expect(screen.getByText(longTitle)).toBeInTheDocument()
-    expect(row.getAttribute('aria-label')).toContain(longTitle)
+    const row = screen.getByRole('button', { name: /Open session Untitled session/ })
+    expect(screen.getByText('Untitled session')).toBeInTheDocument()
+    expect(screen.getByText('01a19ee9…10103')).toBeInTheDocument()
+    expect(screen.queryByText(capturedPrompt)).not.toBeInTheDocument()
+    expect(row.getAttribute('aria-label')).toContain('01a19ee9-7c38-7191-8b38-cea2a8f10103')
+    expect(row.getAttribute('aria-label')).not.toContain(capturedPrompt)
   })
 
   it('renders stable recency and metric ordering controls', async () => {
@@ -90,7 +104,7 @@ describe('SessionList', () => {
     const onSortChange = vi.fn()
     renderList({ onSortChange })
 
-    expect(recordIds()).toEqual(['Investigate the flagged session', 'Review the session title'])
+    expect(recordIds()).toEqual(['session-b', 'session-a'])
     await user.click(screen.getByRole('combobox', { name: 'Sort by' }))
     await user.click(screen.getByRole('option', { name: 'Most tool calls' }))
     expect(onSortChange).toHaveBeenCalledWith('tools')
@@ -105,7 +119,7 @@ describe('SessionList', () => {
     await user.type(search, 'files 5')
     expect(onQueryChange).toHaveBeenCalledWith('files 5')
     rerender(<SessionListHarness selectedId="session-b" onQueryChange={onQueryChange} />)
-    expect(screen.getByRole('button', { name: /Open session Investigate the flagged session \(session-b\)/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /Open session Untitled session \(session-b\)/ })).toHaveAttribute('aria-pressed', 'true')
 
     await user.clear(screen.getByRole('searchbox', { name: 'Search sessions' }))
     await user.type(screen.getByRole('searchbox', { name: 'Search sessions' }), 'missing')
@@ -140,7 +154,7 @@ describe('SessionList', () => {
     expect(screen.getByText('Saved evaluations marked for attention, failure, or error appear here.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Show all sessions' }))
     expect(onFilterChange).toHaveBeenCalledWith('all')
-    expect(screen.getByRole('button', { name: /Open session Previously passed session/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Open session Untitled session \(session-passed\)/ })).toBeInTheDocument()
   })
 
   it('keeps legacy summaries without a title readable and navigable by ID', () => {
@@ -151,8 +165,9 @@ describe('SessionList', () => {
 
     renderList({ sessions: legacySessions, selectedId: null, onSelect })
 
-    const row = screen.getByRole('button', { name: /Open session legacy-session/ })
+    const row = screen.getByRole('button', { name: /Open session Untitled session \(legacy-session\)/ })
     expect(row).toBeInTheDocument()
+    expect(screen.getByText('Untitled session')).toBeInTheDocument()
     expect(screen.getAllByText('legacy-session')).toHaveLength(1)
     expect(row.getAttribute('aria-label')).toContain('legacy-session')
     fireEvent.click(row)

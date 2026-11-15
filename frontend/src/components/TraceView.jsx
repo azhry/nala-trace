@@ -233,10 +233,9 @@ function InstructionInventory({ fileRecords = EMPTY_EVENTS, onEvidenceSelect, se
     records: fileRecords.filter((record) => evidencePath(record.path) === evidencePath(path)),
   })
 
-  return <div className="instruction-inventory" aria-label="Instruction source inventory">
-    <div className="instruction-inventory-heading"><div><span className="section-label">Instruction sources</span><strong>Files the agent referenced and read</strong><small>{readRecords.toLocaleString()} read records · {sources.length} unique instruction sources · {scopeCounts.global} global · {scopeCounts.project} local project</small></div><div className="instruction-scope-legend" aria-label="Instruction scope legend"><InstructionScopeBadge scope={{ kind: 'global', label: 'Global instruction', shortLabel: 'Global' }} /><InstructionScopeBadge scope={{ kind: 'project', label: 'Local project instruction', shortLabel: 'Local project' }} /></div></div>
+  return <div className="instruction-inventory" role="group" aria-label="Instruction source inventory">
+    <div className="instruction-inventory-heading"><div><strong>Instruction files</strong><small>{readRecords.toLocaleString()} read records · {sources.length} unique files · {scopeCounts.global} global · {scopeCounts.project} local project</small></div><div className="instruction-scope-legend" aria-label="Instruction scope legend"><InstructionScopeBadge scope={{ kind: 'global', label: 'Global instruction', shortLabel: 'Global' }} /><InstructionScopeBadge scope={{ kind: 'project', label: 'Local project', shortLabel: 'Local project' }} /></div></div>
     {sources.length ? <div className="instruction-source-list">{sources.map(([path, count]) => { const scope = getInstructionScope(path); const key = `file:${evidencePath(path)}`; return <Button type="button" className="instruction-source-item" key={path} aria-label={`Locate captured instruction source ${path} in the trace`} title={`Locate captured instruction source ${path} in the trace`} aria-pressed={selectedEvidenceKey === key} onClick={() => selectSource(path)}><span className="instruction-source-path">file / {path}</span><InstructionScopeBadge scope={scope} /><strong>{count.reads.toLocaleString()} reads</strong><small>{count.references.toLocaleString()} refs</small></Button> })}</div> : <p className="skill-inventory-empty">No instruction-source references were recorded.</p>}
-    <p className="instruction-inventory-note">Includes AGENTS.md, .agents/workflows, .agents/skills, templates, and project knowledge. Global means a user-level agent skill; Local project means this repository’s instruction files. Unknown roots are not guessed. Open “Prompts & context” to inspect each recorded command and content read.</p>
   </div>
 }
 
@@ -249,7 +248,7 @@ function McpInventory({ callCount = 0, servers = EMPTY_EVENTS }) {
     : 'Server names were not recorded for these calls.'
 
   return <div className="mcp-inventory" role="region" aria-label="Model Context Protocol usage summary">
-    <div className="mcp-inventory-heading"><div><span className="section-label">MODEL CONTEXT PROTOCOL</span><strong>Calls and servers</strong><small>{safeCallCount.toLocaleString()} calls · {safeServers.length.toLocaleString()} distinct server{safeServers.length === 1 ? '' : 's'}</small></div><span className="record-count">Session summary</span></div>
+    <div className="mcp-inventory-heading"><div><span className="section-label">Model Context Protocol (MCP)</span><strong>Calls and servers</strong><small>{safeCallCount.toLocaleString()} calls · {safeServers.length.toLocaleString()} distinct server{safeServers.length === 1 ? '' : 's'}</small></div></div>
     {safeServers.length ? <div className="mcp-server-list" aria-label={`Model Context Protocol servers used: ${serverSummary}`}>{safeServers.map((server) => <span className="mcp-server-chip" key={server}>{server}</span>)}</div> : <p className="mcp-inventory-empty">{emptyMessage}</p>}
   </div>
 }
@@ -280,16 +279,16 @@ function EvidenceSelectionNotice({ selection, onClear, onPrevious, onNext }) {
   </>
 }
 
-export function TraceLoadingPanel({ title = 'Loading trace conversation…', detail = 'Loading the captured session details.' } = {}) {
-  return <div className="trace-state-panel trace-loading-panel" role="status" aria-live="polite" aria-busy="true"><div className="trace-loader-mark" aria-hidden="true"><span /><span /><span /></div><div className="trace-loading-content"><strong>{title}</strong><span>{detail}</span></div><div className="trace-loading-skeletons" aria-hidden="true"><span /><span /><span /></div></div>
+export function TraceLoadingPanel({ title = 'Loading trace conversation…' } = {}) {
+  return <div className="trace-state-panel trace-loading-panel" role="status" aria-live="polite" aria-busy="true"><div className="trace-loading-content"><strong>{title}</strong></div><div className="trace-loading-skeletons" aria-hidden="true"><span /><span /><span /></div></div>
 }
 
-function TraceStatePanel({ state, onRetry }) {
+function TraceStatePanel({ state, onRetry, hasRecordedEvents = false }) {
   if (state === 'loading') return <TraceLoadingPanel />
   if (state === 'missing') return <div className="trace-state-panel" role="alert"><strong>Session trace not found.</strong><span>No stored events were returned for this session.</span><Button type="button" className="state-action" onClick={() => onRetry()}>Retry request</Button></div>
   if (state === 'unauthorized') return <div className="trace-state-panel" role="alert"><strong>Trace access needs authentication.</strong><span>The trace request was rejected. Refresh the application session, then retry.</span><Button type="button" className="state-action" onClick={() => onRetry()}>Retry request</Button></div>
   if (state === 'error') return <div className="trace-state-panel" role="alert"><strong>Trace conversation could not be loaded.</strong><span>The protected trace request failed before conversation data was available.</span><Button type="button" className="state-action" onClick={() => onRetry()}>Retry request</Button></div>
-  if (state === 'empty') return <div className="trace-state-panel" role="status"><strong>No conversation messages were recorded.</strong><span>This session has no reconstructed user or assistant content to display.</span></div>
+  if (state === 'empty') return <div className="trace-state-panel trace-state-panel--empty" role="status"><strong>No conversation messages were recorded.</strong><span>{hasRecordedEvents ? 'Other recorded events are still shown below.' : 'No other recorded events are available.'}</span></div>
   return null
 }
 
@@ -396,30 +395,27 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
     <div className="panel-header trace-panel-header">
       <div>
-        <p className="section-label">SESSION EVIDENCE</p>
         <h2 id="trace-view-title">Conversation and events</h2>
-        <p className="panel-description">Private model reasoning isn’t included.</p>
+        <p className="panel-description">Captured prompts, tools, and file content are shown here. Private model reasoning is excluded.</p>
       </div>
       <span className="record-count">{capturedRecordCount} captured records</span>
     </div>
     <div className="trace-summary">
-      <div><span>Skill invocations</span><strong>{totalSkillInvocationCount.toLocaleString()}</strong><small>captured invocation records</small></div>
-      <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
-      <div><span>Model Context Protocol calls</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()}</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
-      <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{capturedRecordCount} captured records</small></div>
+      <div><span>Skill invocations</span><strong>{totalSkillInvocationCount.toLocaleString()}</strong></div>
+      <div><span>Tool calls</span><strong>{viewModel.toolCount.toLocaleString()}</strong></div>
+      <div><span>MCP calls</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()}</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} servers</small></div>
+      <div><span>Capture window</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong></div>
     </div>
     {hasServerPagination && <p className="trace-page-note">Session totals cover the full capture; load more events below to see the rest.</p>}
     <TokenUsageSummary usage={viewModel.tokenUsage} />
     <SkillInventory events={events} fileRecords={inventoryFiles} capturedSkillEvidenceCount={totalSkillInvocationCount} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <McpInventory callCount={viewModel.mcpCallCount} servers={viewModel.mcpServers} />
     <InstructionInventory fileRecords={inventoryFiles} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
-    <div className="context-inventory" aria-label="Prompt and context summary">
-      <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
-      <span className="context-inventory-note">Use “Prompts & context” below</span>
+    <div className="context-inventory" role="group" aria-labelledby="context-inventory-title">
+      <div><strong id="context-inventory-title">Captured context</strong><small>{contextRows.length.toLocaleString()} records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} other records</small></div>
     </div>
     <EvidenceSelectionNotice selection={selection} onClear={() => setSelection(null)} onPrevious={() => moveToMatch(-1)} onNext={() => moveToMatch(1)} />
     <div className="trace-controls">
-      <span className="trace-controls__label">SHOW RECORDS</span>
       <SegmentedControl className="trace-event-filter" aria-label="Filter session detail" value={filter} onValueChange={changeFilter}>
         <SegmentedControlIndicator />
         {filters.map(([id, label]) => <SegmentedControlItem key={id} value={id}>{label}</SegmentedControlItem>)}
@@ -429,7 +425,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
     <div className="trace-stream" aria-busy={isLoadingMore}>
       {traceState !== 'ready' ? <TraceStatePanel state={traceState} onRetry={onRetry} /> : <>
         {viewModel.partial && <PartialNotice message={viewModel.partialMessage} />}
-        {emptyConversation && <TraceStatePanel state="empty" />}
+        {emptyConversation && <TraceStatePanel state="empty" hasRecordedEvents={renderedEvents.length > 0} />}
         {filter !== 'all' && visibleEvents.length === 0 && <div className="trace-filter-empty" role="status"><strong>No {filters.find(([id]) => id === filter)?.[1].toLowerCase() || 'events'} were recorded.</strong><Button className="button--quiet" onClick={() => changeFilter('all')}>Show all events</Button></div>}
         {(visibleEvents.length > 0 || !emptyConversation) && <div className="stream-intro"><span className="stream-line" /><span>Trace started · {viewModel.startedAt}</span></div>}
         {renderedEvents.length > 0 && <Timeline className="session-timeline" aria-label="Recorded session events" feed>

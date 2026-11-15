@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Button } from '@ui-sdk/react/button'
 import { Dialog, DialogBackdrop, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@ui-sdk/react/dialog'
 import { redirectToNalaLabs } from './authHandoff'
-import { formatSessionDate } from './sessionSummaries'
+import { displaySessionTitle, formatSessionDate, shortenSessionId } from './sessionSummaries'
 import EvaluationPage from './components/EvaluationPage'
 import InsightCards from './components/InsightCards'
 import SessionList from './components/SessionList'
@@ -30,7 +30,7 @@ function sourceCopy(apiState) {
   if (apiState === 'connected') return { label: 'Live session data', status: 'Live session data', detail: '' }
   if (apiState === 'unauthorized') return { label: 'Sign-in required', status: 'Sign-in required', detail: 'Sign in through Nala Labs to view sessions.' }
   if (apiState === 'error') return { label: 'Sessions unavailable', status: 'Sessions unavailable', detail: 'Nala Trace could not load sessions. Try again.' }
-  return { label: 'Checking sign-in', status: 'Checking sign-in', detail: 'Checking your Nala Labs session.' }
+  return { label: 'Checking sign-in', status: 'Checking sign-in', detail: '' }
 }
 
 function NavigationDialog({ onSignOut }) {
@@ -51,9 +51,9 @@ function TraceRail({ route }) {
   return <aside className="trace-rail" aria-label="Primary navigation">
     <a className="trace-brand" href="#/sessions" aria-label="Nala Trace sessions">
       <BrandMark />
-      <span><strong>Nala Trace</strong><small>SESSION EVIDENCE</small></span>
+      <span><strong>Nala Trace</strong></span>
     </a>
-    <span className="trace-rail__label">WORKSPACE</span>
+    <span className="trace-rail__label">Workspace</span>
     <nav className="trace-rail__nav" aria-label="Trace navigation">
       <a href="#/sessions" className={route.view === 'sessions' ? 'is-active' : ''} aria-current={route.view === 'sessions' ? 'page' : undefined}>
         <Icon name="grid" /><span>Sessions</span>
@@ -66,7 +66,7 @@ function TraceTopbar({ route, session, apiState, onSignOut }) {
   const source = sourceCopy(apiState)
   return <header className="trace-topbar">
     <NavigationDialog onSignOut={onSignOut} />
-    <div className="trace-topbar__title"><span>NALA TRACE</span></div>
+    <div className="trace-topbar__title"><span>Nala Trace</span></div>
     <span className={'trace-source-chip trace-source-chip--' + apiState}><span />{source.label}</span>
     {(route.view === 'detail' || route.view === 'evaluation') && <span className="trace-topbar__session" title={session?.id}>{session?.id}</span>}
     <ThemeToggle />
@@ -101,7 +101,7 @@ export function AuthBoundary({ handoffState, onRetry }) {
   }, [handoffState])
 
   return <main className="trace-auth-boundary" aria-labelledby="auth-boundary-title">
-    <div className="trace-auth-top"><a className="trace-brand" href="#/sessions"><BrandMark /><span><strong>Nala Trace</strong><small>SESSION EVIDENCE</small></span></a><ThemeToggle /></div>
+    <div className="trace-auth-top"><a className="trace-brand" href="#/sessions"><BrandMark /><span><strong>Nala Trace</strong></span></a><ThemeToggle /></div>
     <section className="trace-auth-panel" role="alert" aria-live="polite">
       <span className="trace-auth-panel__marker"><span /></span>
       <p className="eyebrow">NALA TRACE / ACCESS</p>
@@ -118,7 +118,7 @@ export function AuthBoundary({ handoffState, onRetry }) {
 
 function DataSourceNotice({ apiState }) {
   const source = sourceCopy(apiState)
-  if (apiState === 'connected') return null
+  if (apiState === 'connected' || apiState === 'loading') return null
   return <div className={'trace-source-notice trace-source-notice--' + apiState} role="status">
     <span className="trace-source-notice__mark" />
     <div><strong>{source.status}</strong><p>{source.detail}</p></div>
@@ -153,10 +153,10 @@ export function SessionStatePanel({ state, onRetry }) {
 export function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, sortBy, onSortChange, apiState, onRetry }) {
   return <section className="trace-page trace-sessions-page" aria-labelledby="sessions-title">
     <div className="trace-page-heading">
-      <div><p className="eyebrow">WORKSPACE</p><h1 id="sessions-title">Sessions</h1></div>
+      <div><h1 id="sessions-title">Sessions</h1></div>
     </div>
     <DataSourceNotice apiState={apiState} />
-    {apiState === 'loading' ? <TraceLoadingPanel title="Loading sessions…" detail="Checking your Nala Labs session." />
+    {apiState === 'loading' ? <TraceLoadingPanel title="Loading sessions…" />
       : apiState === 'connected' ? <>
         <SessionStats sessions={sessions} />
         <SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} sortBy={sortBy} onSortChange={onSortChange} onRetry={onRetry} />
@@ -166,15 +166,14 @@ export function SessionsPage({ sessions, selectedId, onSelect, query, onQueryCha
 
 export function DetailPage({ session, apiState, traceState, traceError, onTraceRetry, onLoadMore, isLoadingMore, loadMoreError, onBack }) {
   const isLoading = traceState === 'loading'
-  const title = typeof session.title === 'string' && session.title.trim() ? session.title.trim() : session.id
-  const hasDistinctTitle = title !== session.id
+  const title = displaySessionTitle(session)
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
   const evaluationHref = '#/sessions/' + encodeURIComponent(session.id) + '/evaluation'
   return <section className="trace-page trace-detail-page" aria-labelledby="detail-title">
     <Button className="trace-back-link" onClick={onBack}>← <span>Sessions</span></Button>
     <div className="trace-detail-heading">
-      <div><p className="eyebrow">SESSION</p><h1 id="detail-title">{title}</h1>
-        <p>{hasDistinctTitle && <>{session.id} <span>·</span> </>}captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p>
+      <div><h1 id="detail-title">{title}</h1>
+        <p><code title={session.id}>{shortenSessionId(session.id)}</code> <span>·</span> captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p>
       </div>
       <div className="trace-detail-heading__aside"><span className={'trace-record-status trace-record-status--' + session.status}><span />{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span><a className="trace-review-link" href={evaluationHref}>Review evaluation<Icon name="arrow" size={15} /></a></div>
     </div>

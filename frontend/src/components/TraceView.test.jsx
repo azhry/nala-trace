@@ -85,12 +85,12 @@ describe('TraceView API conversation', () => {
     expect(tiles).toHaveLength(4)
     expect(tiles.map((tile) => tile.querySelector('span')?.textContent)).toEqual([
       'Skill invocations',
-      'Tools',
-      'Model Context Protocol calls',
-      'Capture',
+      'Tool calls',
+      'MCP calls',
+      'Capture window',
     ])
     expect(within(tiles[0]).getByText('2')).toBeInTheDocument()
-    expect(within(tiles[0]).getByText('captured invocation records')).toBeInTheDocument()
+    expect(within(tiles[0]).queryByText('captured invocation records')).not.toBeInTheDocument()
     expect(within(tiles[0]).queryByText('session-api-shaped')).not.toBeInTheDocument()
   })
 
@@ -98,7 +98,7 @@ describe('TraceView API conversation', () => {
     const { rerender } = render(<TraceView session={{ ...apiTrace, summary: { ...apiTrace.summary, mcp_call_count: 4, mcp_servers: ['github', 'linear'] } }} />)
 
     expect(screen.getByText(/4 calls/)).toBeInTheDocument()
-    expect(screen.getByText('2 distinct servers')).toBeInTheDocument()
+    expect(screen.getByText(/2 distinct servers/)).toBeInTheDocument()
     expect(screen.getByText('github')).toBeInTheDocument()
     expect(screen.getByText('linear')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Model Context Protocol usage summary' })).toBeInTheDocument()
@@ -460,14 +460,18 @@ describe('TraceView API conversation', () => {
       ...apiTrace,
       conversation: [{ role: 'assistant', content: null, occurred_at: null, turn_id: null }],
     }
-    const { rerender } = render(<TraceView session={partialTrace} />)
+    const { container, rerender } = render(<TraceView session={partialTrace} />)
 
     expect(screen.getByText('Partial conversation data')).toBeInTheDocument()
     expect(screen.getByText('Content not recorded')).toBeInTheDocument()
     expect(screen.getByText('partial evidence')).toBeInTheDocument()
 
-    rerender(<TraceView session={{ schema_version: '1', conversation: [] }} />)
-    expect(screen.getByText('No conversation messages were recorded.')).toBeInTheDocument()
+    rerender(<TraceView session={{ schema_version: '1', conversation: [], timeline: [{ id: 'empty-start', hook_event_name: 'SessionStart', occurred_at: '2026-08-19T08:00:00Z', raw: {} }] }} />)
+    const emptyNotice = screen.getByText('No conversation messages were recorded.').closest('.trace-state-panel')
+    expect(emptyNotice).toHaveClass('trace-state-panel--empty')
+    expect(emptyNotice).toHaveTextContent('No conversation messages were recorded.')
+    expect(emptyNotice).toHaveTextContent('Other recorded events are still shown below.')
+    expect(container.querySelector('.session-timeline')).toHaveTextContent('SessionStart')
   })
 
   it.each([
@@ -482,7 +486,6 @@ describe('TraceView API conversation', () => {
       const loadingStatus = screen.getByRole('status')
       expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
       expect(loadingStatus).toHaveClass('trace-loading-panel')
-      expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
       expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
     }
   })
@@ -495,7 +498,7 @@ describe('TraceView API conversation', () => {
     expect(onRetry).toHaveBeenCalledExactlyOnceWith()
   })
 
-  it('shows root chat first and keeps an internal agent prompt in Prompts & context', () => {
+  it('shows root chat first and keeps an internal agent prompt in captured context', () => {
     const trace = {
       schema_version: '1',
       conversation: [
@@ -522,6 +525,9 @@ describe('TraceView API conversation', () => {
 
     const { container } = render(<TraceView session={trace} />)
 
+    expect(container.querySelectorAll('.instruction-inventory-note')).toHaveLength(0)
+    expect(screen.getByRole('group', { name: 'Captured context' })).toBeInTheDocument()
+    expect(screen.getByText('Captured prompts, tools, and file content are shown here. Private model reasoning is excluded.')).toBeInTheDocument()
     expect(container.querySelectorAll('.conversation-message')).toHaveLength(1)
     expect(screen.getByText('Root prompt')).toBeInTheDocument()
     const promptDisclosure = screen.getByRole('button', { name: 'Show recorded prompt' })
@@ -658,7 +664,7 @@ describe('TraceView API conversation', () => {
     render(<TraceView session={trace} />)
 
     expect(screen.getByText(/1 SKILL\.md read across 1 unique skill document · 1 inferred tag occurrence across 1 inferred label/)).toBeInTheDocument()
-    expect(screen.getByText(/2 read records · 3 unique instruction sources · 2 global · 1 local project/)).toBeInTheDocument()
+    expect(screen.getByText(/2 read records · 3 unique files · 2 global · 1 local project/)).toBeInTheDocument()
     expect(screen.getByText('No captured skill evidence or skill invocation was recorded in the source audit; inferred tags are shown separately from document reads.')).toBeInTheDocument()
   })
 
@@ -873,7 +879,7 @@ describe('TraceView API conversation', () => {
     const { container } = render(<TraceView session={trace} />)
 
     expect(screen.getByText(/1 SKILL\.md read across 1 unique skill document · 1 inferred tag occurrence across 1 inferred label/)).toBeInTheDocument()
-    expect(screen.getByText(/2 read records · 2 unique instruction sources/)).toBeInTheDocument()
+    expect(screen.getByText(/2 read records · 2 unique files/)).toBeInTheDocument()
     expect(screen.getByText('inferred / frontend-design')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Locate captured instruction source .agents/workflows/frontend.md in the trace' }))

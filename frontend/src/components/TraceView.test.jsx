@@ -695,6 +695,22 @@ describe('TraceView API conversation', () => {
     expect(container.querySelector('[data-trace-event-id="tool-0"]')).toHaveClass('is-evidence-selected')
   })
 
+  it('focuses a plain 24-hex trace row from an ObjectID-wrapped event reference', () => {
+    const eventId = 'abcdef0123456789abcdef01'
+    const session = {
+      schema_version: '1',
+      session_id: 'session-object-id-focus',
+      timeline: [{ id: eventId, hook_event_name: 'Stop', occurred_at: '2026-10-24T10:00:00Z', partial_reason: 'Captured target event' }],
+      conversation: [],
+      tool_calls: [],
+    }
+
+    const { container } = render(<TraceView session={session} focusEventId={`ObjectID("${eventId.toUpperCase()}")`} />)
+
+    expect(screen.getByText('Captured target event')).toBeInTheDocument()
+    expect(container.querySelector('[data-trace-event-active="true"]')).toBeInTheDocument()
+  })
+
   it('gives instruction file tags a dark surface instead of a native white button background', () => {
     const trace = {
       schema_version: '1',

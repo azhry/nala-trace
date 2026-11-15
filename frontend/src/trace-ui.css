@@ -217,6 +217,9 @@
 .tool-card-name { flex-wrap: wrap; row-gap: 2px; }
 .tool-card-name strong { min-width: 0; overflow-wrap: anywhere; }
 .tool-card-name span { flex: 0 0 auto; white-space: nowrap; }
+.tool-card-chevron { display: inline-flex; width: 16px; height: 16px; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--muted); transition: transform .18s ease; }
+.tool-card-chevron svg { display: block; }
+.tool-card[data-open]:not([data-open="false"]) .tool-card-chevron { transform: rotate(180deg); }
 .tool-card-toggle:hover { background: var(--nala-surface-hover); }
 .tool-card-toggle > span { min-width: 0; }
 .tool-card-title { display: block; overflow: hidden; color: var(--text); font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }

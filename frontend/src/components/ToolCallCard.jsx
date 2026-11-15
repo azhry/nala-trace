@@ -50,7 +50,7 @@ export default function ToolCallCard({ event, defaultOpen = false, selected = fa
           {files.map((file) => <FileTag file={file} key={'file-' + file} />)}
         </span>
       </span>
-      <span className="tool-card-status"><span>{event.status} · record {event.record}</span><ToolUsageMeta usage={event.tokenUsage} /><span className="tool-card-chevron" aria-hidden="true">⌄</span></span>
+      <span className="tool-card-status"><span>{event.status} · record {event.record}</span><ToolUsageMeta usage={event.tokenUsage} /><span className="tool-card-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6.5 8 10.5 12 6.5" /></svg></span></span>
     </CollapsibleTrigger>
     <CollapsiblePanel className="tool-card-body" hiddenUntilFound>
       <div className="code-block">

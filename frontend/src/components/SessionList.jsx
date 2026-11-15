@@ -1,4 +1,11 @@
-import { filterSessionSummaries, sortSessionSummaries } from '../sessionSummaries'
+import { useRef } from 'react'
+import { Button } from '@ui-sdk/react/button'
+import { Field, FieldLabel } from '@ui-sdk/react/field'
+import { Input } from '@ui-sdk/react/input'
+import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@ui-sdk/react/select'
+import { displaySessionTitle, filterSessionSummaries, shortenSessionId, sortSessionSummaries } from '../sessionSummaries'
+import { hasRecordedTokenUsage } from '../tokenUsage'
 
 const filters = [
   { id: 'all', label: 'All sessions' },
@@ -6,13 +13,81 @@ const filters = [
   { id: 'passed', label: 'Passed' },
 ]
 
-function CountBadge({ value, label, accessibleLabel = label }) {
-  return <span className="count-badge" aria-label={`${value} ${accessibleLabel}`}><strong>{value}</strong><span>{label}</span></span>
+function countLabel(value, singular, plural = `${singular}s`) {
+  return `${value.toLocaleString()} ${value === 1 ? singular : plural}`
 }
 
 function StatusBadge({ status }) {
-  const label = status === 'attention' ? 'Needs review' : status === 'passed' ? 'Passed' : 'Captured'
-  return <span className={`status-badge ${status}`}><span className="status-dot" />{label}</span>
+  return <span className={'record-status record-status--' + status}><span />{statusLabel(status)}</span>
+}
+
+function formatDate(value) {
+  if (!value) return 'Unknown time'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function statusLabel(status) {
+  return status === 'attention' ? 'Needs review' : status === 'passed' ? 'Passed' : 'Captured'
+}
+
+function sessionSummaryText(session) {
+  const tokens = hasRecordedTokenUsage(session.tokenUsage)
+    ? `${session.tokenUsage.totalTokens.toLocaleString()} tokens`
+    : 'tokens not recorded'
+  const servers = session.mcpServers.length ? `MCP servers ${session.mcpServers.join(', ')}` : 'no MCP servers recorded'
+  return [
+    countLabel(session.eventCount, 'event'),
+    countLabel(session.toolCallCount, 'tool call'),
+    countLabel(session.mcpCallCount, 'MCP call'),
+    servers,
+    countLabel(session.skillInvocationCount, 'skill invocation'),
+    countLabel(session.fileOperationCount, 'file operation'),
+    countLabel(session.fileReadCount, 'file read'),
+    tokens,
+  ].join(', ')
+}
+
+function sessionAccessibleLabel(session) {
+  const title = displaySessionTitle(session)
+  return `Open session ${title} (${session.id}). ${statusLabel(session.status)}. ${sessionSummaryText(session)}. Last activity ${formatDate(session.lastEventAt)}.`
+}
+
+function SessionRecord({ session, selected, onSelect }) {
+  const title = displaySessionTitle(session)
+  const tokenCount = hasRecordedTokenUsage(session.tokenUsage)
+    ? session.tokenUsage.totalTokens.toLocaleString()
+    : 'Not recorded'
+  const tokensRecorded = hasRecordedTokenUsage(session.tokenUsage)
+  const metrics = [
+    [session.eventCount.toLocaleString(), session.eventCount === 1 ? 'event' : 'events'],
+    [session.toolCallCount.toLocaleString(), session.toolCallCount === 1 ? 'tool' : 'tools'],
+    [session.mcpCallCount.toLocaleString(), session.mcpCallCount === 1 ? 'MCP call' : 'MCP calls'],
+    [session.mcpServers.length.toLocaleString(), session.mcpServers.length === 1 ? 'server' : 'servers'],
+    [session.skillInvocationCount.toLocaleString(), session.skillInvocationCount === 1 ? 'skill' : 'skills'],
+    [session.fileOperationCount.toLocaleString(), session.fileOperationCount === 1 ? 'file op' : 'file ops'],
+    [session.fileReadCount.toLocaleString(), session.fileReadCount === 1 ? 'read' : 'reads'],
+    [tokenCount, tokensRecorded ? (session.tokenUsage.totalTokens === 1 ? 'token' : 'tokens') : 'token usage'],
+  ]
+  return <li className="session-record-item">
+    <Button
+      className={'session-record' + (selected ? ' is-selected' : '')}
+      aria-label={sessionAccessibleLabel(session)}
+      aria-pressed={selected}
+      onClick={() => onSelect(session.id)}
+    >
+      <span className="session-record__identity">
+        <span className="session-record__title"><strong>{title}</strong><StatusBadge status={session.status} /></span>
+        <code title={session.id}>{shortenSessionId(session.id)}</code>
+        <span className="session-record__metadata">
+          {metrics.map(([value, label]) => <span className="session-record__metric" key={label}><strong>{value}</strong> {label}</span>)}
+          {session.mcpServers.length > 0 && <span className="session-record__servers">MCP servers: {session.mcpServers.join(', ')}</span>}
+        </span>
+      </span>
+      <span className="session-record__event"><time aria-label={`Last activity ${formatDate(session.lastEventAt)}`} dateTime={session.lastEventAt || undefined}>{formatDate(session.lastEventAt)}</time></span>
+      <span className="session-record__arrow" aria-hidden="true">↗</span>
+    </Button>
+  </li>
 }
 
 export default function SessionList({
@@ -25,114 +100,81 @@ export default function SessionList({
   onFilterChange,
   sortBy,
   onSortChange,
+  onRetry,
 }) {
+  const searchInputRef = useRef(null)
   const filteredSessions = filterSessionSummaries(sessions, query, filter)
   const visibleSessions = sortSessionSummaries(filteredSessions, sortBy)
-  const hasFilters = Boolean(query.trim()) || filter !== 'all'
+  const hasSearch = Boolean(query.trim())
+  const hasFilters = hasSearch || filter !== 'all'
+  const hasNoSavedSessions = sessions.length === 0 && !hasSearch
+  const hasNoReviewSessions = sessions.length > 0 && visibleSessions.length === 0 && filter === 'attention' && !hasSearch
+  const resetFilters = () => {
+    onQueryChange('')
+    onFilterChange('all')
+  }
 
-  return (
-    <section className="panel session-list-panel" aria-labelledby="session-list-title">
-      <div className="panel-header session-list-header">
-        <div>
-          <p className="section-label">Records</p>
-          <h2 id="session-list-title">Session records</h2>
-          <p className="panel-description">Every row is a captured session. Select one to open the complete detail view.</p>
-        </div>
-        <span className="record-count">{visibleSessions.length} of {sessions.length}</span>
-      </div>
-
-      <div className="session-controls">
-        <label className="search-box">
-          <span className="search-icon" aria-hidden="true">⌕</span>
-          <span className="sr-only">Search sessions</span>
-          <input
+  return <section className="trace-records-panel" aria-labelledby="session-list-title">
+    <div className="trace-records-heading">
+      <div><h2 id="session-list-title">Browse sessions</h2></div>
+      <div className="trace-records-count"><strong>{visibleSessions.length.toLocaleString()}</strong><span>of {sessions.length.toLocaleString()} records</span></div>
+    </div>
+    <div className="trace-record-controls">
+      <Field className="trace-search-field">
+        <FieldLabel>Search sessions</FieldLabel>
+        <div className="trace-search-group">
+          <Input
+            type="search"
+            className="trace-search-input"
+            ref={searchInputRef}
             value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search titles, IDs, dates, counts, or status"
+            onValueChange={onQueryChange}
+            placeholder="Title, ID, status, or counts"
           />
-          {query && <button type="button" className="clear-search" onClick={() => onQueryChange('')} aria-label="Clear search">×</button>}
-        </label>
-        <div className="session-control-actions">
-          <div className="filter-tabs" role="group" aria-label="Filter sessions">
-            {filters.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={filter === option.id ? 'is-active' : ''}
-                aria-pressed={filter === option.id}
-                onClick={() => onFilterChange(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <label className="sort-control">
-            <span>Sort</span>
-            <select value={sortBy} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort sessions">
-              <option value="recent">Most recent</option>
-              <option value="tools">Most tool calls</option>
-              <option value="events">Most events</option>
-            </select>
-          </label>
+          {query && <Button className="trace-search-clear" aria-label="Clear search text" onClick={() => { onQueryChange(''); searchInputRef.current?.focus() }}>×</Button>}
         </div>
+      </Field>
+      <Field className="trace-filter-field">
+        <FieldLabel>Filter sessions</FieldLabel>
+        <SegmentedControl className="trace-filter-control" aria-label="Filter sessions" aria-describedby="needs-review-filter-help" value={filter} onValueChange={onFilterChange}>
+          <SegmentedControlIndicator />
+          {filters.map((option) => <SegmentedControlItem value={option.id} key={option.id}>{option.label}</SegmentedControlItem>)}
+        </SegmentedControl>
+        <small id="needs-review-filter-help" className="trace-filter-help">Includes saved evaluations marked for attention, failure, or error.</small>
+      </Field>
+      <Field className="trace-sort-field">
+        <FieldLabel>Sort by</FieldLabel>
+        <Select value={sortBy} onValueChange={onSortChange}>
+          <SelectTrigger className="trace-sort-trigger"><SelectValue /></SelectTrigger>
+          <SelectContent className="trace-sort-options">
+            <SelectItem value="recent">Most recent</SelectItem>
+            <SelectItem value="tools">Most tool calls</SelectItem>
+            <SelectItem value="events">Most events</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+    </div>
+    {visibleSessions.length ? <ul className="session-record-list" aria-label="Trace sessions">
+      {visibleSessions.map((session) => <SessionRecord key={session.id} session={session} selected={selectedId === session.id} onSelect={onSelect} />)}
+    </ul> : <div className="session-empty-state" role="status">
+      <span className="session-empty-state__mark" aria-hidden="true">∅</span>
+      <div>
+        <h3>{hasNoSavedSessions ? 'No sessions yet.' : hasNoReviewSessions ? 'No sessions currently need review.' : hasSearch ? 'No sessions match your search.' : 'No sessions match this filter.'}</h3>
+        <p>{hasNoSavedSessions
+          ? 'Send an authenticated trace to Nala Trace, then refresh.'
+          : hasNoReviewSessions
+            ? 'Saved evaluations marked for attention, failure, or error appear here.'
+            : hasSearch
+              ? 'Try a different title or session ID.'
+              : 'Show all sessions to see the other saved evaluations.'}</p>
+        {hasNoSavedSessions
+          ? <Button className="button--quiet" onClick={onRetry}>Refresh sessions</Button>
+          : hasNoReviewSessions
+            ? <Button className="button--quiet" onClick={() => onFilterChange('all')}>Show all sessions</Button>
+            : hasFilters
+              ? <Button className="button--quiet" onClick={resetFilters}>{hasSearch && filter !== 'all' ? 'Clear search and filters' : hasSearch ? 'Clear search' : 'Show all sessions'}</Button>
+              : null}
       </div>
-
-      <div className="records-table" role="list" aria-label="Trace sessions">
-        <div className="records-table-head" aria-hidden="true">
-          <span>Session</span><span>Signal</span><span>Last event</span><span>Captured</span>
-        </div>
-        {visibleSessions.length ? visibleSessions.map((session) => (
-          <button
-            key={session.id}
-            type="button"
-            aria-label={sessionAccessibleLabel(session)}
-            className={`session-record ${selectedId === session.id ? 'is-selected' : ''}`}
-            aria-pressed={selectedId === session.id}
-            onClick={() => onSelect(session.id)}
-          >
-            <span className="session-record-main">
-              <span className="session-record-title"><strong>{sessionTitle(session)}</strong><StatusBadge status={session.status} /></span>
-              <span className="session-record-id">{session.id}</span>
-            </span>
-            <span className="session-counts" aria-label={`${session.toolCallCount} tool calls, ${session.mcpCallCount} MCP calls, ${session.skillInvocationCount} skills, ${session.fileOperationCount} files`}>
-              <CountBadge value={session.toolCallCount} label="tools" />
-              <CountBadge value={session.mcpCallCount} label="MCP" accessibleLabel="MCP calls" />
-              <CountBadge value={session.skillInvocationCount} label="skills" />
-              <CountBadge value={session.fileOperationCount} label="files" />
-              <span className="session-mcp-servers" aria-label={`MCP servers used: ${formatMcpServers(session)}`} title={`MCP servers used: ${formatMcpServers(session)}`}>
-                MCP servers: {formatMcpServers(session)}
-              </span>
-            </span>
-            <span className="session-last-event"><strong>{session.eventCount.toLocaleString()} events</strong><span>{formatDate(session.lastEventAt)}</span></span>
-            <span className="session-captured">{formatDate(session.firstEventAt)}<span className="row-arrow" aria-hidden="true">↗</span></span>
-          </button>
-        )) : (
-          <div className="empty-records" role="status">
-            <strong>{hasFilters ? 'No sessions match your filters.' : 'No sessions captured yet.'}</strong>
-            <span>{hasFilters ? 'Try a different search or show all sessions.' : 'New authenticated traces will appear here.'}</span>
-          </div>
-        )}
-      </div>
-    </section>
-  )
-}
-
-function formatDate(value) {
-  if (!value) return 'Unknown time'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
-
-function sessionTitle(session) {
-  return typeof session.title === 'string' && session.title.trim() ? session.title.trim() : session.id || 'Untitled session'
-}
-
-function sessionAccessibleLabel(session) {
-  const title = sessionTitle(session)
-  return title === session.id ? `Open session ${title}` : `Open session ${title} (${session.id})`
-}
-
-function formatMcpServers(session) {
-  const servers = Array.isArray(session.mcpServers) ? session.mcpServers.filter((server) => typeof server === 'string' && server.trim()) : []
-  return servers.length ? servers.join(' · ') : 'none recorded'
+    </div>}
+  </section>
 }

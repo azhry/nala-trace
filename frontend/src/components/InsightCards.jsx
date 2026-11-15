@@ -1,4 +1,9 @@
 import { useId, useState } from 'react'
+import { Button } from '@ui-sdk/react/button'
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible'
+import { Field, FieldLabel } from '@ui-sdk/react/field'
+import { Input } from '@ui-sdk/react/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@ui-sdk/react/select'
 import { normalizeSessionAnalysis, repairCapturedText } from '../sessionAnalysis'
 import { normalizeCapturedEventId } from '../eventIds'
 
@@ -68,8 +73,8 @@ function BoundedList({ items, itemLabel, resetKey = '', ordered = false, classNa
     {items.length > INITIAL_LIST_SIZE && <div className="analysis-list-pagination">
       <span role="status" aria-live="polite">Showing {visibleCount.toLocaleString()} of {items.length.toLocaleString()} {itemLabel}</span>
       {visibleCount < items.length
-        ? <button type="button" aria-controls={listId} onClick={loadMore}>Load more {itemLabel}</button>
-        : <button type="button" aria-controls={listId} onClick={showFewer}>Show fewer {itemLabel}</button>}
+        ? <Button aria-controls={listId} onClick={loadMore}>Load more {itemLabel}</Button>
+        : <Button aria-controls={listId} onClick={showFewer}>Show fewer {itemLabel}</Button>}
     </div>}
   </>
 }
@@ -410,7 +415,7 @@ function CopyableReference({ value, label, referenceType }) {
     }
   }
 
-  return <span className="analysis-event-reference"><span className="analysis-event-reference-label">{label}</span><code>{value}</code><button type="button" className="analysis-copy-event-id" aria-label={`Copy ${referenceType} ${value}`} onClick={copyReference}>Copy ID</button><span className="analysis-copy-event-status" role="status" aria-live="polite">{copyStatus}</span></span>
+  return <span className="analysis-event-reference"><span className="analysis-event-reference-label">{label}</span><code>{value}</code><Button className="analysis-copy-event-id" aria-label={`Copy ${referenceType} ${value}`} onClick={copyReference}>Copy ID</Button><span className="analysis-copy-event-status" role="status" aria-live="polite">{copyStatus}</span></span>
 }
 
 function CopyableEventId({ eventId, label = 'Event ID', referenceType = 'event ID' }) {
@@ -453,8 +458,8 @@ function AnnotationCategory({ category, visibleRecords, visibleBreakdowns, filte
     : `${category.coverageDetail}${unlabeledCount ? ` · ${unlabeledCount.toLocaleString()} not labeled` : ''}`
   const stateLabel = !category.recorded ? 'Not included in this analysis' : category.recordCount ? 'Evidence recorded' : 'No records saved'
 
-  return <details className="analysis-category-card">
-    <summary className="analysis-category-summary">
+  return <Collapsible className="analysis-category-card">
+    <CollapsibleTrigger className="analysis-category-summary">
       <div className="analysis-category-header">
         <div>
           <span className="analysis-card-kicker">{category.label}</span>
@@ -469,8 +474,8 @@ function AnnotationCategory({ category, visibleRecords, visibleBreakdowns, filte
           <span className="analysis-disclosure-hint">Open records</span>
         </div>
       </div>
-    </summary>
-    <div className="analysis-category-content">
+    </CollapsibleTrigger>
+    <CollapsiblePanel className="analysis-category-content" hiddenUntilFound>
       {category.recorded && <Breakdown breakdowns={visibleBreakdowns} />}
       {category.recorded && <div className="analysis-evidence-heading">
         <span>Saved evidence in this category</span>
@@ -479,8 +484,8 @@ function AnnotationCategory({ category, visibleRecords, visibleBreakdowns, filte
       {visibleRecords.length
         ? <BoundedList items={visibleRecords} itemLabel="evidence records" resetKey={filterKey} className="analysis-evidence-list" renderItem={(record, index) => <EvidenceRecord category={category} record={record} eventContextLookup={eventContextLookup} key={record.eventId + '-' + index} />} />
         : <p className="analysis-empty-copy">{!category.recorded ? category.unavailableDetail || 'This category was not stored in the saved analysis.' : filtersActive ? 'No records match the current filters.' : `No ${category.label.toLowerCase()} labels were stored.`}</p>}
-    </div>
-  </details>
+    </CollapsiblePanel>
+  </Collapsible>
 }
 
 function PerformanceSummary({ annotation }) {
@@ -513,7 +518,11 @@ function filteredCategory(category, evidenceType, decisionFilter) {
 
 function AnnotationFilters({ evidenceType, decisionFilter, onEvidenceTypeChange, onDecisionChange, onClear, visibleCount, eligibleCount }) {
   const filtersActive = evidenceType !== ALL_FILTER || decisionFilter !== ALL_FILTER
-  return <div className="analysis-filter-panel"><div className="analysis-filter-controls"><label>Evidence type<select aria-label="Evidence type" value={evidenceType} onChange={(event) => onEvidenceTypeChange(event.target.value)}>{EVIDENCE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label>Decision or label<select aria-label="Decision or label" value={decisionFilter} disabled={evidenceType === 'capture_gaps'} onChange={(event) => onDecisionChange(event.target.value)}>{DECISION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>{filtersActive && <button type="button" className="analysis-filter-clear" onClick={onClear}>Clear filters</button>}</div><p className="analysis-filter-summary" aria-live="polite">Filters match {visibleCount.toLocaleString()} of {eligibleCount.toLocaleString()} saved records</p></div>
+  return <div className="analysis-filter-panel"><div className="analysis-filter-controls">
+    <Field><FieldLabel>Evidence type</FieldLabel><Select value={evidenceType} onValueChange={onEvidenceTypeChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EVIDENCE_TYPE_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
+    <Field><FieldLabel>Decision or label</FieldLabel><Select value={decisionFilter} disabled={evidenceType === 'capture_gaps'} onValueChange={onDecisionChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DECISION_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
+    {filtersActive && <Button className="analysis-filter-clear" onClick={onClear}>Clear filters</Button>}
+  </div><p className="analysis-filter-summary" aria-live="polite">Filters match {visibleCount.toLocaleString()} of {eligibleCount.toLocaleString()} saved records</p></div>
 }
 
 function CaptureGaps({ annotation, visible, eventContextLookup }) {
@@ -632,15 +641,15 @@ function SignalCard({ signal, index, eventContextLookup, filterKey }) {
         <p>These prose references are separate from occurrence records and do not change the count.</p>
         <BoundedList items={description.eventIds} itemLabel="signal references" resetKey={filterKey} className="analysis-related-events" renderItem={(eventId, referenceIndex) => <EventEvidenceRow key={eventId + '-' + referenceIndex} eventId={eventId} eventContextLookup={eventContextLookup} referenceLabel="Event ID cited in prose" />} />
       </div>}
-      <details className="analysis-signal-details" open>
-        <summary><strong>Occurrence details</strong><span>{summary.headline}</span></summary>
-        <div className="analysis-signal-occurrences">
+      <Collapsible className="analysis-signal-details" defaultOpen>
+        <CollapsibleTrigger><strong>Occurrence details</strong><span>{summary.headline}</span></CollapsibleTrigger>
+        <CollapsiblePanel className="analysis-signal-occurrences" hiddenUntilFound>
           {summary.detail && <p className="analysis-signal-occurrences-note">{summary.detail}</p>}
           {signal.occurrences.length
             ? <BoundedList items={signal.occurrences} itemLabel="signal occurrences" ordered className="analysis-signal-occurrence-list" resetKey={filterKey + ':' + signal.signalKey} renderItem={(occurrence, occurrenceIndex) => <SignalOccurrence key={occurrence.eventId + '-' + occurrenceIndex} occurrence={occurrence} index={occurrenceIndex} signalName={signal.name} eventContextLookup={eventContextLookup} />} />
             : <p className="analysis-empty-copy">No explicit occurrence rows were saved. IDs cited in the description are references only, not located occurrences.</p>}
-        </div>
-      </details>
+        </CollapsiblePanel>
+      </Collapsible>
     </div>
     <StatusPill tone={signal.severity}>{signal.count == null ? 'Count not recorded' : signal.count.toLocaleString() + ' ' + (signal.count === 1 ? 'occurrence' : 'occurrences') + ' · ' + severityLabel}</StatusPill>
   </li>
@@ -668,11 +677,11 @@ function ReviewSignals({ signals, eventContextLookup }) {
     <div className="analysis-subsection-heading"><span>Review signals</span><strong>{signals.length ? signals.length.toLocaleString() + ' recorded findings' : 'Not recorded'}</strong></div>
     {signals.length ? <>
       <p className="analysis-signal-legend">Warning and critical labels need review. Info labels provide context. Each listed occurrence is an explicit saved event, not an example parsed from the description.</p>
-      <div className="analysis-signal-filters">
-        <label>Severity<select aria-label="Signal severity" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}><option value={ALL_FILTER}>All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option><option value="unknown">Unknown</option></select></label>
-        <label>Signal category<select aria-label="Signal category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value={ALL_FILTER}>All categories</option>{categoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label>Find a signal or event<input aria-label="Find a signal or event" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, event ID, or evidence text" /></label>
-        {filtersActive && <button type="button" className="analysis-filter-clear" onClick={clearFilters}>Clear filters</button>}
+      <div className="analysis-signal-controls">
+        <Field><FieldLabel>Severity</FieldLabel><Select value={severityFilter} onValueChange={setSeverityFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_FILTER}>All severities</SelectItem><SelectItem value="critical">Critical</SelectItem><SelectItem value="warning">Warning</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="unknown">Unknown</SelectItem></SelectContent></Select></Field>
+        <Field><FieldLabel>Signal category</FieldLabel><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL_FILTER}>All categories</SelectItem>{categoryOptions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></Field>
+        <Field><FieldLabel>Find a signal or event</FieldLabel><Input type="search" value={query} onValueChange={setQuery} placeholder="Name, event ID, or evidence text" /></Field>
+        {filtersActive && <Button className="analysis-filter-clear" onClick={clearFilters}>Clear filters</Button>}
       </div>
       <p className="analysis-filter-summary" aria-live="polite">Filters match {filteredSignals.length.toLocaleString()} of {signals.length.toLocaleString()} findings</p>
       {filteredSignals.length
@@ -843,7 +852,7 @@ function EvidenceDisclosure({ annotation, evaluation, eventContextLookup }) {
     concernCount ? `${concernCount} ${concernCount === 1 ? 'concern' : 'concerns'}` : 'no concerns',
   ].join(' · ')
 
-  return <details className="analysis-evidence-disclosure"><summary><span className="analysis-disclosure-summary-copy"><span className="section-label">Audit trail</span><strong>Evidence details</strong><span>Saved turns, tool calls, skills, files, signals, and judge comparison.</span></span><span className="analysis-disclosure-summary-meta">{evidenceSummary}<span className="analysis-disclosure-toggle"><span className="analysis-disclosure-expand">Show evidence</span><span className="analysis-disclosure-collapse">Hide evidence</span></span></span></summary><div className="analysis-disclosure-content"><p className="analysis-pagination-note">Lists start with 8 rows. Load more reveals rows already loaded for this evaluation; it does not fetch additional data.</p><AnnotationPanel annotation={annotation} eventContextLookup={eventContextLookup} /><EvaluationPanel evaluation={evaluation} eventContextLookup={eventContextLookup} /></div></details>
+  return <Collapsible className="analysis-evidence-disclosure"><CollapsibleTrigger><span className="analysis-disclosure-summary-copy"><span className="section-label">Audit trail</span><strong>Evidence details</strong><span>Saved turns, tool calls, skills, files, signals, and judge comparison.</span></span><span className="analysis-disclosure-summary-meta">{evidenceSummary}<span className="analysis-disclosure-toggle"><span className="analysis-disclosure-expand">Show evidence</span><span className="analysis-disclosure-collapse">Hide evidence</span></span></span></CollapsibleTrigger><CollapsiblePanel className="analysis-disclosure-content" hiddenUntilFound><p className="analysis-pagination-note">Lists start with 8 rows. Load more reveals rows already loaded for this evaluation; it does not fetch additional data.</p><AnnotationPanel annotation={annotation} eventContextLookup={eventContextLookup} /><EvaluationPanel evaluation={evaluation} eventContextLookup={eventContextLookup} /></CollapsiblePanel></Collapsible>
 }
 
 function ImprovementActions({ ledger, followUps = [], eventContextLookup }) {
@@ -930,7 +939,7 @@ function EvaluationPanel({ evaluation, eventContextLookup }) {
 }
 
 function NoAnalysisState() {
-  return <div className="analysis-empty-state" role="status"><strong>No analysis saved</strong><p>The analysis endpoint returned no annotation or evaluation for this session.</p><div className="analysis-not-recorded-grid"><div><span>Annotation</span><strong>Not recorded</strong></div><div><span>Evaluation</span><strong>Not recorded</strong></div></div></div>
+  return <section className="analysis-empty-state" role="status" aria-labelledby="analysis-empty-state-title"><h2 id="analysis-empty-state-title">No saved evaluation for this session.</h2></section>
 }
 
 function sessionEvaluationPath(sessionId) {
@@ -952,18 +961,16 @@ function CompactAnalysisSummary({ analysis, sessionId }) {
 
 function AnalysisCards({ analysis, trace, compact = false, sessionId }) {
   if (compact) return <CompactAnalysisSummary analysis={analysis} sessionId={sessionId} />
+  if (!analysis.recorded) return <NoAnalysisState />
   const eventContextLookup = createEventContextLookup(analysis.annotation, analysis.evaluation, trace, sessionId)
 
-  return <aside className={'insights-section analysis-insights analysis-full-page' + (analysis.recorded ? '' : ' is-unrecorded')} aria-labelledby="analysis-details-title">
+  return <aside className="insights-section analysis-insights analysis-full-page" aria-labelledby="analysis-details-title">
     <div className="section-heading-row analysis-heading">
       <div>
-        <p className="section-label">Evaluation review</p>
         <h2 id="analysis-details-title">Review details</h2>
-        <p className="section-description">Outcome, turn impact, priorities, actions, and evidence gaps appear before the detailed audit trail.</p>
       </div>
-      <StatusPill tone={analysis.recorded ? 'positive' : 'unknown'}>{analysis.recorded ? 'Recorded' : 'Not recorded'}</StatusPill>
     </div>
-    {analysis.recorded ? <div className="analysis-content">
+    <div className="analysis-content">
       {analysis.evaluation.recorded && <EvaluationOverview analysis={analysis} />}
       {analysis.evaluation.recorded && <EvaluationHighlights annotation={analysis.annotation} evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} />}
       {analysis.evaluation.recorded && <ImprovementActions ledger={analysis.evaluation.evaluationLedger} followUps={analysis.evaluation.followUps} eventContextLookup={eventContextLookup} />}
@@ -972,7 +979,7 @@ function AnalysisCards({ analysis, trace, compact = false, sessionId }) {
       {analysis.evaluation.recorded
         ? <EvidenceDisclosure annotation={analysis.annotation} evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} />
         : <><AnnotationPanel annotation={analysis.annotation} eventContextLookup={eventContextLookup} /><EvaluationPanel evaluation={analysis.evaluation} eventContextLookup={eventContextLookup} /></>}
-    </div> : <NoAnalysisState />}
+    </div>
   </aside>
 }
 

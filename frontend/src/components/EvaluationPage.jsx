@@ -1,5 +1,7 @@
+import { Button } from '@ui-sdk/react/button'
 import InsightCards from './InsightCards'
-import { repairCapturedText } from '../sessionAnalysis'
+import { normalizeSessionAnalysis } from '../sessionAnalysis'
+import { displaySessionTitle, shortenSessionId } from '../sessionSummaries'
 
 function sessionIdFor(session) {
   return session.id || session.session_id || ''
@@ -7,23 +9,21 @@ function sessionIdFor(session) {
 
 export default function EvaluationPage({ session, analysis, analysisState = 'ready', analysisError, onAnalysisRetry, onBack }) {
   const sessionId = sessionIdFor(session)
-  const sessionTitle = typeof session.title === 'string'
-    ? repairCapturedText(session.title).trim() || sessionId || 'Untitled session'
-    : sessionId || 'Untitled session'
+  const sessionTitle = displaySessionTitle(session)
+  const hasSavedAnalysis = analysisState === 'ready' && normalizeSessionAnalysis(analysis).recorded
 
-  return <section className="page-section evaluation-page" aria-labelledby="evaluation-page-title">
-    <button type="button" className="back-button" onClick={() => onBack()}>← <span>Session detail</span></button>
-    <div className="detail-heading evaluation-heading">
+  return <section className="trace-page evaluation-page" aria-labelledby="evaluation-page-title">
+    <Button className="back-button" onClick={() => onBack()}>← <span>Session detail</span></Button>
+    <div className="evaluation-heading">
       <div>
-        <p className="eyebrow">Evaluation review</p>
-        <h1 id="evaluation-page-title">Session evaluation</h1>
-        <p>{sessionTitle} · {sessionId}</p>
+        <h1 id="evaluation-page-title">Evaluation</h1>
+        <p>{sessionTitle} · <code title={sessionId}>{shortenSessionId(sessionId)}</code></p>
       </div>
-      <span className="source-note">stored review</span>
+      {hasSavedAnalysis && <span className="source-note" role="status">Saved</span>}
     </div>
-    {analysisState === 'loading' && <div className="analysis-request-state" role="status" aria-live="polite"><strong>Loading saved evaluation</strong><span>Reading the session analysis without loading the full trace.</span></div>}
-    {analysisState === 'error' && <div className="analysis-request-state error" role="alert"><strong>Saved evaluation could not be loaded</strong><span>{analysisError?.status === 401 ? 'Your sign-in may have expired. Sign in again, then retry this review.' : 'The analysis request failed. Your trace was not loaded as a fallback.'}</span><button type="button" className="state-action" onClick={onAnalysisRetry}>Retry analysis request</button></div>}
-    {analysisState === 'missing' && <div className="analysis-request-state error" role="alert"><strong>Session analysis was not found</strong><span>This session may not be available to your account. The full trace was not loaded.</span><button type="button" className="state-action" onClick={onAnalysisRetry}>Retry analysis request</button></div>}
+    {analysisState === 'loading' && <div className="analysis-request-state" role="status" aria-live="polite"><span className="analysis-state-code">FETCH</span><strong>Loading saved evaluation</strong></div>}
+    {analysisState === 'error' && <div className="analysis-request-state error" role="alert"><span className="analysis-state-code">ERROR</span><strong>Evaluation couldn’t be loaded</strong><span>{analysisError?.status === 401 ? 'Your sign-in may have expired. Sign in through Nala Labs, then retry.' : 'Try again in a moment.'}</span><Button className="state-action" onClick={onAnalysisRetry}>Retry</Button></div>}
+    {analysisState === 'missing' && <div className="analysis-request-state error" role="alert"><span className="analysis-state-code">404</span><strong>No saved evaluation found</strong><span>This session may not be available to your account.</span><Button className="state-action" onClick={onAnalysisRetry}>Retry</Button></div>}
     {analysisState === 'ready' && <InsightCards analysis={analysis} forceAnalysis sessionId={sessionId} />}
   </section>
 }

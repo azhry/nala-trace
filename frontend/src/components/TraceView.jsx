@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@ui-sdk/react/button'
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible'
+import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control'
+import { Timeline, TimelineConnector, TimelineDescription, TimelineItem, TimelineMarker, TimelineTime, TimelineTitle } from '@ui-sdk/react/timeline'
 import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
 import { getFileOperations, isReadFileOperation, isSkillDocumentPath, normalizeTraceViewModel, skillNameFromFilePath } from '../traceViewModel'
@@ -47,6 +51,13 @@ function eventMatchesEvidence(event, record) {
   if (getFileOperations(event).some((candidate) => sameFileOperation(candidate, record))) return true
   const recordEventId = normalizeCapturedEventId(record.eventId)
   return Boolean(recordEventId && [event.id, event.timelineId, event.eventId].some((eventId) => normalizeCapturedEventId(eventId) === recordEventId))
+}
+
+function timelineTitle(event) {
+  if (event.type === 'tool') return 'Tool call: ' + (event.tool || 'name not recorded')
+  if (event.type === 'system') return event.label || 'System event'
+  if (event.type === 'context') return (event.contextType || 'context').replaceAll('-', ' ')
+  return (event.roleLabel || event.role || 'Conversation') + ' message'
 }
 
 function SkillTags({ skills = [] }) {
@@ -114,11 +125,10 @@ function FileTag({ file, onSelect }) {
   const scope = isInstructionFile(file) ? getInstructionScope(file) : null
   const content = <><span>file / {file}</span>{scope && <InstructionScopeBadge scope={scope} compact />}</>
   if (!onSelect) return <span className="context-tag file">{content}</span>
-  return <button type="button" className="context-tag file" aria-label={`Locate captured file ${file} in the trace`} title={`Locate captured file ${file} in the trace`} onClick={() => onSelect(file)}>{content}</button>
+  return <Button type="button" className="context-tag file" aria-label={`Locate captured file ${file} in the trace`} title={`Locate captured file ${file} in the trace`} onClick={() => onSelect(file)}>{content}</Button>
 }
 
 function ContextRow({ event, inline = false, selected = false, active = false, onFileSelect }) {
-  const isPrompt = event.contextType !== 'instruction-read'
   const title = event.contextType === 'user-prompt' ? 'User prompt' : event.contextType === 'agent-prompt' ? 'Agent prompt' : event.contextType === 'agent-reply' ? 'Agent reply' : event.contextType === 'instruction-read' ? 'Instruction read' : event.contextType === 'system-context' ? 'App context' : 'Context event'
   const agentLabel = [event.provenance?.agentType, event.provenance?.agentId].filter(Boolean).join(' · ')
   const source = event.contextType === 'user-prompt' ? 'User → Codex' : event.contextType === 'agent-prompt' || event.contextType === 'agent-reply' ? `Agent${agentLabel ? ` · ${agentLabel}` : ''}` : event.contextType === 'system-context' ? 'Codex runtime' : event.contextType === 'system-event' ? event.label || event.provenance?.eventName || 'Lifecycle event' : event.tool || 'Captured context'
@@ -129,12 +139,14 @@ function ContextRow({ event, inline = false, selected = false, active = false, o
       <span className="context-row-count">{event.files?.length || 0} files · {event.skills?.length || 0} inferred tags</span>
     </div>
     <div className="context-row-tags">{(event.files || []).map((file) => <FileTag file={file} key={`file-${file}`} onSelect={onFileSelect} />)}{(event.skills || []).map((skill) => <span className="context-tag skill" key={`skill-${skill}`}>inferred / {skill}</span>)}</div>
-    <details open={isPrompt}>
-      <summary>{event.contextType === 'instruction-read' ? 'Show command and content read' : event.contextType === 'agent-reply' ? 'Show recorded reply' : 'Show recorded prompt'}</summary>
+    <Collapsible className="context-disclosure" defaultOpen={false}>
+      <CollapsibleTrigger className="context-disclosure__trigger">{event.contextType === 'instruction-read' ? 'Show command and content read' : event.contextType === 'agent-reply' ? 'Show recorded reply' : 'Show recorded prompt'}</CollapsibleTrigger>
+      <CollapsiblePanel className="context-disclosure__panel" hiddenUntilFound>
       {event.body && <div className="context-code"><span>{event.contextType === 'user-prompt' ? 'prompt' : event.contextType === 'agent-reply' ? 'reply' : 'context'}</span><pre>{event.body}</pre></div>}
       {event.input && <div className="context-code"><span>tool_input</span><pre>{event.input}</pre></div>}
       {event.response && <div className="context-code"><span>tool_response / content read</span><pre>{event.response}</pre></div>}
-    </details>
+      </CollapsiblePanel>
+    </Collapsible>
   </article>
 }
 
@@ -192,8 +204,8 @@ function SkillInventory({ events, fileRecords = EMPTY_EVENTS, capturedSkillEvide
       <div><span className="section-label">Skill evidence</span><strong>What the audit actually recorded</strong><small>{formatCount(skillReadCount, 'SKILL.md read')} across {formatCount(skillReadCounts.length, 'unique skill document')} · {formatCount(inferredTagCount, 'inferred tag occurrence')} across {formatCount(skillCounts.length, 'inferred label')}</small></div>
       <span className="record-count">from tool trace</span>
     </div>
-    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Skill documents actually read</span><strong>{formatCount(skillReadCount, 'read')} · {formatCount(skillReadCounts.length, 'unique skill doc')}</strong></div>{skillReadCounts.length ? <div className="skill-inventory-list">{skillReadCounts.map(([skill, count]) => <button type="button" className="skill-inventory-item" key={`read-${skill}`} aria-label={`Locate captured skill ${skill} in the trace`} title={`Locate captured skill ${skill} in the trace`} aria-pressed={selectedEvidenceKey === `skill:${skill.toLowerCase()}`} onClick={() => selectSkill(skill, true)}><span>skill / {skill}</span><strong>{count.toLocaleString()}</strong></button>)}</div> : <p className="skill-inventory-empty">No SKILL.md file read was recorded.</p>}</div>
-    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Inferred tags attached to operations</span><strong>{formatCount(inferredTagCount, 'tag occurrence')} · {formatCount(skillCounts.length, 'label')}</strong></div>{skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, value]) => <button type="button" className="skill-inventory-item inferred" key={`tag-${skill}`} aria-label={`Locate inferred skill ${value.name} in the trace`} title={`Locate inferred skill ${value.name} in the trace`} aria-pressed={selectedEvidenceKey === `skill:${skill}`} onClick={() => selectSkill(value.name)}><span>inferred / {value.name}</span><strong>{value.count.toLocaleString()}</strong></button>)}</div> : null}</div>
+    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Skill documents actually read</span><strong>{formatCount(skillReadCount, 'read')} · {formatCount(skillReadCounts.length, 'unique skill doc')}</strong></div>{skillReadCounts.length ? <div className="skill-inventory-list">{skillReadCounts.map(([skill, count]) => <Button type="button" className="skill-inventory-item" key={`read-${skill}`} aria-label={`Locate captured skill ${skill} in the trace`} title={`Locate captured skill ${skill} in the trace`} aria-pressed={selectedEvidenceKey === `skill:${skill.toLowerCase()}`} onClick={() => selectSkill(skill, true)}><span>skill / {skill}</span><strong>{count.toLocaleString()}</strong></Button>)}</div> : <p className="skill-inventory-empty">No SKILL.md file read was recorded.</p>}</div>
+    <div className="skill-evidence-block"><div className="skill-evidence-label"><span>Inferred tags attached to operations</span><strong>{formatCount(inferredTagCount, 'tag occurrence')} · {formatCount(skillCounts.length, 'label')}</strong></div>{skillCounts.length ? <div className="skill-inventory-list">{skillCounts.map(([skill, value]) => <Button type="button" className="skill-inventory-item inferred" key={`tag-${skill}`} aria-label={`Locate inferred skill ${value.name} in the trace`} title={`Locate inferred skill ${value.name} in the trace`} aria-pressed={selectedEvidenceKey === `skill:${skill}`} onClick={() => selectSkill(value.name)}><span>inferred / {value.name}</span><strong>{value.count.toLocaleString()}</strong></Button>)}</div> : null}</div>
     <p className="skill-inventory-note">{skillInventoryNote}</p>
   </div>
 }
@@ -223,10 +235,9 @@ function InstructionInventory({ fileRecords = EMPTY_EVENTS, onEvidenceSelect, se
     records: fileRecords.filter((record) => evidencePath(record.path) === evidencePath(path)),
   })
 
-  return <div className="instruction-inventory" aria-label="Instruction source inventory">
-    <div className="instruction-inventory-heading"><div><span className="section-label">Instruction sources</span><strong>Files the agent referenced and read</strong><small>{readRecords.toLocaleString()} read records · {sources.length} unique instruction sources · {scopeCounts.global} global · {scopeCounts.project} local project</small></div><div className="instruction-scope-legend" aria-label="Instruction scope legend"><InstructionScopeBadge scope={{ kind: 'global', label: 'Global instruction', shortLabel: 'Global' }} /><InstructionScopeBadge scope={{ kind: 'project', label: 'Local project instruction', shortLabel: 'Local project' }} /></div></div>
-    {sources.length ? <div className="instruction-source-list">{sources.map(([path, count]) => { const scope = getInstructionScope(path); const key = `file:${evidencePath(path)}`; return <button type="button" className="instruction-source-item" key={path} aria-label={`Locate captured instruction source ${path} in the trace`} title={`Locate captured instruction source ${path} in the trace`} aria-pressed={selectedEvidenceKey === key} onClick={() => selectSource(path)}><span className="instruction-source-path">file / {path}</span><InstructionScopeBadge scope={scope} /><strong>{count.reads.toLocaleString()} reads</strong><small>{count.references.toLocaleString()} refs</small></button> })}</div> : <p className="skill-inventory-empty">No instruction-source references were recorded.</p>}
-    <p className="instruction-inventory-note">Includes AGENTS.md, .agents/workflows, .agents/skills, templates, and project knowledge. Global means a user-level agent skill; Local project means this repository’s instruction files. Unknown roots are not guessed. Open “Prompts & context” to inspect each recorded command and content read.</p>
+  return <div className="instruction-inventory" role="group" aria-label="Instruction source inventory">
+    <div className="instruction-inventory-heading"><div><strong>Instruction files</strong><small>{readRecords.toLocaleString()} read records · {sources.length} unique files · {scopeCounts.global} global · {scopeCounts.project} local project</small></div><div className="instruction-scope-legend" aria-label="Instruction scope legend"><InstructionScopeBadge scope={{ kind: 'global', label: 'Global instruction', shortLabel: 'Global' }} /><InstructionScopeBadge scope={{ kind: 'project', label: 'Local project', shortLabel: 'Local project' }} /></div></div>
+    {sources.length ? <div className="instruction-source-list">{sources.map(([path, count]) => { const scope = getInstructionScope(path); const key = `file:${evidencePath(path)}`; return <Button type="button" className="instruction-source-item" key={path} aria-label={`Locate captured instruction source ${path} in the trace`} title={`Locate captured instruction source ${path} in the trace`} aria-pressed={selectedEvidenceKey === key} onClick={() => selectSource(path)}><span className="instruction-source-path">file / {path}</span><InstructionScopeBadge scope={scope} /><strong>{count.reads.toLocaleString()} reads</strong><small>{count.references.toLocaleString()} refs</small></Button> })}</div> : <p className="skill-inventory-empty">No instruction-source references were recorded.</p>}
   </div>
 }
 
@@ -235,12 +246,12 @@ function McpInventory({ callCount = 0, servers = EMPTY_EVENTS }) {
   const safeServers = Array.isArray(servers) ? servers.filter((server) => typeof server === 'string' && server.trim()) : EMPTY_EVENTS
   const serverSummary = safeServers.length ? safeServers.join(', ') : ''
   const emptyMessage = safeCallCount === 0 && safeServers.length === 0
-    ? 'No MCP calls or MCP servers were recorded.'
-    : 'MCP server names were not recorded for these calls.'
+    ? 'No Model Context Protocol calls or servers were recorded.'
+    : 'Server names were not recorded for these calls.'
 
-  return <div className="mcp-inventory" role="region" aria-label="MCP usage summary">
-    <div className="mcp-inventory-heading"><div><span className="section-label">MCP usage</span><strong>Recorded MCP calls and servers</strong><small>{safeCallCount.toLocaleString()} MCP calls · {safeServers.length.toLocaleString()} distinct server{safeServers.length === 1 ? '' : 's'}</small></div><span className="record-count">from session summary</span></div>
-    {safeServers.length ? <div className="mcp-server-list" aria-label={`MCP servers used: ${serverSummary}`}>{safeServers.map((server) => <span className="mcp-server-chip" key={server}>{server}</span>)}</div> : <p className="mcp-inventory-empty">{emptyMessage}</p>}
+  return <div className="mcp-inventory" role="region" aria-label="Model Context Protocol usage summary">
+    <div className="mcp-inventory-heading"><div><span className="section-label">Model Context Protocol (MCP)</span><strong>Calls and servers</strong><small>{safeCallCount.toLocaleString()} calls · {safeServers.length.toLocaleString()} distinct server{safeServers.length === 1 ? '' : 's'}</small></div></div>
+    {safeServers.length ? <div className="mcp-server-list" aria-label={`Model Context Protocol servers used: ${serverSummary}`}>{safeServers.map((server) => <span className="mcp-server-chip" key={server}>{server}</span>)}</div> : <p className="mcp-inventory-empty">{emptyMessage}</p>}
   </div>
 }
 
@@ -262,24 +273,24 @@ function EvidenceSelectionNotice({ selection, onClear, onPrevious, onNext }) {
     <div className="evidence-match-dock" role="group" aria-label="Evidence match navigation">
       {matchCount > 0 && <div className="evidence-match-navigation">
         <span aria-live="polite">Match {activeMatchIndex + 1} of {matchCount}</span>
-        <button type="button" className="evidence-match-control" aria-label="Previous matching event" title="Previous matching event" disabled={activeMatchIndex <= 0} onClick={onPrevious}>Previous</button>
-        <button type="button" className="evidence-match-control" aria-label="Next matching event" title="Next matching event" disabled={activeMatchIndex >= matchCount - 1} onClick={onNext}>Next</button>
+        <Button type="button" className="evidence-match-control" aria-label="Previous matching event" title="Previous matching event" disabled={activeMatchIndex <= 0} onClick={onPrevious}>Previous</Button>
+        <Button type="button" className="evidence-match-control" aria-label="Next matching event" title="Next matching event" disabled={activeMatchIndex >= matchCount - 1} onClick={onNext}>Next</Button>
       </div>}
-      <button type="button" className="evidence-clear" onClick={onClear}>Clear selection</button>
+      <Button type="button" className="evidence-clear" onClick={onClear}>Clear selection</Button>
     </div>
   </>
 }
 
-export function TraceLoadingPanel({ title = 'Loading trace conversation…', detail = 'Reading the selected session from the protected Go API.' } = {}) {
-  return <div className="trace-state-panel trace-loading-panel" role="status" aria-live="polite" aria-busy="true"><div className="trace-loader-mark" aria-hidden="true"><span /><span /><span /></div><div className="trace-loading-content"><strong>{title}</strong><span>{detail}</span></div><div className="trace-loading-skeletons" aria-hidden="true"><span /><span /><span /></div></div>
+export function TraceLoadingPanel({ title = 'Loading trace conversation…' } = {}) {
+  return <div className="trace-state-panel trace-loading-panel" role="status" aria-live="polite" aria-busy="true"><div className="trace-loading-content"><strong>{title}</strong></div><div className="trace-loading-skeletons" aria-hidden="true"><span /><span /><span /></div></div>
 }
 
-function TraceStatePanel({ state, onRetry }) {
+function TraceStatePanel({ state, onRetry, hasRecordedEvents = false }) {
   if (state === 'loading') return <TraceLoadingPanel />
-  if (state === 'missing') return <div className="trace-state-panel" role="alert"><strong>Session trace not found.</strong><span>No stored events were returned for this session.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
-  if (state === 'unauthorized') return <div className="trace-state-panel" role="alert"><strong>Trace access needs authentication.</strong><span>The trace request was rejected. Refresh the application session, then retry.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
-  if (state === 'error') return <div className="trace-state-panel" role="alert"><strong>Trace conversation could not be loaded.</strong><span>The protected trace request failed before conversation data was available.</span><button type="button" className="state-action" onClick={() => onRetry()}>Retry request</button></div>
-  if (state === 'empty') return <div className="trace-state-panel" role="status"><strong>No conversation messages were recorded.</strong><span>This session has no reconstructed user or assistant content to display.</span></div>
+  if (state === 'missing') return <div className="trace-state-panel" role="alert"><strong>Session trace not found.</strong><span>No stored events were returned for this session.</span><Button type="button" className="state-action" onClick={() => onRetry()}>Retry request</Button></div>
+  if (state === 'unauthorized') return <div className="trace-state-panel" role="alert"><strong>Trace access needs authentication.</strong><span>The trace request was rejected. Refresh the application session, then retry.</span><Button type="button" className="state-action" onClick={() => onRetry()}>Retry request</Button></div>
+  if (state === 'error') return <div className="trace-state-panel" role="alert"><strong>Trace conversation could not be loaded.</strong><span>The protected trace request failed before conversation data was available.</span><Button type="button" className="state-action" onClick={() => onRetry()}>Retry request</Button></div>
+  if (state === 'empty') return <div className="trace-state-panel trace-state-panel--empty" role="status"><strong>No conversation messages were recorded.</strong><span>{hasRecordedEvents ? 'Other recorded events are still shown below.' : 'No other recorded events are available.'}</span></div>
   return null
 }
 
@@ -337,7 +348,7 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   }, [contextRows, events, filter])
   const renderedEvents = visibleEvents
   const hasMoreEvents = hasMoreServerPages
-  const semanticRecords = String(viewModel.semanticRecords ?? 0)
+  const capturedRecordCount = String(viewModel.semanticRecords ?? 0)
   const isApiTrace = viewModel.source === 'api'
   const emptyConversation = isApiTrace && viewModel.conversation.length === 0
   const contextCounts = contextRows.reduce((counts, event) => ({ ...counts, [event.contextType]: (counts[event.contextType] || 0) + 1 }), {})
@@ -421,55 +432,67 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
     <div className="panel-header trace-panel-header">
       <div>
-        <p className="section-label">Conversation and trace</p>
-        <h2 id="trace-view-title">Session detail</h2>
-        <p className="panel-description">Rows below include only pages loaded so far; request another page to continue. Session summary counts cover the whole capture. Private model reasoning is not part of the hook data.</p>
+        <h2 id="trace-view-title">Conversation and events</h2>
+        <p className="panel-description">Captured prompts, tools, and file content are shown here. Private model reasoning is excluded.</p>
       </div>
-      <span className="record-count">{semanticRecords} records</span>
+      <span className="record-count">{capturedRecordCount} captured records</span>
     </div>
     <div className="trace-summary">
-      <div><span>Skill invocations</span><strong>{totalSkillInvocationCount.toLocaleString()}</strong><small>captured invocation records</small></div>
-      <div><span>Tools</span><strong>{viewModel.toolCount.toLocaleString()}</strong><small>{viewModel.toolCount.toLocaleString()} captured tool rows</small></div>
-      <div><span>MCP</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()} calls</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} distinct servers</small></div>
-      <div><span>Capture</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong><small>{semanticRecords} semantic records</small></div>
+      <div><span>Skill invocations</span><strong>{totalSkillInvocationCount.toLocaleString()}</strong></div>
+      <div><span>Tool calls</span><strong>{viewModel.toolCount.toLocaleString()}</strong></div>
+      <div><span>MCP calls</span><strong>{(viewModel.mcpCallCount || 0).toLocaleString()}</strong><small>{(viewModel.mcpServers?.length || 0).toLocaleString()} servers</small></div>
+      <div><span>Capture window</span><strong>{viewModel.startedAt}–{viewModel.capturedAt}</strong></div>
     </div>
-    {hasServerPagination && <p className="trace-page-note">Summary counts cover the full session. Event details below include only loaded pages.</p>}
+    {hasServerPagination && <p className="trace-page-note">Session totals cover the full capture; load more events below to see the rest.</p>}
     <TokenUsageSummary usage={viewModel.tokenUsage} />
     <SkillInventory events={events} fileRecords={inventoryFiles} capturedSkillEvidenceCount={totalSkillInvocationCount} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
     <McpInventory callCount={viewModel.mcpCallCount} servers={viewModel.mcpServers} />
     <InstructionInventory fileRecords={inventoryFiles} onEvidenceSelect={selectEvidence} selectedEvidenceKey={selection?.key || ''} />
-    <div className="context-inventory" aria-label="Prompt and context summary">
-      <div><span className="section-label">Agent context</span><strong>Prompts & instructions</strong><small>{contextRows.length.toLocaleString()} captured context records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} context markers</small></div>
-      <span className="context-inventory-note">Use “Prompts & context” below</span>
+    <div className="context-inventory" role="group" aria-labelledby="context-inventory-title">
+      <div><strong id="context-inventory-title">Captured context</strong><small>{contextRows.length.toLocaleString()} records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} other records</small></div>
     </div>
     <EvidenceSelectionNotice selection={selection} onClear={() => setSelection(null)} onPrevious={() => moveToMatch(-1)} onNext={() => moveToMatch(1)} />
     {focusSearchLimited && <p className="trace-evidence-search-note" role="status">The linked event was not in the first {loadedEventCount.toLocaleString()} trace rows. Use “Load more rows” to continue locating it.</p>}
     {focusEventMissing && <p className="trace-evidence-search-note" role="status">No captured trace row matches this event reference.</p>}
-    <div className="trace-controls" role="group" aria-label="Filter session detail">
-      <span>Show</span>
-      {filters.map(([id, label]) => <button key={id} type="button" className={filter === id ? 'is-active' : ''} aria-pressed={filter === id} onClick={() => changeFilter(id)}>{label}</button>)}
-      <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} rows · {semanticRecords} semantic records</span>
+    <div className="trace-controls">
+      <SegmentedControl className="trace-event-filter" aria-label="Filter session detail" value={filter} onValueChange={changeFilter}>
+        <SegmentedControlIndicator />
+        {filters.map(([id, label]) => <SegmentedControlItem key={id} value={id}>{label}</SegmentedControlItem>)}
+      </SegmentedControl>
+      <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} events shown · {capturedRecordCount} records</span>
     </div>
     <div className="trace-stream" aria-busy={isLoadingMore}>
       {traceState !== 'ready' ? <TraceStatePanel state={traceState} onRetry={onRetry} /> : <>
         {viewModel.partial && <PartialNotice message={viewModel.partialMessage} />}
-        {emptyConversation && <TraceStatePanel state="empty" />}
+        {emptyConversation && <TraceStatePanel state="empty" hasRecordedEvents={renderedEvents.length > 0} />}
+        {filter !== 'all' && visibleEvents.length === 0 && <div className="trace-filter-empty" role="status"><strong>No {filters.find(([id]) => id === filter)?.[1].toLowerCase() || 'events'} were recorded.</strong><Button className="button--quiet" onClick={() => changeFilter('all')}>Show all events</Button></div>}
         {(visibleEvents.length > 0 || !emptyConversation) && <div className="stream-intro"><span className="stream-line" /><span>Trace started · {viewModel.startedAt}</span></div>}
-        {renderedEvents.map((event) => {
+        {renderedEvents.length > 0 && <Timeline className="session-timeline" aria-label="Recorded session events" feed>
+          {renderedEvents.map((event) => {
           const selected = selection?.eventIds.includes(event.id) || false
           const active = selected && selection?.eventIds[selection.activeMatchIndex ?? 0] === event.id
-          if (event.type === 'context') return <ContextRow key={event.id} event={event} selected={selected} active={active} onFileSelect={selectFile} />
-          if (event.type === 'tool') return <ToolCallCard key={event.id} event={event} defaultOpen={event.index === '001'} selected={selected} active={active} />
-          if (event.type === 'system') return <SystemEvent key={event.id} event={event} selected={selected} active={active} />
-          return <ConversationMessage key={event.id} event={event} selected={selected} active={active} />
-        })}
+          const content = event.type === 'context'
+            ? <ContextRow event={event} selected={selected} active={active} onFileSelect={selectFile} />
+            : event.type === 'tool'
+              ? <ToolCallCard event={event} defaultOpen={event.index === '001'} selected={selected} active={active} />
+              : event.type === 'system'
+                ? <SystemEvent event={event} selected={selected} active={active} />
+                : <ConversationMessage event={event} selected={selected} active={active} />
+          return <TimelineItem key={event.id} className="trace-timeline-item">
+            <TimelineMarker />
+            <TimelineConnector />
+            <TimelineTitle className="sr-only">{timelineTitle(event)}</TimelineTitle>
+            <TimelineTime dateTime={event.occurredAt || event.occurred_at || undefined}>{event.time || 'Timestamp not recorded'}</TimelineTime>
+            <TimelineDescription className="trace-timeline-description">{content}</TimelineDescription>
+          </TimelineItem>
+        })}</Timeline>}
         <div className="trace-stream-pagination">
           <span role="status" aria-live="polite">{hasServerPagination
-            ? `Loaded ${loadedEventCount.toLocaleString()} of ${totalEventCount.toLocaleString()} captured events · ${visibleEvents.length.toLocaleString()} rows shown.`
-            : `Showing ${renderedEvents.length.toLocaleString()} of ${visibleEvents.length.toLocaleString()} rows`}</span>
+            ? `${loadedEventCount.toLocaleString()} of ${totalEventCount.toLocaleString()} captured events loaded · ${visibleEvents.length.toLocaleString()} shown.`
+            : `${renderedEvents.length.toLocaleString()} of ${visibleEvents.length.toLocaleString()} events shown`}</span>
           {loadMoreError && <p className="trace-page-error" role="alert">The next page could not be loaded. Loaded events are still available. Retry to continue.</p>}
           {isLoadingMore && <span className="trace-page-loading" role="status" aria-live="polite">Loading the next page of events. Loaded rows remain on screen.</span>}
-          {hasMoreEvents && <button type="button" className="load-more-events" disabled={isLoadingMore} onClick={loadMoreEvents}>{isLoadingMore ? 'Loading next page…' : loadMoreError && hasMoreServerPages ? 'Retry loading more rows' : hasMoreServerPages ? 'Load more rows' : 'Show more loaded rows'}</button>}
+          {hasMoreEvents && <Button type="button" className="load-more-events" disabled={isLoadingMore} onClick={loadMoreEvents}>{isLoadingMore ? 'Loading next page…' : loadMoreError && hasMoreServerPages ? 'Retry loading more rows' : hasMoreServerPages ? 'Load more rows' : 'Show more loaded rows'}</Button>}
         </div>
       </>}
     </div>

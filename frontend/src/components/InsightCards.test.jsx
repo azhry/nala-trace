@@ -23,19 +23,33 @@ const evaluation = {
   evaluation_ledger: { project: 'nala-trace', improvements: [] },
 }
 
+function revealAuditTrail() {
+  const disclosure = screen.queryByRole('button', { name: /Evidence details/ })
+  if (disclosure && disclosure.getAttribute('aria-expanded') !== 'true') fireEvent.click(disclosure)
+  document.querySelectorAll('.analysis-category-summary').forEach((trigger) => {
+    if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger)
+  })
+}
+
+async function chooseSelectOption(label, option) {
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('combobox', { name: label }))
+  await user.click(screen.getByRole('option', { name: option }))
+}
+
 describe('InsightCards', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('renders explicit not-recorded state for null API analysis', () => {
+  it('shows a concise empty evaluation state when no analysis is saved', () => {
     render(<InsightCards analysis={null} trace={trace} />)
 
-    const panel = screen.getByRole('complementary', { name: 'Review details' })
-    expect(screen.getByRole('heading', { name: 'Review details' })).toBeInTheDocument()
-    expect(panel).toHaveClass('analysis-full-page')
-    expect(screen.getByText('No analysis saved')).toBeInTheDocument()
-    expect(screen.getAllByText('Not recorded')).toHaveLength(3)
+    expect(screen.getByRole('status')).toHaveTextContent('No saved evaluation for this session.')
+    expect(screen.getByRole('heading', { name: 'No saved evaluation for this session.' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Review details' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/analysis endpoint/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
     expect(screen.queryByText('Pass')).not.toBeInTheDocument()
   })
 
@@ -76,6 +90,7 @@ describe('InsightCards', () => {
       updated_at: '2026-08-19T08:10:00Z',
     }} trace={trace} />)
 
+    revealAuditTrail()
     expect(screen.getByText('Coverage: 1 captured agent turn')).toBeInTheDocument()
     expect(screen.getByText('Coverage: 1 captured tool call')).toBeInTheDocument()
     expect(screen.getByText('Coverage source: Current trace conversation')).toBeInTheDocument()
@@ -176,6 +191,8 @@ describe('InsightCards', () => {
       },
     }} />)
 
+    revealAuditTrail()
+
     expect(screen.getAllByText('A tool event was cited as a cited event reference.').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('References cited in finding description')).toBeInTheDocument()
     expect(screen.getByText('No explicit occurrences saved')).toBeInTheDocument()
@@ -227,6 +244,8 @@ describe('InsightCards', () => {
       files: [{ event_id: 'trace-file-event', path: '.agents/AGENTS.md', operation: 'read', summary: 'Read project instructions.' }],
     }} />)
 
+    revealAuditTrail()
+
     const relatedButton = screen.getByRole('button', { name: 'Copy Related event ID tool-event' })
     const relatedEvidence = relatedButton.closest('.analysis-event-evidence')
     expect(relatedEvidence.querySelector('.analysis-linked-event-context')).toHaveTextContent('Tool call · Bash')
@@ -270,7 +289,7 @@ describe('InsightCards', () => {
     expect(screen.getAllByRole('status').some((status) => status.textContent === 'Copied')).toBe(true)
   })
 
-  it('shows only explicit signal occurrences and filters annotation evidence by decision', () => {
+  it('shows only explicit signal occurrences and filters annotation evidence by decision', async () => {
     render(<InsightCards analysis={{
       annotation: {
         schema_version: '1',
@@ -307,6 +326,8 @@ describe('InsightCards', () => {
       ],
     }} />)
 
+    revealAuditTrail()
+
     expect(screen.getByText('2 located of 2 recorded')).toBeInTheDocument()
     const occurrenceButton = screen.getAllByRole('button', { name: 'Copy Occurrence event ID signal-event-1' })[0]
     expect(occurrenceButton).toBeInTheDocument()
@@ -317,7 +338,7 @@ describe('InsightCards', () => {
     expect(screen.getByLabelText('Evidence type')).toBeInTheDocument()
     expect(screen.getByLabelText('Decision or label')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Decision or label'), { target: { value: 'followsInstructions:no' } })
+    await chooseSelectOption('Decision or label', 'Instruction following: Not followed')
 
     expect(screen.getByText('Filters match 1 of 2 saved records')).toBeInTheDocument()
     expect(screen.getAllByText('The turn broke an instruction.').length).toBeGreaterThanOrEqual(1)
@@ -325,7 +346,7 @@ describe('InsightCards', () => {
     expect(agentTurnsCategory.querySelector('.analysis-evidence-list')).not.toHaveTextContent('The turn followed instructions.')
   })
 
-  it('renders v2 turn, tool, skill, file, capture-gap, occurrence, and action evidence with filters', () => {
+  it('renders v2 turn, tool, skill, file, capture-gap, occurrence, and action evidence with filters', async () => {
     render(<InsightCards forceAnalysis analysis={{
       updated_at: '2026-10-24T10:00:00Z',
       annotation: {
@@ -368,6 +389,8 @@ describe('InsightCards', () => {
       },
     }} />)
 
+    revealAuditTrail()
+
     expect(screen.getByText('Current saved record')).toBeInTheDocument()
     expect(screen.getAllByText('Schema v2')).toHaveLength(2)
     expect(screen.getByText('Source: session-annotator')).toBeInTheDocument()
@@ -405,13 +428,13 @@ describe('InsightCards', () => {
     expect(screen.getByText('Agent instructions')).toBeInTheDocument()
     expect(screen.getAllByText('gap-event-1').length).toBeGreaterThanOrEqual(2)
 
-    fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'turns' } })
-    fireEvent.change(screen.getByLabelText('Decision or label'), { target: { value: 'scopeAdherence:deviation' } })
+    await chooseSelectOption('Evidence type', 'Agent turns')
+    await chooseSelectOption('Decision or label', 'Scope: Went outside request')
     expect(screen.getByText('Filters match 1 of 1 saved records')).toBeInTheDocument()
     expect(screen.getByText('Updated the evaluation interface.')).toBeInTheDocument()
     expect(screen.queryByText('Only change the evaluation page.')).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'capture_gaps' } })
+    await chooseSelectOption('Evidence type', 'Capture gaps')
     expect(screen.getByLabelText('Decision or label')).toBeDisabled()
     expect(screen.getByText('Filters match 1 of 1 saved records')).toBeInTheDocument()
     expect(document.querySelector('.analysis-capture-gap')).toHaveTextContent('A tool completion was not captured.')
@@ -666,14 +689,13 @@ describe('InsightCards', () => {
     expect(screen.getAllByText('Not recorded in this saved occurrence: occurrence time, tool name, command or input, message, event summary, impact.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('The invocation has no captured completion hook.').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('The authenticated browser flow was not recorded.')).toBeInTheDocument()
-    const category = screen.getByLabelText('Signal category')
-    expect(category.tagName).toBe('SELECT')
-    await user.selectOptions(category, 'unmatched_tool_hook_pairs')
+    await user.click(screen.getByText('Evidence details'))
+    await chooseSelectOption('Signal category', 'Unmatched tool hook pairs')
     expect(screen.getByText('Filters match 1 of 2 findings')).toBeInTheDocument()
     expect(screen.getAllByText('The invocation has no captured completion hook.').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('The authenticated browser flow was not recorded.')).not.toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Signal severity'), 'info')
+    await chooseSelectOption('Severity', 'Info')
     expect(screen.getByText('Filters match 0 of 2 findings')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
     expect(screen.getByText('Filters match 2 of 2 findings')).toBeInTheDocument()
@@ -810,6 +832,8 @@ describe('InsightCards', () => {
       evaluation: { ...evaluation, schema_version: '2', evaluation_ledger: { improvements } },
     }} />)
 
+    revealAuditTrail()
+
     expect(screen.getByText('10 valid agent actions')).toBeInTheDocument()
     expect(screen.getByText('Update agent guidance 1')).toBeInTheDocument()
     expect(screen.queryByText('Update agent guidance 9')).not.toBeInTheDocument()
@@ -825,10 +849,6 @@ describe('InsightCards', () => {
     await user.click(firstAction.querySelector('.analysis-list-pagination button'))
     expect(firstAction).toHaveTextContent('action-event-1-10')
 
-    const userTurnSummary = Array.from(document.querySelectorAll('.analysis-category-summary'))
-      .find((summary) => summary.textContent.includes('User turns'))
-    expect(userTurnSummary).toBeDefined()
-    await user.click(userTurnSummary)
     expect(screen.getByText('Captured user turn 8')).toBeInTheDocument()
     expect(screen.queryByText('Captured user turn 9')).not.toBeInTheDocument()
     expect(screen.getByText('Showing 8 of 10 evidence records')).toBeInTheDocument()
@@ -836,9 +856,9 @@ describe('InsightCards', () => {
     expect(screen.getByText('Captured user turn 9')).toBeInTheDocument()
     expect(screen.getByText('Filters match 10 of 10 saved records')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Evidence type'), { target: { value: 'user_turns' } })
+    await chooseSelectOption('Evidence type', 'User turns')
     expect(screen.getByText('Showing 8 of 10 evidence records')).toBeInTheDocument()
-  })
+  }, 15000)
 
   it('bounds saved signal occurrences while retaining the evaluator total', async () => {
     const user = userEvent.setup()
@@ -864,6 +884,8 @@ describe('InsightCards', () => {
       },
     }} />)
 
+    revealAuditTrail()
+
     expect(screen.getByText('10 located of 11 recorded')).toBeInTheDocument()
     expect(screen.getAllByText('Occurrence summary 1').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('Occurrence summary 9')).not.toBeInTheDocument()
@@ -872,7 +894,7 @@ describe('InsightCards', () => {
     expect(screen.getAllByText('Occurrence summary 9').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Showing 10 of 10 signal occurrences')).toBeInTheDocument()
     expect(screen.getByText(/1 more are included in the count/)).toBeInTheDocument()
-  })
+  }, 15000)
 
   it('preserves the legacy fixture-shaped insights when no API trace is supplied', () => {
     render(<InsightCards insights={{

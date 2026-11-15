@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  displaySessionTitle,
   filterSessionSummaries,
   normalizeSessionSummaries,
   sortSessionSummaries,
@@ -10,12 +11,16 @@ const payload = {
     {
       session_id: 'session-old',
       title: 'Review the older session',
+      safe_title: 'Older review',
       first_event_at: '2026-08-18T08:00:00Z',
       last_event_at: '2026-08-18T08:05:00Z',
       event_count: 12,
       tool_call_count: 4,
+      mcp_call_count: 2,
+      mcp_servers: ['github', 'linear'],
       skill_invocation_count: 1,
       file_operation_count: 2,
+      file_read_count: 3,
       token_usage: { input_tokens: 12, total_tokens: 12 },
     },
     {
@@ -34,32 +39,40 @@ const payload = {
 }
 
 describe('session summary adapter', () => {
-  it('uses the explicit API title as the primary row label', () => {
+  it('keeps only an explicitly safe API title and preserves returned summary metadata', () => {
     const [summary] = normalizeSessionSummaries(payload)
 
     expect(summary).toMatchObject({
       id: 'session-old',
-      title: 'Review the older session',
+      safeTitle: 'Older review',
       eventCount: 12,
       toolCallCount: 4,
+      mcpCallCount: 2,
+      mcpServers: ['github', 'linear'],
       skillInvocationCount: 1,
       fileOperationCount: 2,
+      fileReadCount: 3,
       tokenUsage: { inputTokens: 12, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: 12 },
       status: 'captured',
     })
+    expect(summary).not.toHaveProperty('title')
+    expect(summary.searchTitle).toBe('Review the older session')
+    expect(displaySessionTitle(summary)).toBe('Older review')
     expect(summary.firstEventTime).toBe(Date.parse('2026-08-18T08:00:00Z'))
   })
 
-  it('preserves the adapter-provided prompt fallback and uses the ID when title is absent', () => {
+  it('does not expose the API title when it may contain captured prompt text', () => {
     const [promptFallback, idFallback] = normalizeSessionSummaries({
       sessions: [
         { session_id: 'prompt-session', title: 'Start with the first user prompt' },
-        { session_id: 'legacy-session' },
+        { session_id: 'legacy-session', safe_title: 'Legacy run' },
       ],
     })
 
-    expect(promptFallback).toMatchObject({ id: 'prompt-session', title: 'Start with the first user prompt' })
-    expect(idFallback).toMatchObject({ id: 'legacy-session', title: 'legacy-session' })
+    expect(promptFallback).toMatchObject({ id: 'prompt-session', safeTitle: '' })
+    expect(idFallback).toMatchObject({ id: 'legacy-session', safeTitle: 'Legacy run' })
+    expect(displaySessionTitle(promptFallback)).toBe('Untitled session')
+    expect(displaySessionTitle(idFallback)).toBe('Legacy run')
   })
 
   it('ignores empty or non-string API titles', () => {
@@ -70,7 +83,7 @@ describe('session summary adapter', () => {
       ],
     })
 
-    expect(summaries.map(({ title }) => title)).toEqual(['blank-title', 'non-string-title'])
+    expect(summaries.map(displaySessionTitle)).toEqual(['Untitled session', 'Untitled session'])
   })
 
   it('keeps captured skill signals when a legacy summary omits the canonical counter', () => {
@@ -109,9 +122,12 @@ describe('session summary adapter', () => {
   it('filters by identifier and documented summary metadata', () => {
     const summaries = normalizeSessionSummaries(payload)
 
-    expect(filterSessionSummaries(summaries, 'investigate the new').map(({ id }) => id)).toEqual(['session-new'])
+    expect(filterSessionSummaries(summaries, 'Older review').map(({ id }) => id)).toEqual(['session-old'])
+    expect(filterSessionSummaries(summaries, 'Review the older session').map(({ id }) => id)).toEqual(['session-old'])
+    expect(filterSessionSummaries(summaries, 'Investigate the new session').map(({ id }) => id)).toEqual(['session-new'])
     expect(filterSessionSummaries(summaries, 'session-old').map(({ id }) => id)).toEqual(['session-old'])
     expect(filterSessionSummaries(summaries, 'files 5').map(({ id }) => id)).toEqual(['session-new'])
+    expect(filterSessionSummaries(summaries, 'reads 3').map(({ id }) => id)).toEqual(['session-old'])
     expect(filterSessionSummaries(summaries, '').map(({ id }) => id)).toEqual(['session-old', 'session-new'])
     expect(filterSessionSummaries(summaries, 'does-not-exist')).toEqual([])
   })

@@ -1,0 +1,134 @@
+:root {
+  color-scheme: light;
+  --nala-canvas: #edf2ef;
+  --nala-surface: #f8faf8;
+  --nala-surface-raised: #fff;
+  --nala-surface-muted: #e3ebe6;
+  --nala-surface-hover: #e8f0eb;
+  --nala-text: #172721;
+  --nala-text-muted: #435b50;
+  --nala-text-subtle: #62766c;
+  --nala-border: #c8d5cd;
+  --nala-control-border: #758a7e;
+  --nala-accent: #086b5c;
+  --nala-accent-hover: #07564b;
+  --nala-accent-soft: #d9ece5;
+  --nala-accent-rgb: 8, 107, 92;
+  --nala-success: #176143;
+  --nala-success-soft: #dcefe5;
+  --nala-success-rgb: 23, 97, 67;
+  --nala-warning: #754800;
+  --nala-warning-soft: #f5ead5;
+  --nala-warning-rgb: 117, 72, 0;
+  --nala-danger: #963c35;
+  --nala-danger-soft: #f4e2df;
+  --nala-text-muted-rgb: 67, 91, 80;
+  --nala-code: #e8eeeb;
+  --nala-on-accent: #fff;
+  --nala-radius-control: 6px;
+  --nala-radius-card: 10px;
+  --nala-radius-panel: 14px;
+  --nala-shadow-card: 0 1px 2px rgb(18 39 32 / 5%);
+  --nala-shadow-menu: 0 14px 36px rgb(18 39 32 / 14%);
+  --nala-font: "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --nala-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --nala-space-1: 4px;
+  --nala-space-2: 8px;
+  --nala-space-3: 12px;
+  --nala-space-4: 16px;
+  --nala-space-6: 24px;
+  --nala-space-8: 32px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --nala-canvas: #101816;
+  --nala-surface: #151f1c;
+  --nala-surface-raised: #1b2823;
+  --nala-surface-muted: #202e28;
+  --nala-surface-hover: #26372f;
+  --nala-text: #f0f5f2;
+  --nala-text-muted: #c2d1ca;
+  --nala-text-subtle: #adbbb4;
+  --nala-border: #354840;
+  --nala-control-border: #82978d;
+  --nala-accent: #70d7c5;
+  --nala-accent-hover: #9be6d8;
+  --nala-accent-soft: #1b3f38;
+  --nala-accent-rgb: 112, 215, 197;
+  --nala-success: #83d7a9;
+  --nala-success-soft: #1c392b;
+  --nala-success-rgb: 131, 215, 169;
+  --nala-warning: #f0c277;
+  --nala-warning-soft: #3c3120;
+  --nala-warning-rgb: 240, 194, 119;
+  --nala-danger: #ffaaa0;
+  --nala-danger-soft: #422c2a;
+  --nala-text-muted-rgb: 194, 209, 202;
+  --nala-code: #101816;
+  --nala-on-accent: #0c2520;
+  --nala-shadow-card: 0 1px 2px rgb(0 0 0 / 12%);
+  --nala-shadow-menu: 0 18px 44px rgb(0 0 0 / 38%);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--nala-canvas);
+  color: var(--nala-text);
+  font-family: var(--nala-font);
+  font-size: 15px;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; }
+button { color: inherit; }
+a { color: inherit; }
+svg { display: block; flex: 0 0 auto; }
+::selection { background: var(--nala-accent-soft); color: var(--nala-text); }
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--nala-accent);
+  outline-offset: 3px;
+}
+:where(button, a, select, summary, input[type="checkbox"], input[type="radio"]) { cursor: pointer; }
+:where(button, input, select):disabled { cursor: not-allowed; }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--nala-control-border);
+  border-radius: var(--nala-radius-control);
+  background: var(--nala-surface-raised);
+  color: var(--nala-text-muted);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--nala-surface-hover); color: var(--nala-text); }
+.theme-toggle[data-pressed] {
+  border-color: var(--nala-accent);
+  background: var(--nala-accent-soft);
+  color: var(--nala-accent);
+}
+.theme-toggle svg { width: 17px; height: 17px; }
+.nala-skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 8px;
+  left: 8px;
+  padding: 10px 14px;
+  transform: translateY(-150%);
+  border-radius: var(--nala-radius-control);
+  background: var(--nala-accent);
+  color: var(--nala-on-accent);
+}
+.nala-skip-link:focus { transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

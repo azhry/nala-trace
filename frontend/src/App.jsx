@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, getSessionAnalysis, getSessions, getTrace, resolveSession, SESSION_TRACE_PAGE_SIZE } from './api'
-import { AuthHandoffError, redirectToNalaLabs, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
-import InsightCards from './components/InsightCards'
-import EvaluationPage from './components/EvaluationPage'
-import SessionList from './components/SessionList'
-import SessionMetadata from './components/SessionMetadata'
+import { AuthHandoffError, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import ScrollToTopButton from './components/ScrollToTopButton'
-import TraceView, { TraceLoadingPanel } from './components/TraceView'
-import { formatSessionDate, normalizeSessionSummaries } from './sessionSummaries'
+import { normalizeSessionSummaries } from './sessionSummaries'
 import { normalizeCapturedEventId } from './eventIds'
+import { AuthBoundary, DetailPage, EvaluationRoute, SessionStatePanel, SessionsPage, TraceShell } from './TraceWorkspace'
 
 function parseRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '') || 'sessions'
@@ -120,90 +116,6 @@ function hasContiguousNextTracePage(current, next, nextOffset, limit) {
     if (!seenIds.has(event.id)) newIds.add(event.id)
   }
   return newIds.size === expectedNewRows
-}
-
-function dataSourceCopy(apiState) {
-  if (apiState === 'connected') return { label: 'Go API data', status: 'Go API connected', detail: 'Using live session records from the protected Go API' }
-  if (apiState === 'unauthorized') return { label: 'Sign-in required', status: 'Authentication required', detail: 'Resolve an authenticated application session to view records' }
-  if (apiState === 'error') return { label: 'API unavailable', status: 'API unavailable', detail: 'The session service did not return a usable response' }
-  return { label: 'Checking session', status: 'Checking application session', detail: 'Resolving authentication before requesting session records' }
-}
-
-function AuthBoundary({ handoffState, onRetry }) {
-  const redirectedRef = useRef(false)
-  const defaultDetail = 'Your Nala Labs application session could not be verified. Sign in through Nala Labs, then try again.'
-  const detail = handoffState === 'waiting'
-    ? 'Redirecting to Nala Labs for sign-in.'
-    : handoffState === 'invalid'
-      ? 'Nala Labs did not return a usable session. Start sign-in again, then retry.'
-        : defaultDetail
-  const actionLabel = 'Try again'
-
-  useEffect(() => {
-    if (handoffState !== 'idle' || redirectedRef.current) return
-    redirectedRef.current = true
-    redirectToNalaLabs()
-  }, [handoffState])
-
-  function openLogin() {
-    redirectToNalaLabs()
-  }
-
-  function retry() { onRetry() }
-
-  return (
-    <main className="auth-boundary" aria-labelledby="auth-boundary-title">
-      <section className="auth-boundary-panel" role="alert" aria-live="polite">
-        <p className="eyebrow">Nala Trace access</p>
-        <h1 id="auth-boundary-title">Sign in through Nala Labs</h1>
-        <p>{detail}</p>
-        <button type="button" className="state-action" onClick={openLogin}>Sign in through Nala Labs</button>
-        <button type="button" className="state-action" onClick={retry}>{actionLabel}</button>
-      </section>
-    </main>
-  )
-}
-
-function Topbar({ route, session, apiState, onSignOut }) {
-  const source = dataSourceCopy(apiState)
-  const pageLabel = route.view === 'evaluation' ? 'Session evaluation' : route.view === 'detail' ? 'Session detail' : 'Sessions'
-  return <header className="topbar"><div className="breadcrumb"><span>Nala Trace</span><span>/</span><strong>{pageLabel}</strong></div><div className="topbar-right"><span className={`source-chip ${apiState}`}><span className="pulse-dot" />{source.label}</span>{(route.view === 'detail' || route.view === 'evaluation') && <span className="topbar-session">{session?.id}</span>}<button type="button" className="sign-out-button" onClick={() => onSignOut()}>Sign out</button></div></header>
-}
-
-function SessionStats({ sessions }) {
-  const tools = sessions.reduce((total, session) => total + session.toolCallCount, 0)
-  const mcpCalls = sessions.reduce((total, session) => total + session.mcpCallCount, 0)
-  const mcpServers = [...new Set(sessions.flatMap((session) => Array.isArray(session.mcpServers) ? session.mcpServers : []))]
-  const attention = sessions.filter((session) => session.status === 'attention').length
-  const latest = sessions.reduce((current, session) => {
-    if (!current || (session.lastEventTime || 0) > (current.lastEventTime || 0)) return session
-    return current
-  }, null)
-  return <div className="workspace-stats" aria-label="Session summary"><div><span>Sessions</span><strong>{String(sessions.length).padStart(2, '0')}</strong><small>available to this account</small></div><div><span>Tool calls</span><strong>{tools.toLocaleString()}</strong><small>from bounded summaries</small></div><div aria-label={`${mcpCalls} MCP calls across ${mcpServers.length} unique MCP servers`}><span>MCP calls</span><strong>{mcpCalls.toLocaleString()}</strong><small>{mcpServers.length ? `${mcpServers.length} unique servers` : 'No MCP servers recorded'}</small>{mcpServers.length > 0 && <span className="workspace-stat-server-list" title={mcpServers.join(', ')}>MCP: {mcpServers.join(' · ')}</span>}</div><div><span>Needs review</span><strong className={attention ? 'text-amber' : 'text-green'}>{String(attention).padStart(2, '0')}</strong><small>evaluation signal when available</small></div><div><span>Last captured</span><strong>{latest ? formatSessionDate(latest.lastEventAt) : '—'}</strong><small>most recent event</small></div></div>
-}
-
-function DataSourceNotice({ apiState }) {
-  const source = dataSourceCopy(apiState)
-  if (apiState === 'connected') return null
-  return <div className="data-source-notice" role="status"><span className="section-label">Data provenance</span><strong>{source.label}</strong><p>{source.detail}. Only the captured records from this source are being presented.</p></div>
-}
-
-function SessionStatePanel({ state, onRetry }) {
-  if (state === 'unauthorized') return <div className="panel session-state-panel" role="alert"><strong>Sign in to view sessions.</strong><span>Your application session could not be resolved. Sign in, then try again.</span><button type="button" className="state-action" onClick={onRetry}>Try again</button></div>
-  return <div className="panel session-state-panel" role="alert"><strong>Sessions could not be loaded.</strong><span>The API returned an error while reading session summaries.</span><button type="button" className="state-action" onClick={onRetry}>Retry request</button></div>
-}
-
-function SessionsPage({ sessions, selectedId, onSelect, query, onQueryChange, filter, onFilterChange, sortBy, onSortChange, apiState, onRetry }) {
-  const source = dataSourceCopy(apiState)
-  return <section className="page-section" aria-labelledby="sessions-title"><div className="page-heading"><div><p className="eyebrow">Session list</p><h1 id="sessions-title">All captured sessions</h1><p>Choose a session to open its detailed conversation, tool calls, trace events, and review signal.</p></div><span className="source-note">Source: {source.label.toLowerCase()}</span></div><DataSourceNotice apiState={apiState} />{apiState === 'loading' ? <TraceLoadingPanel title="Loading sessions…" detail="Resolving your application session before reading Trace records." /> : apiState === 'connected' ? <><SessionStats sessions={sessions} /><SessionList sessions={sessions} selectedId={selectedId} onSelect={onSelect} query={query} onQueryChange={onQueryChange} filter={filter} onFilterChange={onFilterChange} sortBy={sortBy} onSortChange={onSortChange} /></> : <SessionStatePanel state={apiState} onRetry={onRetry} />}</section>
-}
-
-function DetailPage({ session, onBack, apiState, traceState, traceError, onTraceRetry, onLoadMore, isLoadingMore, loadMoreError, focusEventId }) {
-  const source = dataSourceCopy(apiState)
-  const isLoading = traceState === 'loading'
-  const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
-  const evaluationHref = `#/sessions/${encodeURIComponent(session.id)}/evaluation`
-  return <section className="page-section detail-page" aria-labelledby="detail-title"><button type="button" className="back-button" onClick={onBack}>← <span>All sessions</span></button><div className="detail-heading"><div><p className="eyebrow">Session detail</p><h1 id="detail-title">{session.title || session.id}</h1><a className="detail-analysis-link" href={evaluationHref}>View annotation and evaluation</a><p>{session.id} · captured {formatSessionDate(session.firstEventAt)}–{formatSessionDate(session.lastEventAt)}</p></div><div className="detail-heading-meta"><span className="source-note">Source: {source.label.toLowerCase()}</span><span className={`detail-status ${session.status}`}>{session.outcome || (isLoading ? 'Loading' : statusLabel)}</span></div></div><DataSourceNotice apiState={apiState} />{isLoading ? <TraceLoadingPanel /> : <><SessionMetadata session={session} /><div className="detail-layout"><TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} onLoadMore={onLoadMore} isLoadingMore={isLoadingMore} loadMoreError={loadMoreError} focusEventId={focusEventId} /><InsightCards analysis={session.analysis ?? null} trace={session} insights={session.insights} compact sessionId={session.id} /></div></>}</section>
 }
 
 export default function App() {
@@ -405,9 +317,56 @@ export default function App() {
   }
 
   if (apiState === 'unauthorized') return <AuthBoundary handoffState={handoffState} onRetry={loadSessions} />
-  if (apiState === 'error') return <div className="app-shell"><main className="main-content"><section className="page-section" aria-label="Session loading error"><SessionStatePanel state="error" onRetry={loadSessions} /></section></main></div>
+  if (apiState === 'error') return (
+    <TraceShell route={route} session={selectedSession} apiState={apiState} onSignOut={signOutFromTrace}>
+      <section className="trace-page trace-error-page" aria-label="Session loading error">
+        <SessionStatePanel state="error" onRetry={loadSessions} />
+      </section>
+    </TraceShell>
+  )
 
   const showDetail = route.view === 'detail' && detailSession
   const showEvaluation = route.view === 'evaluation' && apiState === 'connected' && detailSession
-  return <div className="app-shell"><main className="main-content"><Topbar route={route} session={detailSession || selectedSession} apiState={apiState} onSignOut={signOutFromTrace} />{showEvaluation ? <EvaluationPage session={detailSession} analysis={analysisSessionId === route.sessionId ? analysisPayload : null} analysisState={analysisSessionId === route.sessionId ? analysisState : 'loading'} analysisError={analysisError} onAnalysisRetry={() => loadAnalysis(route.sessionId)} onBack={() => navigateTo(`sessions/${encodeURIComponent(route.sessionId)}`)} /> : showDetail ? <><DetailPage session={detailSession} apiState={apiState} traceState={apiState === 'loading' ? 'loading' : detailTraceState} traceError={traceError} onTraceRetry={() => loadTrace(route.sessionId)} onLoadMore={() => loadMoreTrace(route.sessionId)} isLoadingMore={tracePageState === 'loading'} loadMoreError={Boolean(tracePageError)} onBack={() => navigateTo('sessions')} focusEventId={route.evidenceEventId} /><ScrollToTopButton /></> : <SessionsPage sessions={sessions} selectedId={selectedSession?.id} onSelect={selectSession} query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} sortBy={sortBy} onSortChange={setSortBy} apiState={apiState} onRetry={loadSessions} />}</main></div>
+  return (
+    <TraceShell route={route} session={detailSession || selectedSession} apiState={apiState} onSignOut={signOutFromTrace}>
+      {showEvaluation
+        ? <EvaluationRoute
+            session={detailSession}
+            analysis={analysisSessionId === route.sessionId ? analysisPayload : null}
+            analysisState={analysisSessionId === route.sessionId ? analysisState : 'loading'}
+            analysisError={analysisError}
+            onAnalysisRetry={() => loadAnalysis(route.sessionId)}
+            onBack={() => navigateTo('sessions/' + encodeURIComponent(route.sessionId))}
+          />
+        : showDetail
+          ? <>
+              <DetailPage
+                session={detailSession}
+                apiState={apiState}
+                traceState={apiState === 'loading' ? 'loading' : detailTraceState}
+                traceError={traceError}
+                onTraceRetry={() => loadTrace(route.sessionId)}
+                onLoadMore={() => loadMoreTrace(route.sessionId)}
+                isLoadingMore={tracePageState === 'loading'}
+                loadMoreError={Boolean(tracePageError)}
+                focusEventId={route.evidenceEventId}
+                onBack={() => navigateTo('sessions')}
+              />
+              <ScrollToTopButton />
+            </>
+          : <SessionsPage
+              sessions={sessions}
+              selectedId={selectedSession?.id}
+              onSelect={selectSession}
+              query={query}
+              onQueryChange={setQuery}
+              filter={filter}
+              onFilterChange={setFilter}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+              apiState={apiState}
+              onRetry={loadSessions}
+            />}
+    </TraceShell>
+  )
 }

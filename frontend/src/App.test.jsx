@@ -145,9 +145,9 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    await screen.findByRole('button', { name: 'Sign in through Nala Labs' })
+    await screen.findByRole('button', { name: /Continue to Nala Labs/ })
     await waitFor(() => expect(redirectToNalaLabs).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in through Nala Labs' }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue to Nala Labs/ }))
     expect(redirectToNalaLabs).toHaveBeenCalledTimes(2)
   })
 
@@ -158,7 +158,7 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Open session .*authenticated-session/ })).toBeInTheDocument()
     expect(redeemNalaLabsAuthCode.mock.invocationCallOrder[0]).toBeLessThan(resolveSession.mock.invocationCallOrder[0])
     expect(getSessions).toHaveBeenCalledExactlyOnceWith()
   })
@@ -167,7 +167,7 @@ describe('authenticated sessions flow', () => {
     render(<App />)
 
     await screen.findByRole('button', { name: 'Sign out' })
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    fireEvent.click(document.querySelector('.trace-topbar .trace-signout'))
     expect(signOutFromTrace).toHaveBeenCalledExactlyOnceWith()
   })
 
@@ -180,14 +180,14 @@ describe('authenticated sessions flow', () => {
     render(<App />)
 
     expect(screen.getByRole('banner')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'All captured sessions' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument()
     const loadingStatus = document.querySelector('.trace-loading-panel')
     expect(loadingStatus).toBeInTheDocument()
     expect(loadingStatus).toHaveTextContent('Loading sessions…')
-    expect(loadingStatus).toHaveTextContent('Resolving your application session before reading Trace records.')
+    expect(screen.getAllByText('Checking sign-in')).toHaveLength(1)
+    expect(screen.queryByText('Checking your Nala Labs session.')).not.toBeInTheDocument()
     expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
     expect(loadingStatus).toHaveClass('trace-loading-panel')
-    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
     expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
     expect(document.querySelector('.auth-boundary')).not.toBeInTheDocument()
@@ -195,7 +195,7 @@ describe('authenticated sessions flow', () => {
     await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
     resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
 
-    expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Open session .*authenticated-session/ })).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
   })
 
@@ -210,16 +210,15 @@ describe('authenticated sessions flow', () => {
 
     const loadingStatus = document.querySelector('.trace-loading-panel')
     expect(loadingStatus).toHaveClass('trace-loading-panel')
-    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
     expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'All captured sessions' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
     expect(redirectToNalaLabs).not.toHaveBeenCalled()
 
     await waitFor(() => expect(resolveAuthentication).toBeTypeOf('function'))
     resolveAuthentication({ authenticated: true, user: { id: 'user-1' } })
-    expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Open session .*authenticated-session/ })).toBeInTheDocument()
   })
 
   it('keeps the full detail shell while initial authentication is unresolved', async () => {
@@ -233,11 +232,10 @@ describe('authenticated sessions flow', () => {
     render(<App />)
 
     expect(screen.getByRole('banner')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /All sessions/ })).toBeInTheDocument()
-    expect(screen.getByText('Session detail', { selector: 'p' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sessions/ })).toBeInTheDocument()
+    expect(document.querySelector('.trace-topbar__title')).toHaveTextContent('Nala Trace')
     const loadingStatus = document.querySelector('.trace-loading-panel')
     expect(loadingStatus).toBeInTheDocument()
-    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
     expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Sign in through Nala Labs' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Recorded execution settings' })).not.toBeInTheDocument()
@@ -256,37 +254,40 @@ describe('authenticated sessions flow', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Sign in through Nala Labs')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'All captured sessions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Sessions' })).not.toBeInTheDocument()
   })
 
   it('resolves the application session before requesting GET /sessions', async () => {
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: 'Open session authenticated-session' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Open session .*authenticated-session/ })).toBeInTheDocument()
     expect(resolveSession.mock.invocationCallOrder[0]).toBeLessThan(getSessions.mock.invocationCallOrder[0])
   })
 
-  it('shows aggregate MCP calls and unique servers in workspace stats', async () => {
+  it('shows aggregate Model Context Protocol calls and unique servers in workspace stats', async () => {
     render(<App />)
 
-    await screen.findByRole('button', { name: 'Open session authenticated-session' })
+    await screen.findByRole('button', { name: /Open session .*authenticated-session/ })
 
-    expect(screen.getByText('MCP calls')).toBeInTheDocument()
+    expect(screen.getByText('Model Context Protocol (MCP)')).toBeInTheDocument()
     expect(screen.getByText('2 unique servers')).toBeInTheDocument()
-    expect(screen.getByText('MCP: github · linear')).toBeInTheDocument()
+    expect(screen.getByText('Across sessions')).toBeInTheDocument()
+    expect(screen.getByText('From saved evaluations')).toBeInTheDocument()
   })
 
   it('keeps row selection addressable through the hash route', async () => {
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Open session authenticated-session' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Open session .*authenticated-session/ }))
     await waitFor(() => expect(window.location.hash).toBe('#/sessions/authenticated-session'))
   })
 
   it('renders the empty, unauthorized, and API-error response states', async () => {
     getSessions.mockResolvedValueOnce({ sessions: [], limit: 100 })
     const { unmount } = render(<App />)
-    expect(await screen.findByText('No sessions captured yet.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'No sessions yet.' })).toBeInTheDocument()
+    expect(screen.getByText('Send an authenticated trace to Nala Trace, then refresh.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh sessions' })).toBeInTheDocument()
     unmount()
 
     resolveSession.mockRejectedValueOnce(new ApiError('Authentication is required', 401))
@@ -324,7 +325,7 @@ describe('authenticated sessions flow', () => {
     expect(await screen.findByText('Initial page event 0')).toBeInTheDocument()
     expect(screen.queryByText('Next page event')).not.toBeInTheDocument()
     expect(getTrace).toHaveBeenCalledExactlyOnceWith('authenticated-session', { offset: 0, limit: 100 })
-    expect(screen.getByText('Loaded 100 of 101 captured events · 100 rows shown.')).toBeInTheDocument()
+    expect(screen.getByText('100 of 101 captured events loaded · 100 shown.')).toBeInTheDocument()
     expect(container.querySelector('.trace-summary > div:first-child strong')).toHaveTextContent('8')
     expect(container.querySelector('.trace-summary > div:nth-child(2) strong')).toHaveTextContent('9')
 
@@ -333,7 +334,7 @@ describe('authenticated sessions flow', () => {
     await waitFor(() => expect(getTrace).toHaveBeenNthCalledWith(2, 'authenticated-session', { offset: 100, limit: 100 }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(await screen.findByText('Next page event')).toBeInTheDocument()
-    expect(container.querySelector('.trace-stream-pagination [role="status"]').textContent).toBe('Loaded 101 of 101 captured events · 101 rows shown.')
+    expect(container.querySelector('.trace-stream-pagination [role="status"]').textContent).toBe('101 of 101 captured events loaded · 101 shown.')
     expect(getTrace).toHaveBeenNthCalledWith(2, 'authenticated-session', { offset: 100, limit: 100 })
     expect(screen.getAllByText('Initial page event 0')).toHaveLength(1)
     expect(container.querySelectorAll('[data-trace-event-id="page-event-99"]')).toHaveLength(1)
@@ -432,10 +433,15 @@ describe('authenticated sessions flow', () => {
     render(<App />)
 
     const title = await screen.findByRole('heading', { level: 1 })
-    const evaluationLink = await screen.findByRole('link', { name: 'View annotation and evaluation' })
+    const evaluationLink = await screen.findByRole('link', { name: 'Review evaluation' })
+    const subtitle = title.nextElementSibling
 
     expect(evaluationLink).toBeVisible()
-    expect(title.parentElement).toContainElement(evaluationLink)
+    expect(document.querySelector('.trace-detail-heading')).toContainElement(title)
+    expect(document.querySelector('.trace-detail-heading')).toContainElement(evaluationLink)
+    expect(title).toHaveTextContent('Untitled session')
+    expect(subtitle).toHaveTextContent('captured')
+    expect(subtitle).toHaveTextContent('authenti…ssion')
     expect(evaluationLink).toHaveAttribute('href', '#/sessions/authenticated-session/evaluation')
   })
 
@@ -465,7 +471,8 @@ describe('authenticated sessions flow', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Session evaluation', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Evaluation', level: 1 })).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('.source-note')).toHaveTextContent('Saved'))
     expect(await screen.findByRole('heading', { name: 'Review details' })).toBeInTheDocument()
     expect(await screen.findByText('The evaluator recorded a review concern.')).toBeInTheDocument()
     expect(screen.getAllByText('review required').length).toBeGreaterThanOrEqual(1)
@@ -532,9 +539,10 @@ describe('authenticated sessions flow', () => {
     await waitFor(() => expect(getSessionAnalysis).toHaveBeenCalledExactlyOnceWith('authenticated-session'))
     expect(await screen.findByText('Loading saved evaluation')).toBeInTheDocument()
     await act(async () => rejectAnalysis(new ApiError('analysis failed', 500)))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Saved evaluation could not be loaded')
-    fireEvent.click(screen.getByRole('button', { name: 'Retry analysis request' }))
-    expect(await screen.findByText('No analysis saved')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Evaluation couldn’t be loaded')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('heading', { name: 'No saved evaluation for this session.' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Review details' })).not.toBeInTheDocument()
     expect(getSessionAnalysis).toHaveBeenCalledTimes(2)
     expect(getTrace).not.toHaveBeenCalled()
   })
@@ -552,7 +560,7 @@ describe('authenticated sessions flow', () => {
     const loadingStatus = screen.getByRole('status')
     expect(loadingStatus).toHaveTextContent('Loading trace conversation…')
     expect(loadingStatus).toHaveAttribute('aria-busy', 'true')
-    expect(loadingStatus.querySelector('.trace-loader-mark')).toBeInTheDocument()
+    expect(loadingStatus.querySelector('.trace-loading-skeletons')).toBeInTheDocument()
 
     resolveTrace(apiTracePayload)
     expect(await screen.findByText('Show the recorded conversation.')).toBeInTheDocument()
@@ -615,7 +623,7 @@ describe('authenticated sessions flow', () => {
       fireEvent(window, new Event('hashchange'))
       await act(async () => { await vi.advanceTimersByTimeAsync(TRACE_LOADING_MIN_DURATION_MS) })
 
-      expect(screen.getByRole('heading', { name: 'All captured sessions' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument()
       expect(screen.queryByText('Show the recorded conversation.')).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()

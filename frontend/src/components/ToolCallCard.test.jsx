@@ -23,24 +23,30 @@ const shellEvent = {
 
 describe('ToolCallCard', () => {
   it('shows a recorded multiline shell command while collapsed and keeps full evidence after expanding', () => {
-    render(<ToolCallCard event={shellEvent} />)
+    const { container } = render(<ToolCallCard event={shellEvent} />)
+    const trigger = screen.getByRole('button', { name: /shell_command/ })
+    const panel = container.querySelector('.tool-card-body')
 
-    expect(screen.getByText('Command')).toBeInTheDocument()
-    expect(screen.getByText(/npm --prefix frontend test/)).toBeInTheDocument()
-    expect(screen.getByText(/npm --prefix frontend run build/)).toBeInTheDocument()
-    expect(screen.queryByText('Tests passed\nBuild passed')).not.toBeInTheDocument()
+    expect(container.querySelector('.tool-card-preview-label')).toHaveTextContent('Command')
+    expect(container.querySelector('.tool-card-preview')).toHaveTextContent(/npm --prefix frontend test/)
+    expect(container.querySelector('.tool-card-preview')).toHaveTextContent(/npm --prefix frontend run build/)
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(panel).toHaveAttribute('data-closed')
 
-    fireEvent.click(screen.getByRole('button', { name: /shell_command/ }))
+    fireEvent.click(trigger)
 
-    expect(screen.getByText(/"command": "npm --prefix frontend test/)).toBeInTheDocument()
-    expect(screen.getByText('tool_response').parentElement.parentElement.querySelector('pre')).toHaveTextContent(/Tests passed\s+Build passed/)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(panel).toHaveAttribute('data-open')
+    expect(panel.querySelector('pre')).toHaveTextContent(/"command": "npm --prefix frontend test/)
+    expect(panel.querySelector('.response-block pre')).toHaveTextContent(/Tests passed\s+Build passed/)
   })
 
   it('labels a missing input without inventing a command', () => {
-    render(<ToolCallCard event={{ ...shellEvent, input: '' }} />)
+    const { container } = render(<ToolCallCard event={{ ...shellEvent, input: '' }} />)
 
-    expect(screen.getByText('Input not recorded')).toBeInTheDocument()
-    expect(screen.queryByText('Command')).not.toBeInTheDocument()
+    expect(container.querySelector('.tool-card-preview')).toHaveTextContent('Input not recorded')
+    expect(container.querySelector('.tool-card-preview-label')).toHaveTextContent('Input')
+    expect(container.querySelector('.tool-card')).toHaveAttribute('data-closed')
   })
 
   it('shows recorded token usage in the tool row header', () => {

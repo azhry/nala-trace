@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@ui-sdk/react/button'
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible'
 import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control'
@@ -7,6 +7,7 @@ import ToolCallCard from './ToolCallCard'
 import { getInstructionScope, instructionFilePattern, isInstructionFile, normalizePath } from './instructionScope'
 import { getFileOperations, isReadFileOperation, isSkillDocumentPath, normalizeTraceViewModel, skillNameFromFilePath } from '../traceViewModel'
 import { EMPTY_TOKEN_USAGE, hasRecordedTokenUsage } from '../tokenUsage'
+import { normalizeCapturedEventId } from '../eventIds'
 
 const filters = [
   ['all', 'Everything'],
@@ -48,7 +49,8 @@ function eventAnchorId(eventId) {
 
 function eventMatchesEvidence(event, record) {
   if (getFileOperations(event).some((candidate) => sameFileOperation(candidate, record))) return true
-  return Boolean(record.eventId && [event.id, event.timelineId].includes(record.eventId))
+  const recordEventId = normalizeCapturedEventId(record.eventId)
+  return Boolean(recordEventId && [event.id, event.timelineId, event.eventId].some((eventId) => normalizeCapturedEventId(eventId) === recordEventId))
 }
 
 function timelineTitle(event) {
@@ -296,9 +298,10 @@ function PartialNotice({ message }) {
   return <div className="trace-partial-notice" role="status"><strong>Partial conversation data</strong><span>{message}</span></div>
 }
 
-export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {}, onLoadMore = () => {}, isLoadingMore = false, loadMoreError = false }) {
+export default function TraceView({ session = {}, traceState = 'ready', onRetry = () => {}, onLoadMore = () => {}, isLoadingMore = false, loadMoreError = false, focusEventId = null }) {
   const [filter, setFilter] = useState('all')
   const [selection, setSelection] = useState(null)
+  const focusSearchRef = useRef({ eventId: null, pages: 0, lastLoadedCount: -1 })
   const viewModel = useMemo(() => normalizeTraceViewModel(session), [session])
   const events = viewModel.events || EMPTY_EVENTS
   const sessionKey = session.id || session.session_id || viewModel.sessionId || 'selected-session'
@@ -330,6 +333,10 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
     : events.length
   const totalEventCount = hasServerPagination ? Number(pagination.total) : loadedEventCount
   const hasMoreServerPages = pagination?.has_more === true
+  const normalizedFocusEventId = normalizeCapturedEventId(focusEventId)
+  const focusEvent = normalizedFocusEventId
+    ? events.find((event) => [event.id, event.timelineId, event.eventId].some((eventId) => normalizeCapturedEventId(eventId) === normalizedFocusEventId))
+    : null
   const visibleEvents = useMemo(() => {
     if (filter === 'context') return contextRows
     return events.filter((event) => {
@@ -381,6 +388,33 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   }, [sessionKey])
 
   useEffect(() => {
+    if (!normalizedFocusEventId) {
+      focusSearchRef.current = { eventId: null, pages: 0, lastLoadedCount: -1 }
+      return
+    }
+
+    if (focusSearchRef.current.eventId !== normalizedFocusEventId) {
+      focusSearchRef.current = { eventId: normalizedFocusEventId, pages: 0, lastLoadedCount: -1 }
+    }
+
+    if (focusEvent) {
+      const key = `linked-event:${normalizedFocusEventId}`
+      setFilter('all')
+      setSelection((current) => current?.key === key
+        ? current
+        : { key, label: 'Linked captured event', eventIds: [focusEvent.id], activeMatchIndex: 0, unmatchedRecordCount: 0 })
+      return
+    }
+
+    const loadedCount = Array.isArray(session.timeline) ? session.timeline.length : events.length
+    const search = focusSearchRef.current
+    if (traceState !== 'ready' || !hasMoreServerPages || isLoadingMore || loadMoreError || search.pages >= 2 || search.lastLoadedCount === loadedCount) return
+    search.pages += 1
+    search.lastLoadedCount = loadedCount
+    onLoadMore()
+  }, [events, focusEvent, normalizedFocusEventId, hasMoreServerPages, isLoadingMore, loadMoreError, onLoadMore, session.timeline, traceState])
+
+  useEffect(() => {
     if (!selection?.eventIds.length) return
     const activeMatchIndex = Math.min(selection.activeMatchIndex ?? 0, selection.eventIds.length - 1)
     const target = document.getElementById(eventAnchorId(selection.eventIds[activeMatchIndex]))
@@ -391,6 +425,9 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
   const loadMoreEvents = () => {
     if (hasMoreServerPages && !isLoadingMore) onLoadMore()
   }
+
+  const focusSearchLimited = Boolean(normalizedFocusEventId && !focusEvent && hasMoreServerPages && focusSearchRef.current.eventId === normalizedFocusEventId && focusSearchRef.current.pages >= 2)
+  const focusEventMissing = Boolean(normalizedFocusEventId && !focusEvent && traceState === 'ready' && !hasMoreServerPages)
 
   return <section className="panel trace-panel" aria-labelledby="trace-view-title">
     <div className="panel-header trace-panel-header">
@@ -415,12 +452,14 @@ export default function TraceView({ session = {}, traceState = 'ready', onRetry 
       <div><strong id="context-inventory-title">Captured context</strong><small>{contextRows.length.toLocaleString()} records · {contextCounts['user-prompt'] || 0} user prompts · {contextCounts['agent-prompt'] || 0} agent prompts · {contextCounts['agent-reply'] || 0} agent replies · {contextCounts['instruction-read'] || 0} instruction reads · {contextCounts['system-event'] || 0} other records</small></div>
     </div>
     <EvidenceSelectionNotice selection={selection} onClear={() => setSelection(null)} onPrevious={() => moveToMatch(-1)} onNext={() => moveToMatch(1)} />
+    {focusSearchLimited && <p className="trace-evidence-search-note" role="status">The linked event was not in the first {loadedEventCount.toLocaleString()} trace rows. Use “Load more rows” to continue locating it.</p>}
+    {focusEventMissing && <p className="trace-evidence-search-note" role="status">No captured trace row matches this event reference.</p>}
     <div className="trace-controls">
       <SegmentedControl className="trace-event-filter" aria-label="Filter session detail" value={filter} onValueChange={changeFilter}>
         <SegmentedControlIndicator />
         {filters.map(([id, label]) => <SegmentedControlItem key={id} value={id}>{label}</SegmentedControlItem>)}
       </SegmentedControl>
-      <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} events shown</span>
+      <span className="trace-visible-count">{visibleEvents.length.toLocaleString()} events shown · {capturedRecordCount} records</span>
     </div>
     <div className="trace-stream" aria-busy={isLoadingMore}>
       {traceState !== 'ready' ? <TraceStatePanel state={traceState} onRetry={onRetry} /> : <>

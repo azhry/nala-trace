@@ -3,14 +3,17 @@ import { ApiError, getSessionAnalysis, getSessions, getTrace, resolveSession, SE
 import { AuthHandoffError, redeemNalaLabsAuthCode, signOutFromTrace } from './authHandoff'
 import ScrollToTopButton from './components/ScrollToTopButton'
 import { normalizeSessionSummaries } from './sessionSummaries'
+import { normalizeCapturedEventId } from './eventIds'
 import { AuthBoundary, DetailPage, EvaluationRoute, SessionStatePanel, SessionsPage, TraceShell } from './TraceWorkspace'
 
 function parseRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '') || 'sessions'
-  const evaluationMatch = path.match(/^sessions\/([^/]+)\/evaluation$/)
+  const [routePath, query = ''] = path.split('?', 2)
+  const evidenceEventId = normalizeCapturedEventId(new URLSearchParams(query).get('event'))
+  const evaluationMatch = routePath.match(/^sessions\/([^/]+)\/evaluation$/)
   if (evaluationMatch) return { view: 'evaluation', sessionId: decodeURIComponent(evaluationMatch[1]) }
-  const match = path.match(/^sessions\/([^/]+)$/)
-  return match ? { view: 'detail', sessionId: decodeURIComponent(match[1]) } : { view: 'sessions', sessionId: null }
+  const match = routePath.match(/^sessions\/([^/]+)$/)
+  return match ? { view: 'detail', sessionId: decodeURIComponent(match[1]), evidenceEventId } : { view: 'sessions', sessionId: null }
 }
 
 function navigateTo(path) {
@@ -346,6 +349,7 @@ export default function App() {
                 onLoadMore={() => loadMoreTrace(route.sessionId)}
                 isLoadingMore={tracePageState === 'loading'}
                 loadMoreError={Boolean(tracePageError)}
+                focusEventId={route.evidenceEventId}
                 onBack={() => navigateTo('sessions')}
               />
               <ScrollToTopButton />

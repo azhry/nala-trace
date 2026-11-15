@@ -164,7 +164,7 @@ export function SessionsPage({ sessions, selectedId, onSelect, query, onQueryCha
   </section>
 }
 
-export function DetailPage({ session, apiState, traceState, traceError, onTraceRetry, onLoadMore, isLoadingMore, loadMoreError, onBack }) {
+export function DetailPage({ session, apiState, traceState, traceError, onTraceRetry, onLoadMore, isLoadingMore, loadMoreError, focusEventId, onBack }) {
   const isLoading = traceState === 'loading'
   const title = displaySessionTitle(session)
   const statusLabel = session.status === 'attention' ? 'Needs review' : session.status === 'passed' ? 'Passed' : 'Captured'
@@ -181,7 +181,7 @@ export function DetailPage({ session, apiState, traceState, traceError, onTraceR
     {isLoading ? <TraceLoadingPanel /> : <>
       <SessionMetadata session={session} />
       <div className="trace-detail-layout">
-        <TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} onLoadMore={onLoadMore} isLoadingMore={isLoadingMore} loadMoreError={loadMoreError} />
+        <TraceView session={session} traceState={traceState} traceError={traceError} onRetry={onTraceRetry} onLoadMore={onLoadMore} isLoadingMore={isLoadingMore} loadMoreError={loadMoreError} focusEventId={focusEventId} />
         <InsightCards analysis={session.analysis ?? null} trace={session} insights={session.insights} compact sessionId={session.id} />
       </div>
     </>}

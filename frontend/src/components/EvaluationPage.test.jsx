@@ -56,7 +56,7 @@ describe('EvaluationPage', () => {
     render(<EvaluationPage session={session} analysis={session.analysis} onBack={onBack} />)
 
     expect(screen.getByRole('heading', { name: 'Evaluation', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Saved')
+    expect(screen.getByText('Saved', { exact: true, selector: '.source-note' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Review details' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'What to improve' })).toBeInTheDocument()
     expect(screen.getByText('The evaluator recorded a complete review.')).toBeInTheDocument()
@@ -80,6 +80,23 @@ describe('EvaluationPage', () => {
     expect(evidenceDetails).toHaveAttribute('data-closed')
     fireEvent.click(evidenceTrigger)
     expect(evidenceDetails).toHaveAttribute('data-open')
+  })
+
+  it('keeps a long critique compact until the reviewer opens its disclosure', () => {
+    const critique = 'Saved evaluator detail. '.repeat(40)
+    render(<EvaluationPage session={session} analysis={{
+      ...session.analysis,
+      evaluation: { ...session.analysis.evaluation, critique },
+    }} onBack={vi.fn()} />)
+
+    const critiqueBlock = document.querySelector('.analysis-overview-critique')
+    const preview = critiqueBlock.querySelector(':scope > p')
+    expect(preview.textContent.length).toBeLessThan(critique.length)
+    const disclosure = screen.getByText('Read full critique').closest('details')
+    expect(disclosure).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByText('Read full critique'))
+    expect(disclosure).toHaveAttribute('open')
+    expect(disclosure.querySelector('p').textContent).toBe(critique.trimEnd())
   })
 
   it('places result impact, priority findings, agent changes, and evidence gaps before the audit trail', () => {

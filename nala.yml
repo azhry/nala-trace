@@ -3,7 +3,45 @@ projects:
         cwd: backend
         run: go run .
         port: 3003
+        deployment:
+            schemaVersion: 1
+            app:
+                name: nala-trace-api
+            build:
+                context: .
+                dockerfile: Dockerfile
+                command: [go, build, -o, /tmp/nala-trace-check, .]
+            test:
+                command: [go, test, ./...]
+            runtime:
+                command: [./server]
+                health:
+                    path: /healthz
+            configuration:
+                vault:
+                    mount: secret
+                    path: nala-trace/backend
+                    keys: [MONGO_URI, NALA_LABS_AUTH_URL]
     frontend:
         cwd: frontend
         run: npm run dev
         port: 5005
+        deployment:
+            schemaVersion: 1
+            app:
+                name: nala-trace-frontend
+            build:
+                context: .
+                dockerfile: Dockerfile
+                command: [npm, run, build]
+            test:
+                command: [npm, run, test]
+            runtime:
+                command: [node, start.mjs]
+                health:
+                    path: /
+            configuration:
+                vault:
+                    mount: secret
+                    path: nala-trace/frontend
+                    keys: [VITE_NALA_LABS_URL]

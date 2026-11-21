@@ -1,4 +1,5 @@
 import { bootstrapAuthFromSessionStorage, clearAuthConfiguration, NALA_LABS_ACCESS_TOKEN_STORAGE_KEY } from './api'
+import { nalaTraceRuntimeEnvironment } from './runtimeConfig'
 
 export const DEFAULT_NALA_LABS_ORIGIN = 'http://localhost:5173'
 export const NALA_LABS_AUTH_CODE_QUERY_PARAM = 'nala_labs_auth_code'
@@ -30,7 +31,7 @@ function normalizeTraceOrigin(value) {
   }
 }
 
-export function resolveNalaLabsOrigin(env = import.meta.env) {
+export function resolveNalaLabsOrigin(env = nalaTraceRuntimeEnvironment()) {
   const configuredOrigin = typeof env?.VITE_NALA_LABS_URL === 'string' ? env.VITE_NALA_LABS_URL.trim() : ''
   const candidate = configuredOrigin || DEFAULT_NALA_LABS_ORIGIN
 
@@ -51,7 +52,7 @@ function getSessionStorage(windowRef) {
   }
 }
 
-export function buildNalaLabsLoginUrl({ env = import.meta.env, traceOrigin = getLocationOrigin(globalThis) } = {}) {
+export function buildNalaLabsLoginUrl({ env = nalaTraceRuntimeEnvironment(), traceOrigin = getLocationOrigin(globalThis) } = {}) {
   const url = new URL('/login', resolveNalaLabsOrigin(env))
   const origin = normalizeTraceOrigin(traceOrigin)
   if (origin) url.searchParams.set('trace_origin', origin)
@@ -73,7 +74,7 @@ export function clearNalaLabsAuthCode(windowRef = globalThis) {
   return true
 }
 
-export function redirectToNalaLabs({ env = import.meta.env, windowRef = globalThis, traceOrigin = getLocationOrigin(windowRef) } = {}) {
+export function redirectToNalaLabs({ env = nalaTraceRuntimeEnvironment(), windowRef = globalThis, traceOrigin = getLocationOrigin(windowRef) } = {}) {
   const assign = windowRef?.location?.assign
   if (typeof assign !== 'function') return false
   try {
@@ -84,13 +85,13 @@ export function redirectToNalaLabs({ env = import.meta.env, windowRef = globalTh
   }
 }
 
-export function buildNalaLabsLogoutUrl({ env = import.meta.env } = {}) {
+export function buildNalaLabsLogoutUrl({ env = nalaTraceRuntimeEnvironment() } = {}) {
   const url = new URL('/login', resolveNalaLabsOrigin(env))
   url.searchParams.set('logout', '1')
   return url.toString()
 }
 
-export function signOutFromTrace({ env = import.meta.env, windowRef = globalThis } = {}) {
+export function signOutFromTrace({ env = nalaTraceRuntimeEnvironment(), windowRef = globalThis } = {}) {
   const storage = getSessionStorage(windowRef)
   try {
     storage?.removeItem?.(NALA_LABS_ACCESS_TOKEN_STORAGE_KEY)

@@ -66,16 +66,18 @@ Build the static production image from the repository root:
 
 ```sh
 docker build --file frontend/Dockerfile --tag nala-trace-frontend:local frontend
-docker run --rm --publish 8080:8080 nala-trace-frontend:local
+docker run --rm --publish 5005:5005 nala-trace-frontend:local
 ```
 
-The image runs Vite's preview server from a pinned Node runtime on port `8080`;
+The image runs Vite's preview server from a pinned Node runtime on port `5005`;
 it is a separate frontend process, not the Go API. The browser bundle keeps
 `/healthz` and `/api/...` requests relative, so production must route those
 paths to the Go API through an ingress or equivalent same-origin gateway. No
 Nginx image or backend process is included. No API credential, `.env` file, or
-`.vault-config` is needed at build time or included in the image. The Node base
-image is pinned in `Dockerfile`, the runtime keeps only the built output and
-pruned production dependencies, and `frontend/.dockerignore` excludes local
+`.vault-config` is needed at build time or included in the image. At container
+startup, the runtime writes the public `VITE_NALA_LABS_URL` value into
+`runtime-config.js`; it is not baked into the image. The Node base image is
+pinned in `Dockerfile`, the runtime keeps only the built output and pruned
+production dependencies, and `frontend/.dockerignore` excludes local
 configuration, secret-store files, tests, caches, and generated output from
 the build context.

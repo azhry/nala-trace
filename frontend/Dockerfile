@@ -23,9 +23,9 @@ COPY --from=build --chown=node:node /app/start.mjs ./start.mjs
 
 USER node
 
-EXPOSE 8080
+EXPOSE 5005
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/ || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:5005/ || exit 1
 
 CMD ["node", "start.mjs"]

@@ -11,7 +11,7 @@ const runtimeConfig = `globalThis.__NALA_TRACE_CONFIG__ = Object.freeze(${serial
 await writeFile(new URL('./dist/runtime-config.js', import.meta.url), runtimeConfig, { mode: 0o644 })
 
 const viteCLI = fileURLToPath(new URL('./node_modules/vite/bin/vite.js', import.meta.url))
-const preview = spawn(process.execPath, [viteCLI, 'preview', '--host', '0.0.0.0', '--port', '8080'], {
+const preview = spawn(process.execPath, [viteCLI, 'preview', '--host', '0.0.0.0', '--port', '5005'], {
   stdio: 'inherit',
 })
 
